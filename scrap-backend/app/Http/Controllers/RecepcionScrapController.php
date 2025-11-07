@@ -1,87 +1,240 @@
 <?php
-/* app/Http/Controllers/RecepcionScrapController.php */
+// app/Http/Controllers/RecepcionScrapController.php
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RecepcionesScrap;
-use App\Models\RegistroScrap;
 use App\Models\RegistrosScrap;
+use App\Models\StockScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class RecepcionScrapController extends Controller
 {
-    // Se obtienen todas las cecepciones
-    public function index() {
+    public function index(Request $request)
+    {
         $user = Auth::user();
+        $query = RecepcionesScrap::with(['receptor', 'registro.operador']);
 
-        if ($user->role === 'admin') {
-            $recepciones = RecepcionesScrap::with(['receptor', 'registro.operador'])
-                ->orderBy('created_at', 'desc')
-                ->get();
-        } else {
-            $recepciones = RecepcionesScrap::with(['receptor', 'registro.operador'])
-                ->where('receptor_id', $user->id)
-                ->orderBy('created_at', 'desc')
-                ->get();
+        // Filtros
+        if ($request->has('origen_tipo') && $request->origen_tipo != '') {
+            $query->where('origen_tipo', $request->origen_tipo);
         }
+
+        if ($request->has('destino') && $request->destino != '') {
+            $query->where('destino', $request->destino);
+        }
+
+        if (
+            $request->has('fecha_inicio') && $request->has('fecha_fin') &&
+            $request->fecha_inicio != '' && $request->fecha_fin != ''
+        ) {
+            $query->whereBetween('fecha_entrada', [
+                $request->fecha_inicio,
+                $request->fecha_fin
+            ]);
+        }
+
+        // Control de acceso por rol
+        if ($user->role !== 'admin') {
+            $query->where('receptor_id', $user->id);
+        }
+
+        $recepciones = $query->orderBy('fecha_entrada', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Log para debug
+        \Log::info('Recepciones cargadas para usuario ' . $user->id . ': ' . $recepciones->count());
 
         return response()->json($recepciones);
     }
-
-    // Se obitienen rehistros pendientes para recepcion
 
     public function registrosPendientes()
     {
         $registros = RegistrosScrap::with('operador')
             ->where('estado', 'pendiente')
+            ->where('completo', true)
+            ->orderBy('fecha_registro', 'asc')
             ->orderBy('created_at', 'asc')
             ->get();
 
         return response()->json($registros);
     }
 
-    // Se crea una nueva recepcion
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'registro_scrap_id' => 'required|exists:registros_scrap,id',
             'peso_kg' => 'required|numeric|min:0.1',
-            'tipo_material' => 'required|in:cobre,aluminio,mixto',
+            'tipo_material' => 'required|string|max:50',
             'origen_tipo' => 'required|in:interna,externa',
             'origen_especifico' => 'required|string|max:150',
             'destino' => 'required|in:reciclaje,venta,almacenamiento',
             'observaciones' => 'nullable|string',
+            'registro_scrap_id' => 'nullable|exists:registros_scrap,id',
+            'lugar_almacenamiento' => 'required_if:destino,almacenamiento|string|max:100'
         ]);
 
-        // Se genera el HU único
-        $numeroHU = 'HU-' .strtoupper(Str::random(3)) .'-'.date('Ymd-His');
+        DB::beginTransaction();
+        try {
+            $numeroHU = 'HU-' . strtoupper(Str::random(3)) . '-' . date('Ymd-His');
 
-        $recepcion = RecepcionesScrap::create([
-            'numero_hu' => $numeroHU,
-            'peso_kg' => $validated['peso_kg'],
-            'tipo_material' => $validated['tipo_material'],
-            'origen_tipo' => $validated['origen_tipo'],
-            'origen_especifico' => $validated['origen_especifico'],
-            'registro_scrap_id' => $validated['registro_scrap_id'],
-            'receptor_id' => Auth::id(),
-            'destino' => $validated['destino'],
-            'observaciones' => $validated['observaciones'] ?? null, 
-        ]);
+            $dataToInsert = [
+                'numero_hu' => $numeroHU,
+                'peso_kg' => $validated['peso_kg'],
+                'tipo_material' => $validated['tipo_material'],
+                'origen_tipo' => $validated['origen_tipo'],
+                'origen_especifico' => $validated['origen_especifico'],
+                'registro_scrap_id' => $validated['registro_scrap_id'] ?? null,
+                'receptor_id' => Auth::id(),
+                'destino' => $validated['destino'],
+                'lugar_almacenamiento' => $validated['lugar_almacenamiento'] ?? null,
+                'observaciones' => $validated['observaciones'] ?? null,
+                'fecha_entrada' => now(),
+                'fecha_registro' => now(),
+            ];
 
-        // Actualizar el estado del registro original
-        $registro = RegistrosScrap::find($validated['registro_scrap_id']);
-        $registro->estado = 'recibido';
-        $registro->save();
+            $recepcion = RecepcionesScrap::create($dataToInsert);
 
-        return response()->json([
-            'message' => 'Recepcion de scrap creada correctamente',
-            'recepcion' => $recepcion->load(['receptor', 'registro.operador']),
-            'numero_hu' => $numeroHU
-        ], 201);
+            // Actualizar el estado del registro original SOLO si es origen interno y tiene registro
+            if ($validated['origen_tipo'] === 'interna' && isset($validated['registro_scrap_id'])) {
+                $registro = RegistrosScrap::find($validated['registro_scrap_id']);
+                if ($registro) {
+                    $registro->marcarRecibido();
+                }
+            }
+
+            // Actualizar stock si el destino es almacenamiento
+            if ($validated['destino'] === 'almacenamiento') {
+                StockScrap::actualizarStockGlobal(
+                    $validated['tipo_material'],
+                    $validated['peso_kg'],
+                    'suma'
+                );
+            }
+
+            DB::commit();
+
+            $recepcion->load(['receptor', 'registro.operador']);
+
+            return response()->json([
+                'message' => 'Recepción de scrap creada correctamente',
+                'recepcion' => $recepcion,
+                'numero_hu' => $numeroHU
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error interno del servidor: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    // Obtener estadisticas para el dashboard del receptor
+    public function imprimirHU($id)
+    {
+        $recepcion = RecepcionesScrap::with(['receptor', 'registro.operador'])->findOrFail($id);
+
+        // Verificar permisos
+        $user = Auth::user();
+        if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {
+            return response()->json([
+                'message' => 'No tienes permiso para imprimir esta HU'
+            ], 403);
+        }
+
+        try {
+            // Generar PDF
+            $pdf = PDF::loadView('pdf.hu', compact('recepcion'));
+
+            // Marcar como impreso
+            $recepcion->marcarImpreso();
+
+            // Devolver el PDF como descarga
+            return $pdf->download("HU-{$recepcion->numero_hu}.pdf");
+        } catch (\Exception $e) {
+            \Log::error('Error generando PDF para HU ' . $id . ': ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Error al generar el PDF: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function reporteRecepcion(Request $request)
+    {
+        $user = Auth::user();
+
+        $query = RecepcionesScrap::with(['receptor', 'registro.operador']);
+
+        if ($user->role !== 'admin') {
+            $query->where('receptor_id', $user->id);
+        }
+
+        // Filtros
+        if ($request->has('fecha_inicio') && $request->has('fecha_fin')) {
+            $query->whereBetween('fecha_entrada', [
+                $request->fecha_inicio,
+                $request->fecha_fin
+            ]);
+        }
+
+        if ($request->has('tipo_material')) {
+            $query->where('tipo_material', $request->tipo_material);
+        }
+
+        if ($request->has('origen_tipo')) {
+            $query->where('origen_tipo', $request->origen_tipo);
+        }
+
+        if ($request->has('destino')) {
+            $query->where('destino', $request->destino);
+        }
+
+        $recepciones = $query->orderBy('fecha_entrada', 'desc')->get();
+
+        // Totales
+        $totales = [
+            'total_recepciones' => $recepciones->count(),
+            'total_peso' => $recepciones->sum('peso_kg'),
+            'por_destino' => $recepciones->groupBy('destino')->map(function ($group) {
+                return [
+                    'count' => $group->count(),
+                    'peso_total' => $group->sum('peso_kg')
+                ];
+            }),
+            'por_material' => $recepciones->groupBy('tipo_material')->map(function ($group) {
+                return [
+                    'count' => $group->count(),
+                    'peso_total' => $group->sum('peso_kg')
+                ];
+            }),
+            'por_origen' => $recepciones->groupBy('origen_tipo')->map(function ($group) {
+                return [
+                    'count' => $group->count(),
+                    'peso_total' => $group->sum('peso_kg')
+                ];
+            })
+        ];
+
+        return response()->json([
+            'recepciones' => $recepciones,
+            'totales' => $totales,
+            'filtros' => $request->all()
+        ]);
+    }
+
+    public function stockDisponible()
+    {
+        $stock = StockScrap::disponible()
+            ->selectRaw('tipo_material, SUM(cantidad_kg) as cantidad_total, COUNT(*) as numero_lotes')
+            ->groupBy('tipo_material')
+            ->get();
+
+        return response()->json($stock);
+    }
+
     public function stats()
     {
         $user = Auth::user();
@@ -89,7 +242,7 @@ class RecepcionScrapController extends Controller
         if ($user->role === 'admin') {
             $totalRecepciones = RecepcionesScrap::count();
             $totalPeso = RecepcionesScrap::sum('peso_kg');
-            $registrosPendientes = RecepcionesScrap::where('estado', 'pendiente')->count();
+            $registrosPendientes = RegistrosScrap::where('estado', 'pendiente')->count();
         } else {
             $totalRecepciones = RecepcionesScrap::where('receptor_id', $user->id)->count();
             $totalPeso = RecepcionesScrap::where('receptor_id', $user->id)->sum('peso_kg');
@@ -100,9 +253,9 @@ class RecepcionScrapController extends Controller
         $destinos = RecepcionesScrap::when($user->role !== 'admin', function ($query) use ($user) {
             return $query->where('receptor_id', $user->id);
         })
-        ->selectRaw('destino, COUNT(*) as count, SUM(peso_kg) as peso_total')
-        ->groupBy('destino')
-        ->get();
+            ->selectRaw('destino, COUNT(*) as count, SUM(peso_kg) as peso_total')
+            ->groupBy('destino')
+            ->get();
 
         return response()->json([
             'total_recepciones' => $totalRecepciones,
@@ -111,21 +264,18 @@ class RecepcionScrapController extends Controller
             'destinos' => $destinos,
         ]);
     }
-    
-    // Se obtiene una recepcion especifica
+
     public function show($id)
     {
         $recepcion = RecepcionesScrap::with(['receptor', 'registro.operador'])->findOrFail($id);
 
-        // Se verifican los permisos
         $user = Auth::user();
         if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {
             return response()->json([
-                'message' => ' No tienes permiso para ver esta recepcion'
-            ],403);
+                'message' => 'No tienes permiso para ver esta recepcion'
+            ], 403);
         }
 
         return response()->json($recepcion);
-
     }
 }

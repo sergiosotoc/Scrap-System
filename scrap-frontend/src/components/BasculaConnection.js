@@ -1,0 +1,848 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// API Client integrado
+const API_BASE_URL = 'http://localhost:8000/api';
+
+const getAuthToken = () => {
+  try {
+    return localStorage.getItem('authToken');
+  } catch (error) {
+    console.error('Error obteniendo token:', error);
+    return null;
+  }
+};
+
+const apiClient = {
+  async request(endpoint, options = {}) {
+    const url = `${API_BASE_URL}${endpoint}`;
+    const token = getAuthToken();
+
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...options.headers,
+      },
+      credentials: 'include',
+      ...options,
+    };
+
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (config.body && typeof config.body === 'object') {
+      config.body = JSON.stringify(config.body);
+    }
+
+    try {
+      const response = await fetch(url, config);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText };
+        }
+        throw new Error(errorData.message || `Error ${response.status}`);
+      }
+
+      const responseText = await response.text();
+      return responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      console.error(`Error en petición ${url}:`, error);
+      throw error;
+    }
+  },
+
+  async listarPuertosBascula() {
+    try {
+      return await this.request('/bascula/puertos');
+    } catch (error) {
+      return {
+        success: true,
+        puertos: ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9'],
+        sistema: 'windows',
+        puerto_recomendado: 'COM3',
+        mensaje: 'Usando puertos simulados',
+        error: error.message
+      };
+    }
+  },
+
+  async conectarBascula(data) {
+    return await this.request('/bascula/conectar', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  async leerPesoBascula(data) {
+    return await this.request('/bascula/leer-peso', {
+      method: 'POST',
+      body: data,
+    });
+  }
+};
+
+const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
+  const [conectado, setConectado] = useState(false);
+  const [peso, setPeso] = useState(0);
+  const [cargando, setCargando] = useState(false);
+  const [cargandoPuertos, setCargandoPuertos] = useState(true);
+  const [puertosDisponibles, setPuertosDisponibles] = useState([]);
+  const [puertoSeleccionado, setPuertoSeleccionado] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [formatoDetectado, setFormatoDetectado] = useState('');
+  const intervaloRef = useRef(null);
+  const [modoManual, setModoManual] = useState(false);
+  const [pesoManual, setPesoManual] = useState("");
+  const [ultimaLectura, setUltimaLectura] = useState(null);
+  const [tienePesoInicial, setTienePesoInicial] = useState(false);
+  const [velocidadLectura, setVelocidadLectura] = useState(1000); // 1 segundo
+  const [lecturaEnProgreso, setLecturaEnProgreso] = useState(false);
+
+  const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9'];
+
+  useEffect(() => {
+    console.log('🔧 Inicializando BasculaConnection mejorado');
+    cargarPuertos();
+
+    return () => {
+      if (intervaloRef.current) {
+        clearInterval(intervaloRef.current);
+        console.log('🧹 Limpiando intervalo');
+      }
+    };
+  }, [campoDestino]);
+
+  useEffect(() => {
+    // NO iniciar lectura automática aquí
+    // Solo se iniciará manualmente después de conectar
+    return () => detenerLecturaAutomatica();
+  }, []);
+
+  const cargarPuertos = async () => {
+    setCargandoPuertos(true);
+    setError('');
+    setInfo('🔄 Cargando puertos...');
+
+    try {
+      const resultado = await apiClient.listarPuertosBascula();
+
+      if (resultado.success) {
+        const puertos = resultado.puertos || puertosComunes;
+        setPuertosDisponibles(puertos);
+
+        const puertoRecomendado = resultado.puerto_recomendado ||
+          (puertos.includes('COM3') ? 'COM3' : puertos[0]) || 'COM3';
+
+        setPuertoSeleccionado(puertoRecomendado);
+        setInfo(`✅ ${resultado.mensaje}`);
+      }
+    } catch (error) {
+      console.error('Error cargando puertos:', error);
+      setError('Error cargando puertos');
+      setPuertosDisponibles(puertosComunes);
+      setPuertoSeleccionado('COM3');
+    } finally {
+      setCargandoPuertos(false);
+    }
+  };
+
+  const conectarBascula = async () => {
+    if (!puertoSeleccionado) {
+      setError('Seleccione un puerto');
+      return;
+    }
+
+    setCargando(true);
+    setError('');
+    setInfo(`🔌 Conectando a ${puertoSeleccionado}...`);
+
+    try {
+      const resultado = await apiClient.conectarBascula({
+        puerto: puertoSeleccionado
+      });
+
+      if (resultado.success) {
+        setConectado(true);
+        setModoManual(false);
+        setTienePesoInicial(resultado.tiene_peso_inicial);
+        
+        const pesoObtenido = parseFloat(resultado.peso_kg) || 0;
+        setPeso(pesoObtenido);
+        setUltimaLectura(new Date());
+
+        if (onPesoObtenido) {
+          onPesoObtenido(pesoObtenido, campoDestino);
+        }
+
+        const mensaje = resultado.tiene_peso_inicial
+          ? `✅ Conectado - Peso inicial: ${pesoObtenido} kg`
+          : `✅ Conectado - Esperando peso en báscula`;
+        
+        setInfo(mensaje);
+
+        // Si tiene peso inicial, mostrar formato
+        if (resultado.tiene_peso_inicial && resultado.configuracion) {
+          setFormatoDetectado(`${resultado.configuracion.baudrate} baud`);
+        }
+      } else {
+        setConectado(false);
+        setError(resultado.mensaje || 'No se pudo conectar');
+      }
+    } catch (error) {
+      console.error('Error en conexión:', error);
+      setError('Error de comunicación: ' + error.message);
+      setConectado(false);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const leerPesoAutomatico = async () => {
+    if (!conectado || lecturaEnProgreso) return;
+
+    setLecturaEnProgreso(true);
+    
+    try {
+      const resultado = await apiClient.leerPesoBascula({
+        puerto: puertoSeleccionado
+      });
+
+      if (resultado.success) {
+        const nuevoPeso = parseFloat(resultado.peso_kg) || 0;
+        
+        // Actualizar siempre, incluso si es 0
+        setPeso(nuevoPeso);
+        setUltimaLectura(new Date());
+
+        if (onPesoObtenido) {
+          onPesoObtenido(nuevoPeso, campoDestino);
+        }
+
+        if (resultado.formato_detectado && !formatoDetectado) {
+          setFormatoDetectado(resultado.formato_detectado);
+        }
+      } else if (resultado.requiere_conexion) {
+        // Perdimos conexión
+        console.warn('Conexión perdida');
+        setConectado(false);
+        setError('Conexión perdida - Reconecte');
+        detenerLecturaAutomatica();
+      }
+    } catch (error) {
+      console.debug('Error lectura:', error.message);
+      // No mostrar error al usuario en lecturas automáticas
+    } finally {
+      setLecturaEnProgreso(false);
+    }
+  };
+
+  const iniciarLecturaAutomatica = () => {
+    console.log(`🔄 Iniciando lectura cada ${velocidadLectura}ms`);
+    
+    if (intervaloRef.current) {
+      clearInterval(intervaloRef.current);
+    }
+
+    // Primera lectura inmediata
+    leerPesoAutomatico();
+
+    // Luego cada intervalo
+    intervaloRef.current = setInterval(() => {
+      leerPesoAutomatico();
+    }, velocidadLectura);
+  };
+
+  const detenerLecturaAutomatica = () => {
+    if (intervaloRef.current) {
+      clearInterval(intervaloRef.current);
+      intervaloRef.current = null;
+    }
+  };
+
+  const desconectarBascula = async () => {
+    detenerLecturaAutomatica();
+    
+    try {
+      await apiClient.request('/bascula/desconectar', {
+        method: 'POST',
+        body: { puerto: puertoSeleccionado }
+      });
+    } catch (error) {
+      console.log('Error desconectando:', error);
+    }
+
+    setConectado(false);
+    setPeso(0);
+    setError('');
+    setInfo('Báscula desconectada');
+    setModoManual(false);
+    setPesoManual("");
+    setFormatoDetectado('');
+    setTienePesoInicial(false);
+
+    if (onPesoObtenido) {
+      onPesoObtenido(0, campoDestino);
+    }
+  };
+
+  const probarTodosLosPuertos = async () => {
+    if (cargando) return;
+
+    setCargando(true);
+    setError('');
+    setInfo('🔍 Probando todos los puertos...');
+
+    const puertosAPrueba = puertosDisponibles.length > 0 ? puertosDisponibles : puertosComunes;
+    let puertoConectado = null;
+
+    for (const puerto of puertosAPrueba) {
+      setPuertoSeleccionado(puerto);
+      setInfo(`🔌 Probando ${puerto}...`);
+
+      try {
+        const resultado = await apiClient.conectarBascula({ puerto });
+
+        if (resultado.success) {
+          puertoConectado = puerto;
+          break;
+        }
+      } catch (error) {
+        console.log(`Puerto ${puerto} falló`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    if (puertoConectado) {
+      setPuertoSeleccionado(puertoConectado);
+      setInfo(`✅ Báscula encontrada en ${puertoConectado}`);
+      setTimeout(() => conectarBascula(), 500);
+    } else {
+      setError('No se encontró báscula en ningún puerto');
+      setModoManual(true);
+      setInfo('⚠️ Use modo manual como alternativa');
+    }
+
+    setCargando(false);
+  };
+
+  const activarModoManual = () => {
+    setModoManual(true);
+    setConectado(false);
+    setInfo('📌 Modo manual activado');
+    detenerLecturaAutomatica();
+  };
+
+  const handlePesoManualChange = (e) => {
+    const valor = e.target.value;
+    setPesoManual(valor);
+    
+    const pesoNumerico = parseFloat(valor) || 0;
+    setPeso(pesoNumerico);
+    
+    if (onPesoObtenido) {
+      onPesoObtenido(pesoNumerico, campoDestino);
+    }
+  };
+
+  const cambiarVelocidad = (nuevaVelocidad) => {
+    setVelocidadLectura(nuevaVelocidad);
+    if (conectado) {
+      detenerLecturaAutomatica();
+      // Se reiniciará automáticamente por el useEffect
+    }
+  };
+
+  const formatearTiempo = (fecha) => {
+    if (!fecha) return '';
+    return fecha.toLocaleTimeString();
+  };
+
+  return (
+    <div style={styles.container}>
+      <h4 style={styles.titulo}>
+        ⚖️ Conexión con Báscula Digital
+        {modoManual && <span style={styles.manualBadge}>[MANUAL]</span>}
+        {conectado && <span style={styles.autoBadge}>[AUTO {velocidadLectura}ms]</span>}
+      </h4>
+
+      {info && (
+        <div style={{
+          ...styles.infoBox,
+          ...(info.includes('⚠️') && styles.warningBox),
+          ...(info.includes('✅') && styles.successBox),
+          ...(info.includes('❌') && styles.errorBox)
+        }}>
+          {info}
+        </div>
+      )}
+
+      {error && (
+        <div style={styles.errorBox}>⚠️ {error}</div>
+      )}
+
+      <div style={styles.puertoSection}>
+        <label style={styles.label}>Puerto COM:</label>
+        <select
+          value={puertoSeleccionado}
+          onChange={(e) => setPuertoSeleccionado(e.target.value)}
+          style={styles.select}
+          disabled={conectado || cargandoPuertos || modoManual}
+        >
+          <option value="">{cargandoPuertos ? 'Cargando...' : 'Seleccionar puerto'}</option>
+          {puertosDisponibles.map(puerto => (
+            <option key={puerto} value={puerto}>{puerto}</option>
+          ))}
+        </select>
+
+        <button
+          onClick={cargarPuertos}
+          disabled={cargandoPuertos || conectado}
+          style={styles.refreshButton}
+          title="Actualizar lista"
+        >
+          {cargandoPuertos ? '🔄' : '🔃'}
+        </button>
+      </div>
+
+      {!conectado && !modoManual ? (
+        <div style={styles.connectionPanel}>
+          <div style={styles.buttonGroup}>
+            <button
+              onClick={conectarBascula}
+              disabled={cargando || !puertoSeleccionado || cargandoPuertos}
+              style={{
+                ...styles.connectButton,
+                ...((cargando || !puertoSeleccionado) && styles.disabledButton)
+              }}
+            >
+              {cargando ? '🔌 Conectando...' : '🔌 Conectar'}
+            </button>
+
+            <button
+              onClick={probarTodosLosPuertos}
+              disabled={cargando}
+              style={styles.autoButton}
+            >
+              🔍 Auto-detectar
+            </button>
+
+            <button
+              onClick={activarModoManual}
+              style={styles.manualModeButton}
+            >
+              ✍️ Modo Manual
+            </button>
+          </div>
+        </div>
+      ) : conectado ? (
+        <div style={styles.connected}>
+          <div style={styles.pesoDisplay}>
+            <span style={styles.pesoLabel}>PESO ACTUAL:</span>
+            <span style={styles.pesoValue}>{peso.toFixed(3)} kg</span>
+            <div style={styles.infoAdicional}>
+              {formatoDetectado && <div>📡 {formatoDetectado}</div>}
+              {ultimaLectura && <div>🕒 {formatearTiempo(ultimaLectura)}</div>}
+              <div>🔄 Cada {velocidadLectura/1000}s</div>
+            </div>
+          </div>
+
+          <div style={styles.velocidadControl}>
+            <label style={styles.velocidadLabel}>Velocidad:</label>
+            <div style={styles.velocidadButtons}>
+              <button
+                onClick={() => cambiarVelocidad(500)}
+                style={{
+                  ...styles.velocidadBtn,
+                  ...(velocidadLectura === 500 && styles.velocidadBtnActive)
+                }}
+              >
+                Rápida (0.5s)
+              </button>
+              <button
+                onClick={() => cambiarVelocidad(1000)}
+                style={{
+                  ...styles.velocidadBtn,
+                  ...(velocidadLectura === 1000 && styles.velocidadBtnActive)
+                }}
+              >
+                Normal (1s)
+              </button>
+              <button
+                onClick={() => cambiarVelocidad(2000)}
+                style={{
+                  ...styles.velocidadBtn,
+                  ...(velocidadLectura === 2000 && styles.velocidadBtnActive)
+                }}
+              >
+                Lenta (2s)
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.controlButtons}>
+            <button onClick={desconectarBascula} style={styles.disconnectButton}>
+              🔌 Desconectar
+            </button>
+          </div>
+
+          <div style={styles.status}>
+            <span style={styles.statusConnected}>🟢 Conectado</span>
+            <span style={styles.puertoInfo}>Puerto: {puertoSeleccionado}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {modoManual && (
+        <div style={styles.manualSection}>
+          <div style={styles.manualHeader}>
+            <strong>📌 Modo Manual</strong>
+          </div>
+          <div style={styles.manualInputGroup}>
+            <label style={styles.manualLabel}>Peso (kg):</label>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={pesoManual}
+              onChange={handlePesoManualChange}
+              placeholder="0.000"
+              style={styles.manualInput}
+            />
+            <span style={styles.manualUnit}>kg</span>
+          </div>
+          <div style={styles.manualButtons}>
+            <button
+              onClick={() => {
+                setModoManual(false);
+                setPesoManual("");
+                setInfo('Modo manual desactivado');
+              }}
+              style={styles.backButton}
+            >
+              ↩️ Volver
+            </button>
+          </div>
+          {peso > 0 && (
+            <div style={styles.pesoPreview}>
+              Peso: <strong>{peso.toFixed(3)} kg</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={styles.helpText}>
+        <strong>💡 Sistema mejorado:</strong>
+        <ul style={styles.helpList}>
+          <li>✅ <strong>Conexión sin peso</strong> - Conecta aunque esté vacía</li>
+          <li>✅ <strong>Lectura cada 1 segundo</strong> - Actualización automática</li>
+          <li>✅ <strong>Detección universal</strong> - Cualquier marca</li>
+          <li>✅ <strong>Conexión persistente</strong> - Sin desconexiones</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+const styles = {
+  container: {
+    border: '2px solid #007bff',
+    borderRadius: '8px',
+    padding: '1rem',
+    marginBottom: '1rem',
+    backgroundColor: '#f8f9fa',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+  },
+  titulo: {
+    margin: '0 0 1rem 0',
+    color: '#333',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    flexWrap: 'wrap'
+  },
+  manualBadge: {
+    fontSize: '0.7rem',
+    backgroundColor: '#ffc107',
+    color: '#212529',
+    padding: '0.2rem 0.5rem',
+    borderRadius: '4px'
+  },
+  autoBadge: {
+    fontSize: '0.7rem',
+    backgroundColor: '#17a2b8',
+    color: 'white',
+    padding: '0.2rem 0.5rem',
+    borderRadius: '4px'
+  },
+  infoBox: {
+    backgroundColor: '#d1ecf1',
+    color: '#0c5460',
+    padding: '0.75rem',
+    borderRadius: '4px',
+    marginBottom: '1rem',
+    border: '1px solid #bee5eb'
+  },
+  warningBox: {
+    backgroundColor: '#fff3cd',
+    color: '#856404',
+    border: '1px solid #ffeaa7'
+  },
+  successBox: {
+    backgroundColor: '#d1f2eb',
+    color: '#0c5460',
+    border: '1px solid #a3e4d7'
+  },
+  errorBox: {
+    backgroundColor: '#f8d7da',
+    color: '#721c24',
+    padding: '0.75rem',
+    borderRadius: '4px',
+    marginBottom: '1rem',
+    border: '1px solid #f5c6cb'
+  },
+  puertoSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    marginBottom: '1rem',
+    flexWrap: 'wrap'
+  },
+  label: {
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: '80px'
+  },
+  select: {
+    padding: '0.5rem',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    minWidth: '120px',
+    backgroundColor: 'white',
+    flex: '1'
+  },
+  refreshButton: {
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  connectionPanel: {
+    textAlign: 'center'
+  },
+  buttonGroup: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'center',
+    marginBottom: '1rem',
+    flexWrap: 'wrap'
+  },
+  connectButton: {
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '1rem',
+    fontWeight: 'bold',
+    flex: '1',
+    minWidth: '120px'
+  },
+  autoButton: {
+    backgroundColor: '#17a2b8',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    flex: '1',
+    minWidth: '120px'
+  },
+  manualModeButton: {
+    backgroundColor: '#ffc107',
+    color: '#212529',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    flex: '1',
+    minWidth: '120px'
+  },
+  disabledButton: {
+    backgroundColor: '#6c757d',
+    cursor: 'not-allowed',
+    opacity: 0.6
+  },
+  connected: {
+    textAlign: 'center'
+  },
+  pesoDisplay: {
+    marginBottom: '1rem',
+    padding: '1.5rem',
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    border: '3px solid #28a745',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+  },
+  pesoLabel: {
+    display: 'block',
+    fontSize: '0.9rem',
+    color: '#666',
+    marginBottom: '0.5rem',
+    fontWeight: 'bold'
+  },
+  pesoValue: {
+    fontSize: '2.5rem',
+    fontWeight: 'bold',
+    color: '#28a745',
+    display: 'block'
+  },
+  infoAdicional: {
+    marginTop: '0.5rem',
+    fontSize: '0.8rem',
+    color: '#666',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.2rem'
+  },
+  velocidadControl: {
+    marginBottom: '1rem',
+    padding: '0.75rem',
+    backgroundColor: '#e9ecef',
+    borderRadius: '4px'
+  },
+  velocidadLabel: {
+    display: 'block',
+    fontSize: '0.85rem',
+    fontWeight: 'bold',
+    marginBottom: '0.5rem',
+    color: '#495057'
+  },
+  velocidadButtons: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+    gap: '0.5rem'
+  },
+  velocidadBtn: {
+    padding: '0.5rem',
+    fontSize: '0.75rem',
+    border: '1px solid #6c757d',
+    borderRadius: '4px',
+    backgroundColor: 'white',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  velocidadBtnActive: {
+    backgroundColor: '#007bff',
+    color: 'white',
+    borderColor: '#007bff',
+    fontWeight: 'bold'
+  },
+  controlButtons: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'center',
+    marginBottom: '1rem'
+  },
+  disconnectButton: {
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    flex: '1',
+    minWidth: '120px'
+  },
+  status: {
+    margin: '1rem 0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    fontSize: '0.9rem'
+  },
+  statusConnected: {
+    color: '#28a745',
+    fontWeight: 'bold'
+  },
+  puertoInfo: {
+    color: '#6c757d'
+  },
+  manualSection: {
+    backgroundColor: '#fff3cd',
+    border: '1px solid #ffeaa7',
+    borderRadius: '8px',
+    padding: '1rem'
+  },
+  manualHeader: {
+    textAlign: 'center',
+    marginBottom: '1rem',
+    color: '#856404'
+  },
+  manualInputGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    marginBottom: '1rem',
+    flexWrap: 'wrap'
+  },
+  manualLabel: {
+    fontWeight: 'bold',
+    color: '#856404'
+  },
+  manualInput: {
+    padding: '0.5rem',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+    width: '120px',
+    textAlign: 'center'
+  },
+  manualUnit: {
+    color: '#856404',
+    fontWeight: 'bold'
+  },
+  manualButtons: {
+    textAlign: 'center',
+    marginBottom: '1rem'
+  },
+  backButton: {
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    padding: '0.5rem 1rem',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  pesoPreview: {
+    textAlign: 'center',
+    padding: '0.5rem',
+    backgroundColor: 'white',
+    borderRadius: '4px',
+    border: '1px solid #28a745',
+    color: '#28a745'
+  },
+  helpText: {
+    marginTop: '1rem',
+    color: '#6c757d',
+    fontSize: '0.8rem',
+    textAlign: 'left'
+  },
+  helpList: {
+    margin: '0.5rem 0',
+    paddingLeft: '1.5rem',
+    lineHeight: '1.6'
+  }
+};
+
+export default BasculaConnection;

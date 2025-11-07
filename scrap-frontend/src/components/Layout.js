@@ -1,3 +1,5 @@
+/* src/components/routes/Layout.js */
+
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 

@@ -11,51 +11,47 @@ const Login = () => {
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  console.log('🔐 Intentando login con:', { username });
-  
-  try {
-    const result = await login(username, password);
+    console.log('🔐 Intentando login con:', { username });
     
-    console.log('📋 Resultado del login:', result);
-    
-    if (result.success) {
-      console.log('✅ Login exitoso, redirigiendo...');
-      console.log('👤 Usuario:', result.user);
-      console.log('🎯 Rol:', result.user.role);
+    try {
+      const result = await login(username, password);
       
-      // Pequeña pausa para asegurar que el estado se actualice
-      setTimeout(() => {
-        // Redirigir según el rol
+      console.log('📋 Resultado del login:', result);
+      
+      if (result.success) {
+        console.log('✅ Login exitoso, redirigiendo...');
+        console.log('👤 Usuario:', result.user);
+        console.log('🎯 Rol:', result.user.role);
+        
+        // Redirigir según el rol - CORREGIDO PARA RECEPTOR
         if (result.user.role === 'admin') {
-
           console.log('🔄 Redirigiendo a /admin');
           window.location.href = '/admin';
-
         } else if (result.user.role === 'operador') {
-
           console.log('🔄 Redirigiendo a /operador');
           window.location.href = '/operador';
-          
+        } else if (result.user.role === 'receptor') {
+          console.log('🔄 Redirigiendo a /receptor');
+          window.location.href = '/receptor';
         } else {
           console.log('🔄 Redirigiendo a /home');
           window.location.href = '/home';
         }
-      }, 100);
-    } else {
-      console.error('❌ Error en login:', result.error);
-      setError(result.error);
+      } else {
+        console.error('❌ Error en login:', result.error);
+        setError(result.error);
+      }
+    } catch (error) {
+      console.error('💥 Error capturado en handleSubmit:', error);
+      setError('Error inesperado: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('💥 Error capturado en handleSubmit:', error);
-    setError('Error inesperado: ' + error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <div style={styles.container}>
@@ -104,9 +100,10 @@ const Login = () => {
         </form>
         
         <div style={styles.demo}>
-          <p><strong>Usuario de prueba:</strong></p>
-          <p>Usuario: admin.scrap</p>
-          <p>Contraseña: scrap2025</p>
+          <p><strong>Usuarios de prueba:</strong></p>
+          <p>👑 Admin: admin.scrap / scrap2025</p>
+          <p>👨‍💼 Operador: operador1 / operador123</p>
+          <p>🏷️ Receptor: receptor1 / receptor123</p>
         </div>
       </div>
     </div>

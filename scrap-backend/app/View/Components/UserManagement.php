@@ -1,4 +1,5 @@
 <?php
+/* app/View/Components/UserManagement.php */
 
 namespace App\View\Components;
 

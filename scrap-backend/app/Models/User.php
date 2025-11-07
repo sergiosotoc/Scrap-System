@@ -1,5 +1,5 @@
 <?php
-
+// app/Models/User.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,15 +22,25 @@ class User extends Authenticatable
         'password',
     ];
 
-    protected $table = 'users';
-
-    public function getAuthIdentifierName()
+    // Relaciones
+    public function registrosScrap()
     {
-        return 'username';
+        return $this->hasMany(RegistrosScrap::class, 'operador_id');
     }
 
-    public function getAuthIdentifier()
+    public function recepcionesScrap()
     {
-        return $this->getKey();
+        return $this->hasMany(RecepcionesScrap::class, 'receptor_id');
+    }
+
+    // Scopes para roles
+    public function scopeActivos($query)
+    {
+        return $query->where('activo', true);
+    }
+
+    public function scopePorRol($query, $rol)
+    {
+        return $query->where('role', $rol);
     }
 }

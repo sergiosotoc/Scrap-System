@@ -16,7 +16,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Verificar si el usuario está autenticado al cargar la app
   useEffect(() => {
     checkAuth();
   }, []);
@@ -28,7 +27,7 @@ export const AuthProvider = ({ children }) => {
         const userData = await apiClient.getUser();
         setUser(userData.user);
       } catch (error) {
-        // Token inválido, limpiar
+        console.error('Error verificando autenticación:', error);
         localStorage.removeItem('authToken');
       }
     }
@@ -37,20 +36,17 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-
       console.log('AuthContext - Iniciando login para:', username);
       const response = await apiClient.login(username, password);
 
-      console.log('Autcontext - Login exitoso');
+      console.log('AuthContext - Login exitoso', response);
       
-      // Guardar token en localStorage
       localStorage.setItem('authToken', response.token);
       setUser(response.user);
       
       return { success: true, user: response.user };
 
     } catch (error) {
-
       console.log('AuthContext - Error en login:', error);
       return { success: false, error: error.message };
     }
@@ -62,7 +58,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error en logout:', error);
     } finally {
-      // Limpiar siempre
       localStorage.removeItem('authToken');
       setUser(null);
     }
