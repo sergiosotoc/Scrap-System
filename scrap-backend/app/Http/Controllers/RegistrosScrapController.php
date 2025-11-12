@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class RegistrosScrapController extends Controller
 {
@@ -37,8 +38,8 @@ class RegistrosScrapController extends Controller
         }
 
         $registros = $query->orderBy('fecha_registro', 'desc')
-                          ->orderBy('created_at', 'desc')
-                          ->get();
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         return response()->json($registros);
     }
@@ -65,10 +66,11 @@ class RegistrosScrapController extends Controller
 
     private function obtenerConfigBascula()
     {
+        // Usa el Facade Storage en lugar de \Illuminate\Support\Facades\Storage::exists (redundante si ya se importó)
         if (\Illuminate\Support\Facades\Storage::exists('bascula_config.json')) {
             return json_decode(\Illuminate\Support\Facades\Storage::get('bascula_config.json'), true);
         }
-        
+
         return null;
     }
 
@@ -152,7 +154,6 @@ class RegistrosScrapController extends Controller
                 'peso_total' => $pesoTotal,
                 'reporte_generado' => true
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
@@ -168,19 +169,18 @@ class RegistrosScrapController extends Controller
             $pdf = PDF::loadView('pdf.registro-scrap', compact('registro'));
             $fileName = "registro_scrap_{$registro->id}_{$registro->fecha_registro->format('Ymd_His')}.pdf";
             $pdfPath = storage_path("app/pdf/{$fileName}");
-            
+
             // Asegurar que existe el directorio
             if (!file_exists(dirname($pdfPath))) {
                 mkdir(dirname($pdfPath), 0755, true);
             }
-            
+
             // Guardar PDF localmente
             $pdf->save($pdfPath);
 
             Log::info("PDF generado localmente para registro {$registro->id}: {$pdfPath}");
 
             return true;
-
         } catch (\Exception $e) {
             Log::error('Error generando reporte PDF: ' . $e->getMessage());
             return false;
@@ -232,7 +232,7 @@ class RegistrosScrapController extends Controller
     private function agruparRegistrosComoPDF($registros)
     {
         $agrupado = [];
-        
+
         // Agrupar por área y máquina como en el PDF original
         foreach ($registros->groupBy(['area_real', 'maquina_real']) as $area => $maquinas) {
             foreach ($maquinas as $maquina => $items) {
@@ -245,7 +245,7 @@ class RegistrosScrapController extends Controller
                 ];
             }
         }
-        
+
         return $agrupado;
     }
 
@@ -336,7 +336,7 @@ class RegistrosScrapController extends Controller
             $totalPeso = RegistrosScrap::sum('peso_total');
             $pendientes = RegistrosScrap::where('estado', 'pendiente')->count();
             $conBascula = RegistrosScrap::where('conexion_bascula', true)->count();
-            
+
             // Totales por área
             $porArea = RegistrosScrap::select('area_real', DB::raw('SUM(peso_total) as total_kg'))
                 ->groupBy('area_real')
@@ -350,7 +350,7 @@ class RegistrosScrapController extends Controller
             $conBascula = RegistrosScrap::where('operador_id', $user->id)
                 ->where('conexion_bascula', true)
                 ->count();
-            
+
             $porArea = RegistrosScrap::select('area_real', DB::raw('SUM(peso_total) as total_kg'))
                 ->where('operador_id', $user->id)
                 ->groupBy('area_real')
@@ -382,21 +382,12 @@ class RegistrosScrapController extends Controller
 
     public function conectarBascula(Request $request)
     {
-        try {
-            // Simulación de conexión con báscula
-            $peso = $request->peso_manual ?? $this->simularLecturaBascula();
-            
-            return response()->json([
-                'success' => true,
-                'peso_kg' => $peso,
-                'mensaje' => 'Báscula conectada correctamente'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'mensaje' => 'Error al conectar con báscula: ' . $e->getMessage()
-            ], 500);
-        }
+        // **CORRECCIÓN:** Utiliza el BasculaController real en lugar de la simulación
+        $basculaController = new BasculaController();
+
+        // Redirigimos la solicitud de lectura de peso al controlador de báscula,
+        // que ahora implementa la lógica de abrir/leer/cerrar en una sola petición.
+        return $basculaController->leerPeso($request);
     }
 
     private function simularLecturaBascula()

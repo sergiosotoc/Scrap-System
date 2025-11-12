@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Validation\Rule;
 
 class RecepcionScrapController extends Controller
 {
@@ -73,7 +74,18 @@ class RecepcionScrapController extends Controller
             'origen_especifico' => 'required|string|max:150',
             'destino' => 'required|in:reciclaje,venta,almacenamiento',
             'observaciones' => 'nullable|string',
-            'registro_scrap_id' => 'nullable|exists:registros_scrap,id',
+            // **CORRECCIÓN:** Validación de registro_scrap_id con condición de estado 'pendiente'
+            'registro_scrap_id' => [
+                'nullable',
+                // Valida que el ID exista y que su estado sea 'pendiente' si el ID está presente
+                Rule::exists('registros_scrap', 'id')->where(function ($query) use ($request) {
+                    if ($request->input('registro_scrap_id')) {
+                        $query->where('estado', 'pendiente');
+                    }
+                }),
+                // Hace el campo requerido si el origen es 'interna' para asegurar trazabilidad
+                Rule::requiredIf($request->input('origen_tipo') === 'interna')
+            ],
             'lugar_almacenamiento' => 'required_if:destino,almacenamiento|string|max:100'
         ]);
 
@@ -106,12 +118,16 @@ class RecepcionScrapController extends Controller
                 }
             }
 
-            // Actualizar stock si el destino es almacenamiento
+            // **CORRECCIÓN LÓGICA DE STOCK:** Crear una nueva entrada de StockScrap (lote/HU)
             if ($validated['destino'] === 'almacenamiento') {
-                StockScrap::actualizarStockGlobal(
+                StockScrap::crearNuevoLote(
                     $validated['tipo_material'],
                     $validated['peso_kg'],
-                    'suma'
+                    $validated['lugar_almacenamiento'],
+                    $numeroHU,
+                    $validated['origen_tipo'],
+                    $validated['origen_especifico'],
+                    $recepcion->id
                 );
             }
 
@@ -126,6 +142,7 @@ class RecepcionScrapController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Error interno del servidor: ' . $e->getMessage()
             ], 500);

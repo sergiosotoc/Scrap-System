@@ -1,8 +1,9 @@
 <?php
-// app/Models/StockScrap.php - MEJORADO
+// app/Models/StockScrap.php - MEJORADO para manejar Lotes/HU
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder; // Agregado para tipar scopes
 
 class StockScrap extends Model
 {
@@ -17,7 +18,8 @@ class StockScrap extends Model
         'origen_tipo',
         'origen_especifico',
         'fecha_ingreso',
-        'ultimo_movimiento'
+        'ultimo_movimiento',
+        'recepcion_id' 
     ];
 
     protected $casts = [
@@ -25,29 +27,83 @@ class StockScrap extends Model
         'ultimo_movimiento' => 'datetime',
     ];
 
-    public function scopeDisponible($query)
+    public function recepcion()
     {
-        return $query->where('estado', 'disponible');
+        return $this->belongsTo(RecepcionesScrap::class, 'recepcion_id');
     }
 
-    public function scopePorTipoMaterial($query, $tipoMaterial)
-    {
-        return $query->where('tipo_material', $tipoMaterial);
-    }
-
-    public function scopePorUbicacion($query, $ubicacion)
-    {
-        return $query->where('ubicacion', $ubicacion);
-    }
-
-    // Trazabilidad: Obtener historial completo del material
     public function trazabilidad()
     {
         return $this->hasMany(StockMovimiento::class, 'stock_id');
     }
 
-    // Método mejorado para actualizar stock
-    public function actualizarStock($cantidad, $operacion = 'suma', $motivo = 'ajuste')
+    /**
+     * @param Builder $query
+     */
+    public function scopeDisponible(Builder $query): Builder
+    {
+        return $query->where('estado', 'disponible')->where('cantidad_kg', '>', 0);
+    }
+
+    /**
+     * @param Builder $query
+     * @param string $tipoMaterial
+     */
+    public function scopePorTipoMaterial(Builder $query, string $tipoMaterial): Builder
+    {
+        return $query->where('tipo_material', $tipoMaterial);
+    }
+
+    /**
+     * @param Builder $query
+     * @param string $ubicacion
+     */
+    public function scopePorUbicacion(Builder $query, string $ubicacion): Builder
+    {
+        return $query->where('ubicacion', $ubicacion);
+    }
+
+    // MÉTODO DE CREACIÓN DE LOTE (sin cambios lógicos)
+    public static function crearNuevoLote(
+        $tipoMaterial, 
+        $cantidad, 
+        $ubicacion, 
+        $hu, 
+        $origenTipo, 
+        $origenEspecifico,
+        $recepcionId
+    )
+    {
+        $stock = self::create([
+            'tipo_material' => $tipoMaterial,
+            'cantidad_kg' => $cantidad,
+            'numero_hu' => $hu,
+            'ubicacion' => $ubicacion,
+            'origen_tipo' => $origenTipo,
+            'origen_especifico' => $origenEspecifico,
+            'recepcion_id' => $recepcionId,
+            'estado' => 'disponible',
+            'fecha_ingreso' => now(),
+            'ultimo_movimiento' => now(),
+        ]);
+        
+        StockMovimiento::create([
+            'stock_id' => $stock->id,
+            'tipo_movimiento' => 'ingreso',
+            'cantidad' => $cantidad,
+            'cantidad_anterior' => 0,
+            'cantidad_nueva' => $cantidad,
+            'motivo' => 'recepcion',
+            'usuario_id' => auth()->id(),
+            'referencia_id' => $recepcionId,
+            'referencia_tipo' => RecepcionesScrap::class
+        ]);
+
+        return $stock;
+    }
+
+    // Método para actualizar stock (sin cambios lógicos)
+    public function actualizarStock($cantidad, $operacion = 'suma', $motivo = 'ajuste', $referenciaId = null, $referenciaTipo = null)
     {
         $cantidadAnterior = $this->cantidad_kg;
 
@@ -59,7 +115,6 @@ class StockScrap extends Model
 
         $this->ultimo_movimiento = now();
 
-        // Registrar movimiento
         StockMovimiento::create([
             'stock_id' => $this->id,
             'tipo_movimiento' => $operacion,
@@ -68,38 +123,19 @@ class StockScrap extends Model
             'cantidad_nueva' => $this->cantidad_kg,
             'motivo' => $motivo,
             'usuario_id' => auth()->id(),
+            'referencia_id' => $referenciaId,
+            'referencia_tipo' => $referenciaTipo
         ]);
 
-        // Si la cantidad llega a 0, marcar como procesado
         if ($this->cantidad_kg <= 0) {
             $this->estado = 'procesado';
+            $this->cantidad_kg = 0;
         }
 
         return $this->save();
     }
-
-    public static function actualizarStockGlobal($tipoMaterial, $cantidad, $operacion = 'suma', $hu = null, $ubicacion = null)
-    {
-        $stock = self::where('tipo_material', $tipoMaterial)
-                    ->where('estado', 'disponible')
-                    ->first();
-
-        if (!$stock) {
-            return self::create([
-                'tipo_material' => $tipoMaterial,
-                'cantidad_kg' => $cantidad,
-                'numero_hu' => $hu,
-                'ubicacion' => $ubicacion,
-                'estado' => 'disponible',
-                'fecha_ingreso' => now(),
-                'ultimo_movimiento' => now(),
-            ]);
-        }
-
-        return $stock->actualizarStock($cantidad, $operacion, 'recepcion');
-    }
-
-    // Método para obtener stock por ubicación
+    
+    // Método para obtener stock por ubicación (sin cambios lógicos)
     public static function getStockPorUbicacion()
     {
         return self::disponible()
