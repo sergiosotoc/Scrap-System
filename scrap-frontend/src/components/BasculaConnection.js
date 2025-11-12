@@ -140,12 +140,22 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                 if (resultado.formato_detectado) {
                     setFormatoDetectado(`${resultado.formato_detectado} @ ${configuracion.baudios} baud`);
                 }
+
+                // Limpiar error si había uno previo
+                if (error) setError('');
+
             } else {
                 // Manejar error sin desconectar inmediatamente
-                console.warn('Error lectura:', resultado.mensaje);
+                if (resultado.mensaje && resultado.mensaje.includes('conexión')) {
+                    setError('Problema de conexión - ' + resultado.mensaje);
+                    // No desconectar automáticamente, dejar que el usuario decida
+                } else {
+                    console.warn('Error lectura:', resultado.mensaje);
+                }
             }
         } catch (error) {
-            console.debug('Error lectura:', error.message);
+            console.debug('Error en lectura automática:', error.message);
+            // No setear error para no spamear la UI con errores temporales
         } finally {
             setLecturaEnProgreso(false);
         }
@@ -169,27 +179,40 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
     };
 
     const desconectarBascula = async () => {
+        // Detener lectura automática inmediatamente
         detenerLecturaAutomatica();
+
+        // Actualizar estado local inmediatamente para feedback visual
+        setConectado(false);
+        setPeso(0);
+        setInfo('Desconectando...');
 
         try {
             await apiClient.request('/bascula/desconectar', {
                 method: 'POST',
                 body: { puerto: configuracion.puerto }
             });
+
+            setInfo('Báscula desconectada');
+            setError('');
+            setModoManual(false);
+            setPesoManual("");
+            setFormatoDetectado('');
+
+            if (onPesoObtenido) {
+                onPesoObtenido(0, campoDestino);
+            }
+
         } catch (error) {
-            console.log('Error desconectando (ignorado):', error);
-        }
+            console.log('Error durante desconexión (continuando):', error);
+            // Aún así limpiar el estado local
+            setInfo('Báscula desconectada (puede haber errores en el servidor)');
+            setConectado(false);
+            setPeso(0);
 
-        setConectado(false);
-        setPeso(0);
-        setError('');
-        setInfo('Báscula desconectada');
-        setModoManual(false);
-        setPesoManual("");
-        setFormatoDetectado('');
-
-        if (onPesoObtenido) {
-            onPesoObtenido(0, campoDestino);
+            if (onPesoObtenido) {
+                onPesoObtenido(0, campoDestino);
+            }
         }
     };
 

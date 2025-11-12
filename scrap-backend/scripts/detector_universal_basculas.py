@@ -107,7 +107,7 @@ class DetectorUniversalBasculas:
         return 0.0
 
     def leer_peso_conexion_activa(self):
-        """Leer peso de la conexión activa en tiempo real"""
+        """Leer peso de la conexión activa en tiempo real - MEJORADO"""
         if not self.conexion_activa or not self.conexion_activa.is_open:
             return {
                 "success": False,
@@ -159,16 +159,16 @@ class DetectorUniversalBasculas:
                     print(f"Error con comando {cmd}: {e}", file=sys.stderr)
                     continue
 
-            # Estrategia 3: Si no hay datos, devolver peso cero pero conexión OK
+            # Estrategia 3: Si no hay datos, devolver éxito con peso 0
             return {
                 "success": True,
                 "peso": 0.0,
-                "mensaje": "Báscula conectada - esperando datos",
-                "metodo": "conexion_activa"
+                "mensaje": "Báscula conectada - sin datos recientes",
+                "metodo": "conexion_activa_sin_datos"
             }
 
         except Exception as e:
-            print(f"❌ Error leyendo peso: {e}", file=sys.stderr)
+            print(f"❌ Error crítico leyendo peso: {e}", file=sys.stderr)
             try:
                 self.conexion_activa.close()
             except:
@@ -176,7 +176,7 @@ class DetectorUniversalBasculas:
             self.conexion_activa = None
             return {
                 "success": False,
-                "error": str(e),
+                "error": f"Error de comunicación: {str(e)}",
                 "requiere_conexion": True
             }
 

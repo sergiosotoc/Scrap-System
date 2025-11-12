@@ -37,7 +37,7 @@ Route::middleware('api')->group(function () {
         Route::get('/puertos', [BasculaController::class, 'listarPuertos']);
         Route::post('/conectar', [BasculaController::class, 'conectar']);
         Route::post('/leer-peso', [BasculaController::class, 'leerPeso']);
-        Route::post('/desconectar', [BasculaController::class, 'desconectar']); // AGREGAR ESTA
+        Route::post('/desconectar', [BasculaController::class, 'desconectar']); // ← ESTA RUTA
         Route::post('/configurar', [BasculaController::class, 'configurarBascula']);
         Route::get('/diagnostico', [BasculaController::class, 'diagnostico']);
     });

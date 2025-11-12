@@ -213,10 +213,7 @@ class BasculaController extends Controller
     }
 
     /**
-     * Lee el peso (modo sin estado - abre/lee/cierra en cada llamada)
-     */
-    /**
-     * Lee el peso usando conexión persistente
+     * Lee el peso usando conexión persistente - MEJORADO
      */
     public function leerPeso(Request $request)
     {
@@ -224,7 +221,7 @@ class BasculaController extends Controller
             $currentConfig = $this->obtenerConfiguracion();
             $puerto = $request->input('puerto', $currentConfig['puerto']);
 
-            Log::info("⚖️ Leyendo peso desde conexión activa: {$puerto}");
+            Log::info("⚖️ Leyendo peso desde: {$puerto}");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
@@ -240,28 +237,32 @@ class BasculaController extends Controller
                 'leer',
                 $puerto
             ]);
-            $process->setTimeout(5);
+            $process->setTimeout(10); // Aumentar timeout
             $process->run();
 
             $output = trim($process->getOutput());
             $errorOutput = trim($process->getErrorOutput());
 
+            // Log debug info
             if ($errorOutput) {
-                Log::debug("Python debug: " . $errorOutput);
+                Log::debug("Python stderr: " . $errorOutput);
             }
 
+            // Si el proceso falla, no lanzar excepción inmediatamente
             if (!$process->isSuccessful()) {
-                throw new \Exception('Error ejecutando script: ' . ($errorOutput ?: 'Proceso falló'));
+                Log::warning("Script Python terminó con error: " . $errorOutput);
+                // Continuar para intentar parsear la salida anyway
             }
 
             $resultado = json_decode($output, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new \Exception("Respuesta JSON inválida del script: " . $output);
+                Log::error("JSON inválido del script: " . $output);
+                throw new \Exception("Error en la comunicación con la báscula");
             }
 
             if ($resultado['success']) {
-                Log::info("✅ Peso leído: {$resultado['peso']} kg desde {$puerto}");
+                Log::debug("✅ Peso leído: {$resultado['peso']} kg desde {$puerto}");
 
                 return response()->json([
                     'success' => true,
@@ -274,11 +275,7 @@ class BasculaController extends Controller
                     'mensaje' => $resultado['mensaje'] ?? null
                 ]);
             } else {
-                // Si falla la lectura con conexión activa, intentar reconectar
-                if (isset($resultado['requiere_conexion']) && $resultado['requiere_conexion']) {
-                    Log::warning("Reconectando báscula...");
-                    // Aquí podrías llamar automáticamente a conectar
-                }
+                Log::warning("❌ Error leyendo peso: " . ($resultado['error'] ?? 'Error desconocido'));
 
                 return response()->json([
                     'success' => false,
@@ -288,12 +285,13 @@ class BasculaController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            Log::error('Error leyendo peso: ' . $e->getMessage());
+            Log::error('Error en leerPeso: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'mensaje' => $e->getMessage(),
-                'peso_kg' => 0
-            ], 500);
+                'mensaje' => 'Error de comunicación con la báscula: ' . $e->getMessage(),
+                'peso_kg' => 0,
+                'error_tecnico' => $e->getMessage() // Para debug
+            ], 200); // Cambiar a 200 en lugar de 500 para evitar errores en el frontend
         }
     }
 
@@ -301,33 +299,43 @@ class BasculaController extends Controller
      * Desconecta la báscula (principalmente limpia la caché).
      * (Combina la lógica de ambos: Llama al script 'cerrar' del Código 1 y limpia la caché).
      */
+    /**
+     * Desconecta la báscula - MEJORADO
+     */
     public function desconectar(Request $request)
     {
         try {
             $puerto = $request->input('puerto', $this->obtenerPuertoConfigurado());
 
-            // Llamar al script (lógica del Código 1 para cerrar recursos de Python)
+            Log::info("🔌 Desconectando báscula en: {$puerto}");
+
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             $pythonPath = $this->getPythonPath();
+
+            // Llamar al script para cerrar la conexión
             $process = new Process([$pythonPath, $scriptPath, 'cerrar']);
             $process->setTimeout(5);
             $process->run();
 
-            // Limpiar caché de conexión (lógica de ambos)
+            // Limpiar caché de conexión
             Cache::forget($this->getConexionKey($puerto));
 
-            Log::info("Báscula desconectada: {$puerto}");
+            Log::info("✅ Báscula desconectada: {$puerto}");
 
             return response()->json([
                 'success' => true,
-                'mensaje' => 'Báscula desconectada'
+                'mensaje' => 'Báscula desconectada correctamente',
+                'puerto' => $puerto
             ]);
         } catch (\Exception $e) {
-            Log::error('Error desconectando: ' . $e->getMessage());
-            // Se asume que si falla la limpieza de Python, la desconexión a nivel de Laravel debe ser exitosa.
+            Log::error('Error en desconectar: ' . $e->getMessage());
+            // Aún así limpiar la caché
+            Cache::forget($this->getConexionKey($puerto ?? ''));
+
             return response()->json([
-                'success' => true,
-                'mensaje' => 'Conexión cerrada'
+                'success' => true, // Siempre éxito para permitir la desconexión
+                'mensaje' => 'Conexión cerrada en el sistema',
+                'puerto' => $puerto ?? ''
             ]);
         }
     }
