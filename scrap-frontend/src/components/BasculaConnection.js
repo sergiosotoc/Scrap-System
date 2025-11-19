@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+/* src/components/BasculaConnection.js */
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../services/api';
 
 const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
@@ -7,13 +8,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
     const [cargando, setCargando] = useState(false);
     const [cargandoPuertos, setCargandoPuertos] = useState(true);
     const [puertosDisponibles, setPuertosDisponibles] = useState([]);
-
     const [configuracion, setConfiguracion] = useState({
         puerto: 'COM3',
         baudios: 9600,
         timeout: 2,
     });
-
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
     const [formatoDetectado, setFormatoDetectado] = useState('');
@@ -23,25 +22,51 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
     const [ultimaLectura, setUltimaLectura] = useState(null);
     const [velocidadLectura, setVelocidadLectura] = useState(1000);
     const [lecturaEnProgreso, setLecturaEnProgreso] = useState(false);
+    const [desconectando, setDesconectando] = useState(false);
 
     const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9'];
 
+    // ✅ CORREGIDO: useEffect con cleanup adecuado
     useEffect(() => {
         cargarPuertos();
-        return () => detenerLecturaAutomatica();
-    }, [campoDestino]);
+        return () => {
+            detenerLecturaAutomatica();
+            if (conectado && !desconectando) {
+                handleDesconexionRapida();
+            }
+        };
+    }, []);
 
+    // ✅ CORREGIDO: Effect para controlar lectura automática
     useEffect(() => {
-        if (conectado && !modoManual) {
+        if (conectado && !modoManual && !desconectando) {
             iniciarLecturaAutomatica();
         } else {
             detenerLecturaAutomatica();
         }
+        
         return () => detenerLecturaAutomatica();
-    }, [conectado, velocidadLectura, modoManual]);
+    }, [conectado, velocidadLectura, modoManual, desconectando]);
 
+    // ✅ CORREGIDO: Effect para notificar cambios de peso - SIN BUCLE
+    useEffect(() => {
+        if (onPesoObtenido && !desconectando) {
+            console.log(`📤 Notificando peso actual: ${peso} kg a campo: ${campoDestino}`);
+            onPesoObtenido(peso, campoDestino);
+        }
+    }, [peso, campoDestino, onPesoObtenido, desconectando]);
 
-    const cargarPuertos = async () => {
+    // ✅ CORREGIDO: Función de desconexión rápida para cleanup
+    const handleDesconexionRapida = async () => {
+        try {
+            await apiClient.desconectarBascula({ puerto: configuracion.puerto });
+        } catch (error) {
+            console.warn('Error en desconexión rápida:', error);
+        }
+    };
+
+    // ✅ CORREGIDO: cargarPuertos con useCallback
+    const cargarPuertos = useCallback(async () => {
         setCargandoPuertos(true);
         setError('');
         setInfo('🔄 Cargando puertos...');
@@ -73,7 +98,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
         } finally {
             setCargandoPuertos(false);
         }
-    };
+    }, []);
 
     const conectarBascula = async () => {
         if (!configuracion.puerto) {
@@ -83,6 +108,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
 
         setCargando(true);
         setError('');
+        setDesconectando(false);
         setInfo(`🔌 Testeando ${configuracion.puerto} @ ${configuracion.baudios} baudios...`);
 
         try {
@@ -91,14 +117,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
             if (resultado.success) {
                 setConectado(true);
                 setModoManual(false);
+                setDesconectando(false);
 
                 const pesoObtenido = parseFloat(resultado.peso_kg) || 0;
                 setPeso(pesoObtenido);
                 setUltimaLectura(new Date());
-
-                if (onPesoObtenido) {
-                    onPesoObtenido(pesoObtenido, campoDestino);
-                }
 
                 const mensaje = pesoObtenido > 0
                     ? `✅ Conectado - Peso inicial: ${pesoObtenido} kg`
@@ -120,99 +143,104 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
     };
 
     const leerPesoAutomatico = async () => {
-        if (!conectado || lecturaEnProgreso) return;
+        if (!conectado || lecturaEnProgreso || desconectando || modoManual) {
+            return;
+        }
 
         setLecturaEnProgreso(true);
 
         try {
             const resultado = await apiClient.leerPesoBascula(configuracion);
 
+            if (desconectando) {
+                console.log('⏹️ Cancelando lectura - desconexión en progreso');
+                return;
+            }
+
             if (resultado.success) {
                 const nuevoPeso = parseFloat(resultado.peso_kg) || 0;
 
-                setPeso(nuevoPeso);
-                setUltimaLectura(new Date());
-
-                if (onPesoObtenido) {
-                    onPesoObtenido(nuevoPeso, campoDestino);
+                if (nuevoPeso !== peso) {
+                    setPeso(nuevoPeso);
+                    setUltimaLectura(new Date());
                 }
 
                 if (resultado.formato_detectado) {
                     setFormatoDetectado(`${resultado.formato_detectado} @ ${configuracion.baudios} baud`);
                 }
 
-                // Limpiar error si había uno previo
                 if (error) setError('');
 
             } else {
-                // Manejar error sin desconectar inmediatamente
                 if (resultado.mensaje && resultado.mensaje.includes('conexión')) {
                     setError('Problema de conexión - ' + resultado.mensaje);
-                    // No desconectar automáticamente, dejar que el usuario decida
-                } else {
-                    console.warn('Error lectura:', resultado.mensaje);
                 }
             }
         } catch (error) {
             console.debug('Error en lectura automática:', error.message);
-            // No setear error para no spamear la UI con errores temporales
         } finally {
             setLecturaEnProgreso(false);
         }
     };
 
     const iniciarLecturaAutomatica = () => {
+        if (desconectando) {
+            console.log('⏹️ No iniciar lectura - desconexión en progreso');
+            return;
+        }
+
         if (intervaloRef.current) {
             clearInterval(intervaloRef.current);
         }
+        
         leerPesoAutomatico();
+        
         intervaloRef.current = setInterval(() => {
             leerPesoAutomatico();
         }, velocidadLectura);
+        
+        console.log(`🔁 Iniciando lectura automática cada ${velocidadLectura}ms`);
     };
 
     const detenerLecturaAutomatica = () => {
         if (intervaloRef.current) {
+            console.log('🛑 Deteniendo lectura automática');
             clearInterval(intervaloRef.current);
             intervaloRef.current = null;
         }
     };
 
     const desconectarBascula = async () => {
-        // Detener lectura automática inmediatamente
+        console.log('🔌 Iniciando proceso de desconexión...');
+        
+        setDesconectando(true);
         detenerLecturaAutomatica();
-
-        // Actualizar estado local inmediatamente para feedback visual
+        
         setConectado(false);
         setPeso(0);
-        setInfo('Desconectando...');
+        setError('');
+        setInfo('🔌 Desconectando báscula...');
+        setFormatoDetectado('');
 
         try {
-            await apiClient.request('/bascula/desconectar', {
-                method: 'POST',
-                body: { puerto: configuracion.puerto }
+            const desconectarPromise = apiClient.desconectarBascula({ puerto: configuracion.puerto });
+            
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Timeout en desconexión')), 3000);
             });
 
-            setInfo('Báscula desconectada');
-            setError('');
+            await Promise.race([desconectarPromise, timeoutPromise]);
+            
+            setInfo('✅ Báscula desconectada');
             setModoManual(false);
             setPesoManual("");
-            setFormatoDetectado('');
-
-            if (onPesoObtenido) {
-                onPesoObtenido(0, campoDestino);
-            }
 
         } catch (error) {
-            console.log('Error durante desconexión (continuando):', error);
-            // Aún así limpiar el estado local
-            setInfo('Báscula desconectada (puede haber errores en el servidor)');
-            setConectado(false);
-            setPeso(0);
-
-            if (onPesoObtenido) {
-                onPesoObtenido(0, campoDestino);
-            }
+            console.log('⚠️ Error durante desconexión:', error.message);
+            setInfo('✅ Báscula desconectada (puede haber errores en el servidor)');
+        } finally {
+            setDesconectando(false);
+            console.log('🔌 Proceso de desconexión completado');
         }
     };
 
@@ -227,6 +255,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
     const activarModoManual = () => {
         setModoManual(true);
         setConectado(false);
+        setDesconectando(false);
         setInfo('📌 Modo manual activado');
         detenerLecturaAutomatica();
     };
@@ -237,10 +266,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
 
         const pesoNumerico = parseFloat(valor) || 0;
         setPeso(pesoNumerico);
-
-        if (onPesoObtenido) {
-            onPesoObtenido(pesoNumerico, campoDestino);
-        }
     };
 
     const cambiarVelocidad = (nuevaVelocidad) => {
@@ -258,6 +283,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                 ⚖️ Conexión con Báscula Digital
                 {modoManual && <span style={styles.manualBadge}>[MANUAL]</span>}
                 {conectado && <span style={styles.autoBadge}>[AUTO {velocidadLectura}ms]</span>}
+                {desconectando && <span style={styles.disconnectingBadge}>[DESCONECTANDO...]</span>}
             </h4>
 
             {info && (
@@ -265,9 +291,10 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                     ...styles.infoBox,
                     ...(info.includes('⚠️') && styles.warningBox),
                     ...(info.includes('✅') && styles.successBox),
-                    ...(info.includes('❌') && styles.errorBox)
+                    ...(info.includes('❌') && styles.errorBox),
+                    ...(info.includes('Desconectando') && styles.disconnectingBox)
                 }}>
-                    {info}
+                    {desconectando ? '⏳ ' + info : info}
                 </div>
             )}
 
@@ -284,7 +311,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                         value={configuracion.puerto}
                         onChange={handleConfigChange}
                         style={styles.select}
-                        disabled={conectado || cargandoPuertos || modoManual}
+                        disabled={conectado || cargandoPuertos || modoManual || desconectando}
                     >
                         <option value="">{cargandoPuertos ? 'Cargando...' : 'Seleccionar puerto'}</option>
                         {puertosDisponibles.map(puerto => (
@@ -294,7 +321,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
 
                     <button
                         onClick={cargarPuertos}
-                        disabled={cargandoPuertos || conectado}
+                        disabled={cargandoPuertos || conectado || desconectando}
                         style={styles.refreshButton}
                         title="Actualizar lista"
                     >
@@ -311,7 +338,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                             value={configuracion.baudios}
                             onChange={handleConfigChange}
                             style={styles.inputSmall}
-                            disabled={conectado || modoManual}
+                            disabled={conectado || modoManual || desconectando}
                         />
                     </div>
                     <div style={styles.configGroup}>
@@ -322,22 +349,21 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                             value={configuracion.timeout}
                             onChange={handleConfigChange}
                             style={styles.inputSmall}
-                            disabled={conectado || modoManual}
+                            disabled={conectado || modoManual || desconectando}
                         />
                     </div>
                 </div>
             </div>
-
 
             {!conectado && !modoManual ? (
                 <div style={styles.connectionPanel}>
                     <div style={styles.buttonGroup}>
                         <button
                             onClick={conectarBascula}
-                            disabled={cargando || !configuracion.puerto || cargandoPuertos}
+                            disabled={cargando || !configuracion.puerto || cargandoPuertos || desconectando}
                             style={{
                                 ...styles.connectButton,
-                                ...((cargando || !configuracion.puerto) && styles.disabledButton)
+                                ...((cargando || !configuracion.puerto || desconectando) && styles.disabledButton)
                             }}
                         >
                             {cargando ? '🔌 Conectando...' : '🔌 Testear Conexión'}
@@ -345,6 +371,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
 
                         <button
                             onClick={activarModoManual}
+                            disabled={desconectando}
                             style={styles.manualModeButton}
                         >
                             ✍️ Modo Manual
@@ -360,6 +387,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                             {formatoDetectado && <div>📡 {formatoDetectado}</div>}
                             {ultimaLectura && <div>🕒 {formatearTiempo(ultimaLectura)}</div>}
                             <div>🔄 Leyendo cada {velocidadLectura / 1000}s</div>
+                            <div>🎯 Campo: {campoDestino}</div>
                         </div>
                     </div>
 
@@ -368,18 +396,21 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                         <div style={styles.velocidadButtons}>
                             <button
                                 onClick={() => cambiarVelocidad(500)}
+                                disabled={desconectando}
                                 style={{ ...styles.velocidadBtn, ...(velocidadLectura === 500 && styles.velocidadBtnActive) }}
                             >
                                 Rápida (0.5s)
                             </button>
                             <button
                                 onClick={() => cambiarVelocidad(1000)}
+                                disabled={desconectando}
                                 style={{ ...styles.velocidadBtn, ...(velocidadLectura === 1000 && styles.velocidadBtnActive) }}
                             >
                                 Normal (1s)
                             </button>
                             <button
                                 onClick={() => cambiarVelocidad(2000)}
+                                disabled={desconectando}
                                 style={{ ...styles.velocidadBtn, ...(velocidadLectura === 2000 && styles.velocidadBtnActive) }}
                             >
                                 Lenta (2s)
@@ -388,13 +419,22 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                     </div>
 
                     <div style={styles.controlButtons}>
-                        <button onClick={desconectarBascula} style={styles.disconnectButton}>
-                            🔌 Desconectar
+                        <button 
+                            onClick={desconectarBascula} 
+                            disabled={desconectando}
+                            style={{
+                                ...styles.disconnectButton,
+                                ...(desconectando && styles.disconnectingButton)
+                            }}
+                        >
+                            {desconectando ? '⏳ Desconectando...' : '🔌 Desconectar'}
                         </button>
                     </div>
 
                     <div style={styles.status}>
-                        <span style={styles.statusConnected}>🟢 Conectado a {configuracion.puerto}</span>
+                        <span style={styles.statusConnected}>
+                            {desconectando ? '🟡 Desconectando...' : '🟢 Conectado a ' + configuracion.puerto}
+                        </span>
                         <span style={styles.puertoInfo}>
                             Config: {configuracion.baudios} baud, {configuracion.timeout}s timeout
                         </span>
@@ -417,6 +457,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                             onChange={handlePesoManualChange}
                             placeholder="0.000"
                             style={styles.manualInput}
+                            disabled={desconectando}
                         />
                         <span style={styles.manualUnit}>kg</span>
                     </div>
@@ -428,6 +469,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                                 setInfo('Modo manual desactivado');
                                 conectarBascula();
                             }}
+                            disabled={desconectando}
                             style={styles.backButton}
                         >
                             ↩️ Volver a Báscula
@@ -436,6 +478,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                     {peso > 0 && (
                         <div style={styles.pesoPreview}>
                             Peso actual en el formulario: <strong>{peso.toFixed(3)} kg</strong>
+                            <div>🎯 Campo: {campoDestino}</div>
                         </div>
                     )}
                 </div>
@@ -445,6 +488,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
                 <strong>💡 Arquitectura de Conexión:</strong>
                 <ul style={styles.helpList}>
                     <li>El sistema **abre, lee y cierra** la conexión serial en cada lectura (Modo sin estado).</li>
+                    <li>La conexión se mantiene activa al cambiar entre materiales.</li>
                     <li>Asegúrate que el puerto, baudios y timeout coincidan con la configuración de tu báscula.</li>
                 </ul>
             </div>
@@ -483,6 +527,13 @@ const styles = {
         padding: '0.2rem 0.5rem',
         borderRadius: '4px'
     },
+    disconnectingBadge: {
+        fontSize: '0.7rem',
+        backgroundColor: '#ffc107',
+        color: '#212529',
+        padding: '0.2rem 0.5rem',
+        borderRadius: '4px'
+    },
     infoBox: {
         backgroundColor: '#d1ecf1',
         color: '#0c5460',
@@ -508,6 +559,11 @@ const styles = {
         borderRadius: '4px',
         marginBottom: '1rem',
         border: '1px solid #f5c6cb'
+    },
+    disconnectingBox: {
+        backgroundColor: '#fff3cd',
+        color: '#856404',
+        border: '1px solid #ffeaa7'
     },
     configSection: {
         marginBottom: '1rem',
@@ -680,6 +736,11 @@ const styles = {
         cursor: 'pointer',
         flex: '1',
         minWidth: '120px'
+    },
+    disconnectingButton: {
+        backgroundColor: '#ffc107',
+        color: '#212529',
+        cursor: 'not-allowed'
     },
     status: {
         margin: '1rem 0',

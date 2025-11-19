@@ -1,5 +1,7 @@
 <?php
 
+/* app/Http/Controllers/BasculaController.php */
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -10,48 +12,32 @@ use Symfony\Component\Process\Process;
 
 class BasculaController extends Controller
 {
-    // Configuración por defecto (usada si no hay un archivo de configuración guardado)
     private $configBascula = [
         'puerto' => 'COM3',
         'baudios' => 9600,
-        'timeout' => 2, // Tiempo en segundos
+        'timeout' => 2,
     ];
 
-    /**
-     * Genera la clave de caché para la conexión activa.
-     */
     private function getConexionKey($puerto)
     {
         return "bascula_conexion_{$puerto}";
     }
 
-    /**
-     * Obtiene la configuración actual (por defecto + guardada).
-     * (Mejora del Código 2: Carga la configuración guardada y la fusiona con los valores por defecto).
-     */
     private function obtenerConfiguracion()
     {
         if (Storage::exists('bascula_config.json')) {
             $config = json_decode(Storage::get('bascula_config.json'), true);
-            // Fusiona los valores guardados con los por defecto, asegurando que existan todas las claves
             return array_merge($this->configBascula, $config);
         }
 
         return $this->configBascula;
     }
 
-    /**
-     * Obtiene el puerto configurado actual.
-     */
     private function obtenerPuertoConfigurado()
     {
         return $this->obtenerConfiguracion()['puerto'];
     }
 
-    /**
-     * Almacena la configuración de la báscula en el almacenamiento.
-     * (Mejora del Código 2: Permite guardar puerto, baudios y timeout).
-     */
     private function guardarConfiguracionPuerto($puerto, $baudios = null, $timeout = null)
     {
         $currentConfig = $this->obtenerConfiguracion();
@@ -64,21 +50,15 @@ class BasculaController extends Controller
         ];
 
         Storage::put('bascula_config.json', json_encode($config, JSON_PRETTY_PRINT));
-        Log::info("💾 Configuración guardada: {$puerto} @ " . $config['baudios'] . " baud");
+        Log::info("💾 Configuración guardada: {$puerto} @ " . $config['baudios'] . " baud, timeout: " . $config['timeout'] . "s");
     }
 
-    /**
-     * Lista los puertos COM/TTY disponibles.
-     * (Combina las lógicas de ambos: usa el script, mejora el fallback con puertos Linux/Windows).
-     */
     public function listarPuertos(Request $request)
     {
         try {
             Log::info('Solicitando lista de puertos');
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
-            // La lógica del Código 1 de crear el script se omite, asumiendo que debe existir o fallar.
-            // Si el script debe crearse automáticamente, descomentar: $this->createUniversalDetectorScript();
             if (!file_exists($scriptPath)) {
                 Log::error('Script Python no encontrado');
                 return $this->listarPuertosFallback('Script no encontrado');
@@ -125,10 +105,6 @@ class BasculaController extends Controller
         }
     }
 
-    /**
-     * Intenta conectar y auto-detectar la configuración.
-     * (Lógica del Código 2: Usa el comando 'conectar' con auto-detección de baudios y guarda la configuración).
-     */
     public function conectar(Request $request)
     {
         try {
@@ -136,7 +112,10 @@ class BasculaController extends Controller
             $puerto = $request->input('puerto', $currentConfig['puerto']);
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
-            Log::info("🔌 Iniciando conexión en: $puerto (auto-detectando configuración)");
+            // ✅ CORREGIDO: Validar y limitar timeout
+            $timeout = min(max($timeout, 1), 30); // Entre 1 y 30 segundos
+
+            Log::info("🔌 Iniciando conexión en: $puerto con timeout: {$timeout}s");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
@@ -145,9 +124,15 @@ class BasculaController extends Controller
 
             $pythonPath = $this->getPythonPath();
 
-            // Comando 'conectar': Prueba TODAS las configuraciones automáticamente. Pasa el timeout.
-            $process = new Process([$pythonPath, $scriptPath, 'conectar', $puerto, (string)$timeout]);
-            $process->setTimeout(30);
+            // ✅ CORREGIDO: Pasar timeout correctamente al script
+            $process = new Process([
+                $pythonPath, 
+                $scriptPath, 
+                'conectar', 
+                $puerto, 
+                (string)$timeout
+            ]);
+            $process->setTimeout($timeout + 10);
             $process->run();
 
             $output = trim($process->getOutput());
@@ -168,7 +153,6 @@ class BasculaController extends Controller
             }
 
             if ($resultado['success']) {
-                // Lógica mejorada del Código 2 para guardar baudios detectados en configuración y caché
                 $baudiosDetectados = $resultado['baudios_detectados'] ?? $currentConfig['baudios'];
                 $this->guardarConfiguracionPuerto($puerto, $baudiosDetectados, $timeout);
 
@@ -195,7 +179,6 @@ class BasculaController extends Controller
                 ]);
             } else {
                 Log::warning("❌ Conexión fallida en {$puerto}: " . ($resultado['error'] ?? 'Error desconocido'));
-                // Respuesta 200 con success: false del Código 2
                 return response()->json([
                     'success' => false,
                     'mensaje' => $resultado['error'] ?? 'No se pudo conectar',
@@ -212,16 +195,17 @@ class BasculaController extends Controller
         }
     }
 
-    /**
-     * Lee el peso usando conexión persistente - MEJORADO
-     */
     public function leerPeso(Request $request)
     {
         try {
             $currentConfig = $this->obtenerConfiguracion();
             $puerto = $request->input('puerto', $currentConfig['puerto']);
+            $timeout = $request->input('timeout', $currentConfig['timeout']);
 
-            Log::info("⚖️ Leyendo peso desde: {$puerto}");
+            // ✅ CORREGIDO: Validar timeout
+            $timeout = min(max($timeout, 1), 10); // Entre 1 y 10 segundos
+
+            Log::info("⚖️ Leyendo peso desde: {$puerto} con timeout: {$timeout}s");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
@@ -230,28 +214,26 @@ class BasculaController extends Controller
 
             $pythonPath = $this->getPythonPath();
 
-            // Usar el comando 'leer' que aprovecha la conexión persistente
             $process = new Process([
                 $pythonPath,
                 $scriptPath,
                 'leer',
-                $puerto
+                $puerto,
+                (string)$currentConfig['baudios'],
+                (string)$timeout
             ]);
-            $process->setTimeout(10); // Aumentar timeout
+            $process->setTimeout($timeout + 5);
             $process->run();
 
             $output = trim($process->getOutput());
             $errorOutput = trim($process->getErrorOutput());
 
-            // Log debug info
             if ($errorOutput) {
                 Log::debug("Python stderr: " . $errorOutput);
             }
 
-            // Si el proceso falla, no lanzar excepción inmediatamente
             if (!$process->isSuccessful()) {
                 Log::warning("Script Python terminó con error: " . $errorOutput);
-                // Continuar para intentar parsear la salida anyway
             }
 
             $resultado = json_decode($output, true);
@@ -290,18 +272,11 @@ class BasculaController extends Controller
                 'success' => false,
                 'mensaje' => 'Error de comunicación con la báscula: ' . $e->getMessage(),
                 'peso_kg' => 0,
-                'error_tecnico' => $e->getMessage() // Para debug
-            ], 200); // Cambiar a 200 en lugar de 500 para evitar errores en el frontend
+                'error_tecnico' => $e->getMessage()
+            ], 200);
         }
     }
 
-    /**
-     * Desconecta la báscula (principalmente limpia la caché).
-     * (Combina la lógica de ambos: Llama al script 'cerrar' del Código 1 y limpia la caché).
-     */
-    /**
-     * Desconecta la báscula - MEJORADO
-     */
     public function desconectar(Request $request)
     {
         try {
@@ -312,12 +287,10 @@ class BasculaController extends Controller
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             $pythonPath = $this->getPythonPath();
 
-            // Llamar al script para cerrar la conexión
             $process = new Process([$pythonPath, $scriptPath, 'cerrar']);
             $process->setTimeout(5);
             $process->run();
 
-            // Limpiar caché de conexión
             Cache::forget($this->getConexionKey($puerto));
 
             Log::info("✅ Báscula desconectada: {$puerto}");
@@ -329,39 +302,31 @@ class BasculaController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Error en desconectar: ' . $e->getMessage());
-            // Aún así limpiar la caché
-            Cache::forget($this->getConexionKey($puerto ?? ''));
+            $puerto = $request->input('puerto', $this->obtenerPuertoConfigurado());
+            Cache::forget($this->getConexionKey($puerto));
 
             return response()->json([
-                'success' => true, // Siempre éxito para permitir la desconexión
+                'success' => true,
                 'mensaje' => 'Conexión cerrada en el sistema',
-                'puerto' => $puerto ?? ''
+                'puerto' => $puerto
             ]);
         }
     }
 
-    /**
-     * Permite al usuario configurar manualmente el puerto, baudios y timeout.
-     * (Lógica del Código 2: Usa la nueva función guardarConfiguracionPuerto).
-     */
     public function configurarBascula(Request $request)
     {
         try {
             $validated = $request->validate([
                 'puerto' => 'required|string',
                 'baudios' => 'required|integer',
-                'timeout' => 'required|integer|min:1'
+                'timeout' => 'required|integer|min:1|max:30'
             ]);
 
-            // Guardar toda la configuración
             $this->guardarConfiguracionPuerto(
                 $validated['puerto'],
                 $validated['baudios'],
                 $validated['timeout']
             );
-
-            // Actualizar la configuración en memoria para la respuesta (opcional, obtenerConfiguracion ya lo hace)
-            //$this->configBascula = $this->obtenerConfiguracion(); // No es necesario
 
             return response()->json([
                 'success' => true,
@@ -376,10 +341,6 @@ class BasculaController extends Controller
         }
     }
 
-    /**
-     * Realiza un diagnóstico del sistema.
-     * (Lógica mejorada del Código 2: Incluye más checks como pyserial y rutas).
-     */
     public function diagnostico()
     {
         $config = $this->obtenerConfiguracion();
@@ -400,7 +361,6 @@ class BasculaController extends Controller
                 $pythonPath = $this->getPythonPath();
                 $diagnostico['python_path'] = $pythonPath;
 
-                // Verificar Python
                 $process = new Process([$pythonPath, '--version']);
                 $process->run();
                 $diagnostico['python'] = $process->isSuccessful() ? '✅ Disponible' : '❌ No disponible';
@@ -408,7 +368,6 @@ class BasculaController extends Controller
                     $diagnostico['python_version'] = trim($process->getOutput());
                 }
 
-                // Verificar pyserial
                 $process = new Process([$pythonPath, '-c', 'import serial; print(serial.__version__)']);
                 $process->run();
                 if ($process->isSuccessful()) {
@@ -426,20 +385,6 @@ class BasculaController extends Controller
 
     // ========== MÉTODOS PRIVADOS ==========
 
-    /**
-     * Intenta crear el script universal si no existe (mantenido del Código 1).
-     */
-    private function createUniversalDetectorScript()
-    {
-        // Aquí deberías copiar el contenido del script Python mejorado
-        Log::info("Creando script detector universal");
-        // Por ahora solo logueamos
-    }
-
-    /**
-     * Obtiene la ruta del ejecutable de Python, priorizando venv.
-     * (Mejora del Código 2: Devuelve 'python' o 'python3' si el venv no existe).
-     */
     private function getPythonPath()
     {
         $venvPath = base_path('venv');
@@ -457,10 +402,6 @@ class BasculaController extends Controller
         return $this->esWindows() ? 'python' : 'python3';
     }
 
-    /**
-     * Función de fallback para listar puertos.
-     * (Mejora del Código 2: Usa puertos específicos para Linux).
-     */
     private function listarPuertosFallback($error = null)
     {
         $puertosComunes = $this->esWindows()
@@ -477,10 +418,6 @@ class BasculaController extends Controller
         ]);
     }
 
-    /**
-     * Devuelve un puerto recomendado basado en la configuración guardada y preferencias.
-     * (Mejora del Código 2: Incluye la recomendación de /dev/ttyUSB0).
-     */
     private function obtenerPuertoRecomendado($puertos)
     {
         $configurado = $this->obtenerPuertoConfigurado();
@@ -498,9 +435,6 @@ class BasculaController extends Controller
         return count($puertos) > 0 ? $puertos[0] : 'COM3';
     }
 
-    /**
-     * Comprueba si el sistema operativo es Windows.
-     */
     private function esWindows()
     {
         return strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';

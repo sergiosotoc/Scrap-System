@@ -1,5 +1,5 @@
-// src/components/RegistroScrapCompleto.js - MEJORADO
-import React, { useState, useEffect } from 'react';
+// src/components/RegistroScrapCompleto.js
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
 
@@ -30,15 +30,39 @@ const RegistroScrapCompleto = () => {
 
   const [showReporteOptions, setShowReporteOptions] = useState(false);
 
+  // ✅ CORREGIDO: useEffect para carga inicial
   useEffect(() => {
     loadConfig();
   }, []);
+
+  // ✅ CORREGIDO: useCallback para evitar recreaciones innecesarias
+  const handlePesoFromBascula = useCallback((peso, campo = campoBascula) => {
+    console.log(`📝 Recibiendo peso ${peso} para campo: ${campo}`);
+    
+    setFormData(prev => {
+      const currentValue = prev[campo];
+      const newValue = peso;
+      
+      if (currentValue === newValue || (parseFloat(currentValue) === parseFloat(newValue))) {
+        console.log('✅ Peso sin cambios, evitando update');
+        return prev;
+      }
+      
+      console.log('🔄 Actualizando formulario con nuevo peso');
+      return {
+        ...prev,
+        [campo]: newValue,
+        conexion_bascula: true
+      };
+    });
+  }, [campoBascula]);
 
   const loadConfig = async () => {
     try {
       const configData = await apiClient.getRegistrosConfig();
       setConfig(configData);
     } catch (error) {
+      console.error('Error cargando configuración:', error);
       alert('Error cargando configuración: ' + error.message);
     } finally {
       setLoading(false);
@@ -53,14 +77,6 @@ const RegistroScrapCompleto = () => {
     }));
   };
 
-  const handlePesoFromBascula = (peso, campo = campoBascula) => {
-    setFormData(prev => ({
-      ...prev,
-      [campo]: peso,
-      conexion_bascula: true
-    }));
-  };
-
   const calcularTotal = () => {
     const total = Object.keys(formData)
       .filter(key => key.startsWith('peso_'))
@@ -72,7 +88,6 @@ const RegistroScrapCompleto = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validar que al menos un campo de peso tenga valor
     const tienePesos = Object.keys(formData).some(key => 
       key.startsWith('peso_') && parseFloat(formData[key]) > 0
     );
@@ -83,7 +98,6 @@ const RegistroScrapCompleto = () => {
     }
 
     try {
-      // Convertir campos vacíos a 0
       const datosEnviar = { ...formData };
       Object.keys(datosEnviar).forEach(key => {
         if (key.startsWith('peso_') && datosEnviar[key] === '') {
@@ -94,8 +108,6 @@ const RegistroScrapCompleto = () => {
       const resultado = await apiClient.createRegistroScrap(datosEnviar);
 
       alert('✅ Registro de scrap guardado exitosamente!');
-      
-      // Mostrar opciones de reporte
       setShowReporteOptions(true);
       
     } catch (error) {
@@ -108,7 +120,6 @@ const RegistroScrapCompleto = () => {
       const fecha = new Date().toISOString().split('T')[0];
       const turno = formData.turno;
       
-      // Crear un enlace temporal para descargar el PDF
       const token = localStorage.getItem('authToken');
       const url = `http://localhost:8000/api/registros-scrap/generar-reporte-diario`;
       
@@ -128,7 +139,6 @@ const RegistroScrapCompleto = () => {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
 
-      // Obtener el blob del PDF
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -184,6 +194,7 @@ const RegistroScrapCompleto = () => {
       
       {/* Sección de Báscula */}
       <div style={styles.basculaSection}>
+        {/* ✅ CORREGIDO: Pasar la función estabilizada */}
         <BasculaConnection 
           onPesoObtenido={handlePesoFromBascula}
           campoDestino={campoBascula}

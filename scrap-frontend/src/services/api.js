@@ -1,4 +1,4 @@
-// src/services/api.js
+/* src/services/api.js */
 const API_BASE_URL = 'http://localhost:8000/api';
 
 const getAuthToken = () => {
@@ -105,10 +105,9 @@ export const apiClient = {
         return this.request('/user');
     },
 
-    // ========== BÁSCULA (Abre/Cierra en cada llamada) ==========
+    // ========== BÁSCULA ==========
     async listarPuertosBascula() {
         return this.request('/bascula/puertos').catch(error => {
-             // Fallback
              return {
                 success: true,
                 puertos: ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9'],
@@ -120,7 +119,6 @@ export const apiClient = {
         });
     },
 
-    // Envía puerto, baudios y timeout al backend para que este abra/lea/cierre
     async conectarBascula(data = {}) {
         return this.request('/bascula/conectar', {
             method: 'POST',
@@ -128,9 +126,15 @@ export const apiClient = {
         });
     },
     
-    // Envía puerto, baudios y timeout al backend para que este abra/lea/cierre
     async leerPesoBascula(data = {}) {
         return this.request('/bascula/leer-peso', {
+            method: 'POST',
+            body: data,
+        });
+    },
+
+    async desconectarBascula(data = {}) {
+        return this.request('/bascula/desconectar', {
             method: 'POST',
             body: data,
         });

@@ -1,3 +1,4 @@
+""" script/detector_universal_basculas.py """
 #!/usr/bin/env python3
 import serial
 import time
@@ -21,33 +22,44 @@ class DetectorUniversalBasculas:
         self.config_activa = None
         self.puerto_activo = None
 
-    def detectar_y_conectar(self, puerto):
-        """Detectar báscula y mantener conexión activa (como tu código original)"""
-        print(f"🔍 Conectando a {puerto}", file=sys.stderr)
+    def detectar_y_conectar(self, puerto, timeout=1):
+        """Detectar báscula y mantener conexión activa"""
+        print(f"🔍 Conectando a {puerto} con timeout {timeout}s", file=sys.stderr)
+
+        # ✅ CORREGIDO: Cerrar conexión previa si existe
+        if self.conexion_activa and self.conexion_activa.is_open:
+            try:
+                self.conexion_activa.close()
+            except:
+                pass
+            self.conexion_activa = None
 
         for config in self.configuraciones_comunes:
             try:
-                print(f"🎯 Probando: {config['baudrate']} baud", file=sys.stderr)
+                config_actual = config.copy()
+                config_actual['timeout'] = timeout
+                
+                print(f"🎯 Probando: {config_actual['baudrate']} baud, {timeout}s timeout", file=sys.stderr)
 
                 ser = serial.Serial(
                     port=puerto,
-                    baudrate=config['baudrate'],
-                    bytesize=config['bytesize'],
-                    parity=config['parity'],
-                    stopbits=config['stopbits'],
-                    timeout=config['timeout']
+                    baudrate=config_actual['baudrate'],
+                    bytesize=config_actual['bytesize'],
+                    parity=config_actual['parity'],
+                    stopbits=config_actual['stopbits'],
+                    timeout=config_actual['timeout']
                 )
 
                 time.sleep(0.5)
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
 
-                # Intentar leer peso inicial (MODIFICADO: más tolerante)
-                peso_inicial = self._leer_peso_conexion(ser, config)
+                # Intentar leer peso inicial
+                peso_inicial = self._leer_peso_conexion(ser, config_actual)
 
-                # Guardar conexión activa solo si podemos comunicarnos
+                # Guardar conexión activa
                 self.conexion_activa = ser
-                self.config_activa = config
+                self.config_activa = config_actual
                 self.puerto_activo = puerto
 
                 print(f"✅ Conectado en {puerto}", file=sys.stderr)
@@ -57,15 +69,15 @@ class DetectorUniversalBasculas:
                     "conectado": True,
                     "peso": peso_inicial if peso_inicial is not None else 0.0,
                     "puerto": puerto,
-                    "configuracion": config,
-                    "baudios_detectados": config['baudrate'],
+                    "configuracion": config_actual,
+                    "baudios_detectados": config_actual['baudrate'],
                     "mensaje": f"Báscula conectada en {puerto}",
                     "tiene_peso_inicial": peso_inicial is not None
                 }
 
             except Exception as e:
                 print(f"  ❌ Error: {e}", file=sys.stderr)
-                if 'conexion_activa' in locals():
+                if 'ser' in locals():
                     try:
                         ser.close()
                     except:
@@ -79,32 +91,36 @@ class DetectorUniversalBasculas:
         }
 
     def _leer_peso_conexion(self, ser, config):
-        """Leer peso durante la conexión inicial (más tolerante)"""
-        # 1. Leer buffer directo
-        if ser.in_waiting > 0:
-            data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
-            peso, _ = self._extraer_peso_universal(data)
-            if peso is not None:
-                return peso
+        """Leer peso durante la conexión inicial"""
+        try:
+            # 1. Leer buffer directo
+            if ser.in_waiting > 0:
+                data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
+                peso, _ = self._extraer_peso_universal(data)
+                if peso is not None:
+                    return peso
 
-        # 2. Probar comandos comunes
-        for cmd in self.comandos_solicitud:
-            try:
-                ser.reset_input_buffer()
-                ser.write(cmd)
-                time.sleep(0.3)
+            # 2. Probar comandos comunes
+            for cmd in self.comandos_solicitud:
+                try:
+                    ser.reset_input_buffer()
+                    ser.write(cmd)
+                    time.sleep(0.3)
 
-                if ser.in_waiting > 0:
-                    data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
-                    peso, _ = self._extraer_peso_universal(data)
-                    if peso is not None:
-                        return peso
-            except:
-                continue
+                    if ser.in_waiting > 0:
+                        data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
+                        peso, _ = self._extraer_peso_universal(data)
+                        if peso is not None:
+                            return peso
+                except Exception as e:
+                    print(f"  ⚠️  Error con comando {cmd}: {e}", file=sys.stderr)
+                    continue
 
-        # 3. Si no hay datos, considerar conexión exitosa pero sin peso
-        print("⚠️  Conexión establecida pero sin datos de peso inicial", file=sys.stderr)
-        return 0.0
+            return 0.0
+            
+        except Exception as e:
+            print(f"  ❌ Error en lectura inicial: {e}", file=sys.stderr)
+            return 0.0
 
     def leer_peso_conexion_activa(self):
         """Leer peso de la conexión activa en tiempo real - MEJORADO"""
@@ -117,6 +133,18 @@ class DetectorUniversalBasculas:
 
         try:
             ser = self.conexion_activa
+
+            # ✅ VERIFICAR: Si el puerto sigue disponible
+            try:
+                ser.in_waiting
+            except Exception as e:
+                print(f"❌ Puerto desconectado: {e}", file=sys.stderr)
+                self.conexion_activa = None
+                return {
+                    "success": False,
+                    "error": "Puerto desconectado",
+                    "requiere_conexion": True
+                }
 
             # Estrategia 1: Leer datos disponibles inmediatamente
             if ser.in_waiting > 0:
@@ -141,7 +169,7 @@ class DetectorUniversalBasculas:
                     
                     # Leer con timeout corto
                     start_time = time.time()
-                    while time.time() - start_time < 0.5:  # 500ms timeout
+                    while time.time() - start_time < 0.5:
                         if ser.in_waiting > 0:
                             data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                             if data.strip():
@@ -181,8 +209,8 @@ class DetectorUniversalBasculas:
             }
 
     def leer_peso_una_vez(self, puerto, baudios=None, timeout=1):
-        """Método alternativo: abrir, leer y cerrar (para compatibilidad)"""
-        print(f"🔍 Lectura única desde {puerto}", file=sys.stderr)
+        """Método alternativo: abrir, leer y cerrar"""
+        print(f"🔍 Lectura única desde {puerto} con timeout {timeout}s", file=sys.stderr)
         
         configs_a_probar = self.configuraciones_comunes
         
@@ -256,7 +284,7 @@ class DetectorUniversalBasculas:
         }
 
     def _extraer_peso_universal(self, datos):
-        """Extraer peso en múltiples formatos de básculas (sin cambios)"""
+        """Extraer peso en múltiples formatos de básculas"""
         if not datos or len(datos) < 2:
             return None, "sin_datos"
 
@@ -323,8 +351,8 @@ class DetectorUniversalBasculas:
             try:
                 self.conexion_activa.close()
                 print(f"🔌 Conexión cerrada", file=sys.stderr)
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️  Error cerrando conexión: {e}", file=sys.stderr)
             self.conexion_activa = None
             self.config_activa = None
             self.puerto_activo = None
@@ -372,7 +400,8 @@ def main():
             detector = obtener_detector()
             if len(sys.argv) >= 3:
                 puerto = sys.argv[2]
-                resultado = detector.detectar_y_conectar(puerto)
+                timeout = int(sys.argv[3]) if len(sys.argv) >= 4 else 1
+                resultado = detector.detectar_y_conectar(puerto, timeout)
                 print(json.dumps(resultado))
             else:
                 puertos = listar_puertos()
