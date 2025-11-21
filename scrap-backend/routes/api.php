@@ -1,5 +1,5 @@
 <?php
-// routes/api.php
+// routes/api.php - ACTUALIZADO
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -32,12 +32,12 @@ Route::middleware('api')->group(function () {
         Route::patch('/{id}/toggle-status', [UserController::class, 'toggleStatus']);
     });
 
-    /* BÁSCULA */
+    // Báscula
     Route::middleware('auth:sanctum')->prefix('bascula')->group(function () {
         Route::get('/puertos', [BasculaController::class, 'listarPuertos']);
         Route::post('/conectar', [BasculaController::class, 'conectar']);
         Route::post('/leer-peso', [BasculaController::class, 'leerPeso']);
-        Route::post('/desconectar', [BasculaController::class, 'desconectar']); // ← ESTA RUTA
+        Route::post('/desconectar', [BasculaController::class, 'desconectar']);
         Route::post('/configurar', [BasculaController::class, 'configurarBascula']);
         Route::get('/diagnostico', [BasculaController::class, 'diagnostico']);
     });
@@ -57,7 +57,7 @@ Route::middleware('api')->group(function () {
     // Recepciones de scrap
     Route::middleware('auth:sanctum')->prefix('recepciones-scrap')->group(function () {
         Route::get('/', [RecepcionScrapController::class, 'index']);
-        Route::get('/registros-pendientes', [RecepcionScrapController::class, 'registrosPendientes']);
+        // ✅ ELIMINADO: Ruta de registros pendientes
         Route::post('/', [RecepcionScrapController::class, 'store']);
         Route::get('/{id}/imprimir-hu', [RecepcionScrapController::class, 'imprimirHU']);
         Route::get('/reportes/recepcion', [RecepcionScrapController::class, 'reporteRecepcion']);

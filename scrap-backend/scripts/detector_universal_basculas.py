@@ -346,16 +346,21 @@ class DetectorUniversalBasculas:
         return None, "desconocido"
 
     def cerrar_conexion(self):
-        """Cerrar conexión activa"""
+        """Cerrar conexión de forma segura"""
         if self.conexion_activa:
             try:
-                self.conexion_activa.close()
-                print(f"🔌 Conexión cerrada", file=sys.stderr)
+                # Limpiar buffers antes de cerrar
+                if self.conexion_activa.is_open:
+                    self.conexion_activa.reset_input_buffer()
+                    self.conexion_activa.reset_output_buffer()
+                    time.sleep(0.1)
+                    self.conexion_activa.close()
+                print(f"🔌 Conexión cerrada correctamente", file=sys.stderr)
             except Exception as e:
-                print(f"⚠️  Error cerrando conexión: {e}", file=sys.stderr)
-            self.conexion_activa = None
-            self.config_activa = None
-            self.puerto_activo = None
+                print(f"⚠️ Error cerrando: {e}", file=sys.stderr)
+            finally:
+                self.conexion_activa = None
+                self.config_activa = None
 
 
 def listar_puertos():

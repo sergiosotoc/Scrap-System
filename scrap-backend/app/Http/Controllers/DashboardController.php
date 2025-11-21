@@ -18,8 +18,6 @@ class DashboardController extends Controller
             'total_usuarios_activos' => User::where('activo', true)->count(),
             'total_registros' => RegistrosScrap::count(),
             'total_recepciones' => RecepcionesScrap::count(),
-            'scrap_pendiente' => RegistrosScrap::where('estado', 'pendiente')->count(),
-            'scrap_recibido' => RegistrosScrap::where('estado', 'recibido')->count(),
             'total_peso_registros' => RegistrosScrap::sum('peso_total'),
             'total_peso_recepciones' => RecepcionesScrap::sum('peso_kg'),
         ];

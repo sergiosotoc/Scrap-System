@@ -1,825 +1,534 @@
-/* src/components/BasculaConnection.js */
+/* src/components/BasculaConnection.js - VERSIÓN FINAL CORREGIDA */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../services/api';
 
-const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso' }) => {
-    const [conectado, setConectado] = useState(false);
+const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado', modoInicial = "desconectado" }) => {
+    // ==========================================
+    // 1. LÓGICA DE ESTADO Y REFS (ORIGINAL)
+    // ==========================================
+    const [estado, setEstado] = useState(modoInicial);
     const [peso, setPeso] = useState(0);
-    const [cargando, setCargando] = useState(false);
-    const [cargandoPuertos, setCargandoPuertos] = useState(true);
-    const [puertosDisponibles, setPuertosDisponibles] = useState([]);
-    const [configuracion, setConfiguracion] = useState({
-        puerto: 'COM3',
-        baudios: 9600,
-        timeout: 2,
-    });
-    const [error, setError] = useState('');
-    const [info, setInfo] = useState('');
-    const [formatoDetectado, setFormatoDetectado] = useState('');
-    const intervaloRef = useRef(null);
+    const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 2 });
+    const [puertos, setPuertos] = useState([]);
     const [modoManual, setModoManual] = useState(false);
-    const [pesoManual, setPesoManual] = useState("");
+    const [mensaje, setMensaje] = useState('');
     const [ultimaLectura, setUltimaLectura] = useState(null);
-    const [velocidadLectura, setVelocidadLectura] = useState(1000);
-    const [lecturaEnProgreso, setLecturaEnProgreso] = useState(false);
-    const [desconectando, setDesconectando] = useState(false);
+    const [cargandoPuertos, setCargandoPuertos] = useState(true);
+    
+    const intervaloRef = useRef(null);
+    const abortControllerRef = useRef(null);
+    const estadoRef = useRef(estado);
+    const montadoRef = useRef(true);
+    const lecturaEnProgresoRef = useRef(false);
+    const ultimoPesoEnviadoRef = useRef(null);
+    
+    const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5'];
 
-    const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9'];
-
-    // ✅ CORREGIDO: useEffect con cleanup adecuado
     useEffect(() => {
-        cargarPuertos();
-        return () => {
-            detenerLecturaAutomatica();
-            if (conectado && !desconectando) {
-                handleDesconexionRapida();
+        estadoRef.current = estado;
+    }, [estado]);
+
+    // Cargar puertos
+    useEffect(() => {
+        let cancelado = false;
+        const cargarPuertos = async () => {
+            setCargandoPuertos(true);
+            setMensaje('Iniciando sistema...');
+            try {
+                const resultado = await apiClient.listarPuertosBascula();
+                if (cancelado) return;
+                if (resultado.success && resultado.puertos?.length > 0) {
+                    setPuertos(resultado.puertos);
+                } else {
+                    setPuertos(puertosComunes);
+                }
+                const puertoDefecto = resultado.puerto_recomendado || 'COM3';
+                setConfig(prev => ({ ...prev, puerto: puertoDefecto }));
+            } catch (error) {
+                if (!cancelado) {
+                    setPuertos(puertosComunes);
+                    setMensaje('Error driver puertos');
+                }
+            } finally {
+                if (!cancelado) setCargandoPuertos(false);
             }
         };
+        cargarPuertos();
+        return () => { cancelado = true; };
     }, []);
 
-    // ✅ CORREGIDO: Effect para controlar lectura automática
-    useEffect(() => {
-        if (conectado && !modoManual && !desconectando) {
-            iniciarLecturaAutomatica();
-        } else {
-            detenerLecturaAutomatica();
+    // Detener lectura
+    const detenerLecturaCompleta = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
         }
-        
-        return () => detenerLecturaAutomatica();
-    }, [conectado, velocidadLectura, modoManual, desconectando]);
-
-    // ✅ CORREGIDO: Effect para notificar cambios de peso - SIN BUCLE
-    useEffect(() => {
-        if (onPesoObtenido && !desconectando) {
-            console.log(`📤 Notificando peso actual: ${peso} kg a campo: ${campoDestino}`);
-            onPesoObtenido(peso, campoDestino);
-        }
-    }, [peso, campoDestino, onPesoObtenido, desconectando]);
-
-    // ✅ CORREGIDO: Función de desconexión rápida para cleanup
-    const handleDesconexionRapida = async () => {
-        try {
-            await apiClient.desconectarBascula({ puerto: configuracion.puerto });
-        } catch (error) {
-            console.warn('Error en desconexión rápida:', error);
-        }
-    };
-
-    // ✅ CORREGIDO: cargarPuertos con useCallback
-    const cargarPuertos = useCallback(async () => {
-        setCargandoPuertos(true);
-        setError('');
-        setInfo('🔄 Cargando puertos...');
-
-        try {
-            const resultado = await apiClient.listarPuertosBascula();
-
-            if (resultado.success) {
-                const puertos = resultado.puertos || puertosComunes;
-                setPuertosDisponibles(puertos);
-
-                const puertoRecomendado = resultado.puerto_recomendado ||
-                    (puertos.includes('COM3') ? 'COM3' : puertos[0]) || 'COM3';
-
-                const configGuardada = await apiClient.getRegistrosConfig().then(res => res.config_bascula).catch(() => null);
-
-                setConfiguracion(prev => ({
-                    ...prev,
-                    puerto: configGuardada?.puerto || puertoRecomendado,
-                    baudios: configGuardada?.baudios || 9600,
-                    timeout: configGuardada?.timeout || 2,
-                }));
-                setInfo(`✅ ${resultado.mensaje}. Puerto recomendado: ${puertoRecomendado}`);
-            }
-        } catch (error) {
-            setError('Error cargando puertos');
-            setPuertosDisponibles(puertosComunes);
-            setConfiguracion(prev => ({ ...prev, puerto: 'COM3' }));
-        } finally {
-            setCargandoPuertos(false);
-        }
-    }, []);
-
-    const conectarBascula = async () => {
-        if (!configuracion.puerto) {
-            setError('Seleccione un puerto');
-            return;
-        }
-
-        setCargando(true);
-        setError('');
-        setDesconectando(false);
-        setInfo(`🔌 Testeando ${configuracion.puerto} @ ${configuracion.baudios} baudios...`);
-
-        try {
-            const resultado = await apiClient.conectarBascula(configuracion);
-
-            if (resultado.success) {
-                setConectado(true);
-                setModoManual(false);
-                setDesconectando(false);
-
-                const pesoObtenido = parseFloat(resultado.peso_kg) || 0;
-                setPeso(pesoObtenido);
-                setUltimaLectura(new Date());
-
-                const mensaje = pesoObtenido > 0
-                    ? `✅ Conectado - Peso inicial: ${pesoObtenido} kg`
-                    : `✅ Conectado - Puerto ${configuracion.puerto} responde, pero el peso es cero.`;
-
-                setInfo(mensaje);
-                setFormatoDetectado(`${resultado.formato_detectado || 'desconocido'} @ ${configuracion.baudios} baud`);
-
-            } else {
-                setConectado(false);
-                setError(resultado.mensaje || 'No se pudo conectar/leer peso. Revise la configuración o el puerto.');
-            }
-        } catch (error) {
-            setError('Error de comunicación: ' + error.message);
-            setConectado(false);
-        } finally {
-            setCargando(false);
-        }
-    };
-
-    const leerPesoAutomatico = async () => {
-        if (!conectado || lecturaEnProgreso || desconectando || modoManual) {
-            return;
-        }
-
-        setLecturaEnProgreso(true);
-
-        try {
-            const resultado = await apiClient.leerPesoBascula(configuracion);
-
-            if (desconectando) {
-                console.log('⏹️ Cancelando lectura - desconexión en progreso');
-                return;
-            }
-
-            if (resultado.success) {
-                const nuevoPeso = parseFloat(resultado.peso_kg) || 0;
-
-                if (nuevoPeso !== peso) {
-                    setPeso(nuevoPeso);
-                    setUltimaLectura(new Date());
-                }
-
-                if (resultado.formato_detectado) {
-                    setFormatoDetectado(`${resultado.formato_detectado} @ ${configuracion.baudios} baud`);
-                }
-
-                if (error) setError('');
-
-            } else {
-                if (resultado.mensaje && resultado.mensaje.includes('conexión')) {
-                    setError('Problema de conexión - ' + resultado.mensaje);
-                }
-            }
-        } catch (error) {
-            console.debug('Error en lectura automática:', error.message);
-        } finally {
-            setLecturaEnProgreso(false);
-        }
-    };
-
-    const iniciarLecturaAutomatica = () => {
-        if (desconectando) {
-            console.log('⏹️ No iniciar lectura - desconexión en progreso');
-            return;
-        }
-
         if (intervaloRef.current) {
-            clearInterval(intervaloRef.current);
-        }
-        
-        leerPesoAutomatico();
-        
-        intervaloRef.current = setInterval(() => {
-            leerPesoAutomatico();
-        }, velocidadLectura);
-        
-        console.log(`🔁 Iniciando lectura automática cada ${velocidadLectura}ms`);
-    };
-
-    const detenerLecturaAutomatica = () => {
-        if (intervaloRef.current) {
-            console.log('🛑 Deteniendo lectura automática');
             clearInterval(intervaloRef.current);
             intervaloRef.current = null;
         }
-    };
+        lecturaEnProgresoRef.current = false;
+    }, []);
 
-    const desconectarBascula = async () => {
-        console.log('🔌 Iniciando proceso de desconexión...');
-        
-        setDesconectando(true);
-        detenerLecturaAutomatica();
-        
-        setConectado(false);
+    // Desconectar
+    const desconectarBascula = useCallback(async () => {
+        detenerLecturaCompleta();
+        estadoRef.current = 'desconectado';
+        lecturaEnProgresoRef.current = false;
+        setEstado('desconectando');
         setPeso(0);
-        setError('');
-        setInfo('🔌 Desconectando báscula...');
-        setFormatoDetectado('');
-
+        
         try {
-            const desconectarPromise = apiClient.desconectarBascula({ puerto: configuracion.puerto });
-            
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Timeout en desconexión')), 3000);
-            });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
+            await Promise.race([apiClient.desconectarBascula({ puerto: config.puerto }), timeoutPromise]);
+        } catch (e) { console.warn(e); } 
+        finally {
+            if (montadoRef.current) {
+                setEstado('desconectado');
+                setMensaje('Sistema en espera');
+                ultimoPesoEnviadoRef.current = null;
+            }
+        }
+    }, [config.puerto, detenerLecturaCompleta]);
 
-            await Promise.race([desconectarPromise, timeoutPromise]);
-            
-            setInfo('✅ Báscula desconectada');
-            setModoManual(false);
-            setPesoManual("");
+    // Leer Peso
+    const leerPesoConCancelacion = useCallback(async () => {
+        if (estadoRef.current !== 'conectado' || modoManual || !montadoRef.current || lecturaEnProgresoRef.current) return;
 
+        lecturaEnProgresoRef.current = true;
+        try {
+            const controller = new AbortController();
+            abortControllerRef.current = controller;
+            const resultado = await apiClient.leerPesoBascula(config);
+
+            if (controller.signal.aborted || estadoRef.current !== 'conectado') return;
+
+            if (resultado.success && montadoRef.current) {
+                const nuevoPeso = parseFloat(resultado.peso_kg) || 0;
+                setPeso(nuevoPeso);
+                setUltimaLectura(new Date());
+                setMensaje(nuevoPeso > 0 ? 'Lectura estable' : 'Báscula en cero');
+
+                if (onPesoObtenido && nuevoPeso > 0) {
+                    const diff = Math.abs((ultimoPesoEnviadoRef.current || 0) - nuevoPeso);
+                    if (diff > 0.001) {
+                        onPesoObtenido(nuevoPeso, campoDestino);
+                        ultimoPesoEnviadoRef.current = nuevoPeso;
+                    }
+                }
+            }
         } catch (error) {
-            console.log('⚠️ Error durante desconexión:', error.message);
-            setInfo('✅ Báscula desconectada (puede haber errores en el servidor)');
+            if (!error.message.includes('aborted') && estadoRef.current === 'conectado') {
+                if (error.message.includes('conexión') || error.message.includes('timeout')) {
+                    desconectarBascula();
+                    setMensaje('Pérdida de señal');
+                }
+            }
         } finally {
-            setDesconectando(false);
-            console.log('🔌 Proceso de desconexión completado');
+            lecturaEnProgresoRef.current = false;
+            abortControllerRef.current = null;
+        }
+    }, [config, modoManual, onPesoObtenido, campoDestino, desconectarBascula]);
+
+    // Iniciar Automático
+    const iniciarLecturaAutomatica = useCallback(() => {
+        detenerLecturaCompleta();
+        if (estadoRef.current !== 'conectado' || modoManual) return;
+        leerPesoConCancelacion();
+        intervaloRef.current = setInterval(() => {
+            if (estadoRef.current !== 'conectado' || modoManual) {
+                detenerLecturaCompleta();
+                return;
+            }
+            leerPesoConCancelacion();
+        }, 1000);
+    }, [modoManual, leerPesoConCancelacion, detenerLecturaCompleta]);
+
+    // Conectar
+    const conectarBascula = async () => {
+        setEstado('conectando');
+        setMensaje('Estableciendo enlace...');
+        estadoRef.current = 'conectando';
+        try {
+            const resultado = await apiClient.conectarBascula(config);
+            if (!montadoRef.current) return;
+
+            if (resultado.success) {
+                setEstado('conectado');
+                estadoRef.current = 'conectado';
+                const p = parseFloat(resultado.peso_kg) || 0;
+                setPeso(p);
+                setMensaje('Enlace establecido');
+                setTimeout(() => {
+                    if (estadoRef.current === 'conectado') iniciarLecturaAutomatica();
+                }, 500);
+            } else {
+                throw new Error(resultado.mensaje);
+            }
+        } catch (error) {
+            if (montadoRef.current) {
+                setEstado('error');
+                estadoRef.current = 'desconectado';
+                setMensaje('Fallo de conexión');
+            }
         }
     };
 
-    const handleConfigChange = (e) => {
-        const { name, value } = e.target;
-        setConfiguracion(prev => ({
-            ...prev,
-            [name]: name === 'puerto' ? value : parseInt(value)
-        }));
+    // Effects
+    useEffect(() => {
+        if (estado === 'conectado' && !modoManual) iniciarLecturaAutomatica();
+        else detenerLecturaCompleta();
+        return () => detenerLecturaCompleta();
+    }, [estado, modoManual, iniciarLecturaAutomatica, detenerLecturaCompleta]);
+
+    useEffect(() => {
+        montadoRef.current = true;
+        return () => {
+            montadoRef.current = false;
+            detenerLecturaCompleta();
+            if (estadoRef.current === 'conectado') desconectarBascula();
+        };
+    }, [detenerLecturaCompleta, desconectarBascula]);
+
+    // Manual Handlers
+    const toggleManual = () => {
+        if (modoManual) {
+            setModoManual(false);
+            setPeso(0);
+            setMensaje('Modo Automático');
+        } else {
+            detenerLecturaCompleta();
+            estadoRef.current = 'desconectado'; // Forzar desconexión lógica
+            setEstado('desconectado'); // UI desconectada
+            setModoManual(true);
+            setPeso(0);
+            setMensaje('Modo Manual Activado');
+        }
     };
 
-    const activarModoManual = () => {
-        setModoManual(true);
-        setConectado(false);
-        setDesconectando(false);
-        setInfo('📌 Modo manual activado');
-        detenerLecturaAutomatica();
+    const handleManualChange = (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        setPeso(val);
+        if (onPesoObtenido) onPesoObtenido(val, campoDestino);
     };
 
-    const handlePesoManualChange = (e) => {
-        const valor = e.target.value;
-        setPesoManual(valor);
-
-        const pesoNumerico = parseFloat(valor) || 0;
-        setPeso(pesoNumerico);
-    };
-
-    const cambiarVelocidad = (nuevaVelocidad) => {
-        setVelocidadLectura(nuevaVelocidad);
-    };
-
-    const formatearTiempo = (fecha) => {
-        if (!fecha) return '';
-        return fecha.toLocaleTimeString();
-    };
-
+    // ==========================================
+    // 2. NUEVA INTERFAZ DE USUARIO (UI)
+    // ==========================================
     return (
-        <div style={styles.container}>
-            <h4 style={styles.titulo}>
-                ⚖️ Conexión con Báscula Digital
-                {modoManual && <span style={styles.manualBadge}>[MANUAL]</span>}
-                {conectado && <span style={styles.autoBadge}>[AUTO {velocidadLectura}ms]</span>}
-                {desconectando && <span style={styles.disconnectingBadge}>[DESCONECTANDO...]</span>}
-            </h4>
-
-            {info && (
-                <div style={{
-                    ...styles.infoBox,
-                    ...(info.includes('⚠️') && styles.warningBox),
-                    ...(info.includes('✅') && styles.successBox),
-                    ...(info.includes('❌') && styles.errorBox),
-                    ...(info.includes('Desconectando') && styles.disconnectingBox)
-                }}>
-                    {desconectando ? '⏳ ' + info : info}
-                </div>
-            )}
-
-            {error && (
-                <div style={styles.errorBox}>⚠️ {error}</div>
-            )}
-
-            {/* Configuración del Puerto */}
-            <div style={styles.configSection}>
-                <div style={styles.puertoSection}>
-                    <label style={styles.label}>Puerto COM:</label>
-                    <select
-                        name="puerto"
-                        value={configuracion.puerto}
-                        onChange={handleConfigChange}
-                        style={styles.select}
-                        disabled={conectado || cargandoPuertos || modoManual || desconectando}
-                    >
-                        <option value="">{cargandoPuertos ? 'Cargando...' : 'Seleccionar puerto'}</option>
-                        {puertosDisponibles.map(puerto => (
-                            <option key={puerto} value={puerto}>{puerto}</option>
-                        ))}
-                    </select>
-
-                    <button
-                        onClick={cargarPuertos}
-                        disabled={cargandoPuertos || conectado || desconectando}
-                        style={styles.refreshButton}
-                        title="Actualizar lista"
-                    >
-                        {cargandoPuertos ? '🔄' : '🔃'}
-                    </button>
-                </div>
-
-                <div style={styles.configDetails}>
-                    <div style={styles.configGroup}>
-                        <label style={styles.label}>Baudios:</label>
-                        <input
-                            type="number"
-                            name="baudios"
-                            value={configuracion.baudios}
-                            onChange={handleConfigChange}
-                            style={styles.inputSmall}
-                            disabled={conectado || modoManual || desconectando}
-                        />
+        <div style={styles.panel}>
+            {/* Cabecera del Instrumento */}
+            <div style={styles.header}>
+                <div style={styles.headerTitle}>
+                    <span style={styles.icon}>⚖️</span>
+                    <div>
+                        <h4 style={{margin:0, fontSize: '1rem', fontWeight: '700', color: '#374151'}}>MÓDULO DE PESAJE</h4>
+                        <small style={{color: '#6B7280', fontSize: '0.75rem', letterSpacing: '0.5px'}}>
+                            SERIAL INTERFACE RS232
+                        </small>
                     </div>
-                    <div style={styles.configGroup}>
-                        <label style={styles.label}>Timeout (s):</label>
-                        <input
-                            type="number"
-                            name="timeout"
-                            value={configuracion.timeout}
-                            onChange={handleConfigChange}
-                            style={styles.inputSmall}
-                            disabled={conectado || modoManual || desconectando}
-                        />
+                </div>
+                {/* Indicador LED */}
+                <div style={{
+                    ...styles.statusIndicator,
+                    borderColor: estado === 'conectado' ? '#10B981' : (estado === 'error' ? '#EF4444' : '#E5E7EB')
+                }}>
+                    <span style={{
+                        ...styles.led,
+                        backgroundColor: estado === 'conectado' ? '#10B981' : (estado === 'error' ? '#EF4444' : '#9CA3AF'),
+                        boxShadow: estado === 'conectado' ? '0 0 8px #10B981' : 'none'
+                    }} />
+                    <span style={styles.statusText}>
+                        {estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}
+                    </span>
+                </div>
+            </div>
+
+            {/* Display LCD Industrial */}
+            <div style={styles.lcdContainer}>
+                <div style={styles.lcdGlass}>
+                    <div style={styles.lcdHeader}>
+                        <span style={styles.lcdLabel}>PESO NETO (KG)</span>
+                        <span style={styles.lcdTime}>
+                            {ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}
+                        </span>
+                    </div>
+                    
+                    <div style={styles.lcdValue}>
+                        {peso.toFixed(3)}
+                    </div>
+                    
+                    <div style={styles.lcdFooter}>
+                        <div style={styles.lcdIndicators}>
+                            <span style={{opacity: modoManual ? 1 : 0.2}}>MAN</span>
+                            <span style={{opacity: !modoManual && estado === 'conectado' ? 1 : 0.2}}>AUTO</span>
+                            <span style={{opacity: peso === 0 ? 1 : 0.2}}>ZERO</span>
+                            <span style={{opacity: estado === 'conectado' ? 1 : 0.2}}>STABLE</span>
+                        </div>
+                        <div style={styles.systemMessage}>
+                            {mensaje.toUpperCase()}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {!conectado && !modoManual ? (
-                <div style={styles.connectionPanel}>
-                    <div style={styles.buttonGroup}>
-                        <button
-                            onClick={conectarBascula}
-                            disabled={cargando || !configuracion.puerto || cargandoPuertos || desconectando}
-                            style={{
-                                ...styles.connectButton,
-                                ...((cargando || !configuracion.puerto || desconectando) && styles.disabledButton)
-                            }}
+            {/* Panel de Control */}
+            <div style={styles.controls}>
+                <div style={styles.controlRow}>
+                    <div style={{flex: 1}}>
+                        <label style={styles.controlLabel}>PUERTO COM</label>
+                        <select 
+                            style={styles.modernSelect} 
+                            value={config.puerto}
+                            disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos}
+                            onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
                         >
-                            {cargando ? '🔌 Conectando...' : '🔌 Testear Conexión'}
-                        </button>
+                            {cargandoPuertos ? <option>Cargando...</option> : 
+                                puertos.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                    </div>
+                    
+                    <div style={{flex: 1}}>
+                         <label style={styles.controlLabel}>ACCIÓN</label>
+                         {!modoManual && estado !== 'conectado' && (
+                            <button 
+                                onClick={conectarBascula} 
+                                disabled={estado === 'conectando'}
+                                style={{...styles.btn, ...styles.btnPrimary, ...(estado === 'conectando' && styles.btnDisabled)}}
+                            >
+                                {estado === 'conectando' ? 'CONECTANDO...' : '🔌 CONECTAR'}
+                            </button>
+                        )}
+                        
+                        {estado === 'conectado' && (
+                            <button onClick={desconectarBascula} style={{...styles.btn, ...styles.btnDestructive}}>
+                                🛑 DESCONECTAR
+                            </button>
+                        )}
 
-                        <button
-                            onClick={activarModoManual}
-                            disabled={desconectando}
-                            style={styles.manualModeButton}
-                        >
-                            ✍️ Modo Manual
-                        </button>
+                        {modoManual && (
+                             <div style={styles.manualInputContainer}>
+                                <input 
+                                    type="number" 
+                                    step="0.001"
+                                    value={peso} 
+                                    onChange={handleManualChange}
+                                    style={styles.manualInput}
+                                    placeholder="0.000"
+                                />
+                             </div>
+                        )}
                     </div>
                 </div>
-            ) : conectado ? (
-                <div style={styles.connected}>
-                    <div style={styles.pesoDisplay}>
-                        <span style={styles.pesoLabel}>PESO ACTUAL:</span>
-                        <span style={styles.pesoValue}>{peso.toFixed(3)} kg</span>
-                        <div style={styles.infoAdicional}>
-                            {formatoDetectado && <div>📡 {formatoDetectado}</div>}
-                            {ultimaLectura && <div>🕒 {formatearTiempo(ultimaLectura)}</div>}
-                            <div>🔄 Leyendo cada {velocidadLectura / 1000}s</div>
-                            <div>🎯 Campo: {campoDestino}</div>
-                        </div>
-                    </div>
 
-                    <div style={styles.velocidadControl}>
-                        <label style={styles.velocidadLabel}>Velocidad:</label>
-                        <div style={styles.velocidadButtons}>
-                            <button
-                                onClick={() => cambiarVelocidad(500)}
-                                disabled={desconectando}
-                                style={{ ...styles.velocidadBtn, ...(velocidadLectura === 500 && styles.velocidadBtnActive) }}
-                            >
-                                Rápida (0.5s)
-                            </button>
-                            <button
-                                onClick={() => cambiarVelocidad(1000)}
-                                disabled={desconectando}
-                                style={{ ...styles.velocidadBtn, ...(velocidadLectura === 1000 && styles.velocidadBtnActive) }}
-                            >
-                                Normal (1s)
-                            </button>
-                            <button
-                                onClick={() => cambiarVelocidad(2000)}
-                                disabled={desconectando}
-                                style={{ ...styles.velocidadBtn, ...(velocidadLectura === 2000 && styles.velocidadBtnActive) }}
-                            >
-                                Lenta (2s)
-                            </button>
-                        </div>
-                    </div>
-
-                    <div style={styles.controlButtons}>
-                        <button 
-                            onClick={desconectarBascula} 
-                            disabled={desconectando}
-                            style={{
-                                ...styles.disconnectButton,
-                                ...(desconectando && styles.disconnectingButton)
-                            }}
-                        >
-                            {desconectando ? '⏳ Desconectando...' : '🔌 Desconectar'}
-                        </button>
-                    </div>
-
-                    <div style={styles.status}>
-                        <span style={styles.statusConnected}>
-                            {desconectando ? '🟡 Desconectando...' : '🟢 Conectado a ' + configuracion.puerto}
-                        </span>
-                        <span style={styles.puertoInfo}>
-                            Config: {configuracion.baudios} baud, {configuracion.timeout}s timeout
-                        </span>
-                    </div>
+                <div style={styles.secondaryActions}>
+                    <button onClick={toggleManual} style={styles.btnLink}>
+                        {modoManual ? '↩️ Volver a Modo Automático' : '✍️ Ingresar Peso Manualmente'}
+                    </button>
+                    <span style={{fontSize: '0.75rem', color: '#9CA3AF'}}>Target: {campoDestino}</span>
                 </div>
-            ) : null}
-
-            {modoManual && (
-                <div style={styles.manualSection}>
-                    <div style={styles.manualHeader}>
-                        <strong>📌 Modo Manual</strong>
-                    </div>
-                    <div style={styles.manualInputGroup}>
-                        <label style={styles.manualLabel}>Peso (kg):</label>
-                        <input
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            value={pesoManual}
-                            onChange={handlePesoManualChange}
-                            placeholder="0.000"
-                            style={styles.manualInput}
-                            disabled={desconectando}
-                        />
-                        <span style={styles.manualUnit}>kg</span>
-                    </div>
-                    <div style={styles.manualButtons}>
-                        <button
-                            onClick={() => {
-                                setModoManual(false);
-                                setPesoManual("");
-                                setInfo('Modo manual desactivado');
-                                conectarBascula();
-                            }}
-                            disabled={desconectando}
-                            style={styles.backButton}
-                        >
-                            ↩️ Volver a Báscula
-                        </button>
-                    </div>
-                    {peso > 0 && (
-                        <div style={styles.pesoPreview}>
-                            Peso actual en el formulario: <strong>{peso.toFixed(3)} kg</strong>
-                            <div>🎯 Campo: {campoDestino}</div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            <div style={styles.helpText}>
-                <strong>💡 Arquitectura de Conexión:</strong>
-                <ul style={styles.helpList}>
-                    <li>El sistema **abre, lee y cierra** la conexión serial en cada lectura (Modo sin estado).</li>
-                    <li>La conexión se mantiene activa al cambiar entre materiales.</li>
-                    <li>Asegúrate que el puerto, baudios y timeout coincidan con la configuración de tu báscula.</li>
-                </ul>
             </div>
         </div>
     );
 };
 
 const styles = {
-    container: {
-        border: '2px solid #007bff',
-        borderRadius: '8px',
-        padding: '1rem',
-        marginBottom: '1rem',
-        backgroundColor: '#f8f9fa',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    },
-    titulo: {
-        margin: '0 0 1rem 0',
-        color: '#333',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        flexWrap: 'wrap'
-    },
-    manualBadge: {
-        fontSize: '0.7rem',
-        backgroundColor: '#ffc107',
-        color: '#212529',
-        padding: '0.2rem 0.5rem',
-        borderRadius: '4px'
-    },
-    autoBadge: {
-        fontSize: '0.7rem',
-        backgroundColor: '#17a2b8',
-        color: 'white',
-        padding: '0.2rem 0.5rem',
-        borderRadius: '4px'
-    },
-    disconnectingBadge: {
-        fontSize: '0.7rem',
-        backgroundColor: '#ffc107',
-        color: '#212529',
-        padding: '0.2rem 0.5rem',
-        borderRadius: '4px'
-    },
-    infoBox: {
-        backgroundColor: '#d1ecf1',
-        color: '#0c5460',
-        padding: '0.75rem',
-        borderRadius: '4px',
-        marginBottom: '1rem',
-        border: '1px solid #bee5eb'
-    },
-    warningBox: {
-        backgroundColor: '#fff3cd',
-        color: '#856404',
-        border: '1px solid #ffeaa7'
-    },
-    successBox: {
-        backgroundColor: '#d1f2eb',
-        color: '#0c5460',
-        border: '1px solid #a3e4d7'
-    },
-    errorBox: {
-        backgroundColor: '#f8d7da',
-        color: '#721c24',
-        padding: '0.75rem',
-        borderRadius: '4px',
-        marginBottom: '1rem',
-        border: '1px solid #f5c6cb'
-    },
-    disconnectingBox: {
-        backgroundColor: '#fff3cd',
-        color: '#856404',
-        border: '1px solid #ffeaa7'
-    },
-    configSection: {
-        marginBottom: '1rem',
-        padding: '1rem',
-        backgroundColor: '#e9ecef',
-        borderRadius: '8px',
-        border: '1px solid #ddd'
-    },
-    puertoSection: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        marginBottom: '0.5rem',
-        flexWrap: 'wrap'
-    },
-    configDetails: {
-        display: 'flex',
-        gap: '1rem',
-        marginTop: '0.5rem',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between'
-    },
-    configGroup: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-    },
-    label: {
-        fontWeight: 'bold',
-        color: '#333',
-        minWidth: '80px'
-    },
-    select: {
-        padding: '0.5rem',
-        border: '1px solid #ddd',
-        borderRadius: '4px',
-        minWidth: '120px',
-        backgroundColor: 'white',
-        flex: '1'
-    },
-    inputSmall: {
-        padding: '0.5rem',
-        border: '1px solid #ddd',
-        borderRadius: '4px',
-        width: '80px',
-        textAlign: 'center'
-    },
-    refreshButton: {
-        backgroundColor: '#6c757d',
-        color: 'white',
-        border: 'none',
-        padding: '0.5rem 0.75rem',
-        borderRadius: '4px',
-        cursor: 'pointer'
-    },
-    connectionPanel: {
-        textAlign: 'center'
-    },
-    buttonGroup: {
-        display: 'flex',
-        gap: '0.5rem',
-        justifyContent: 'center',
-        marginBottom: '1rem',
-        flexWrap: 'wrap'
-    },
-    connectButton: {
-        backgroundColor: '#28a745',
-        color: 'white',
-        border: 'none',
-        padding: '0.75rem 1.5rem',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontSize: '1rem',
-        fontWeight: 'bold',
-        flex: '1',
-        minWidth: '120px'
-    },
-    manualModeButton: {
-        backgroundColor: '#ffc107',
-        color: '#212529',
-        border: 'none',
-        padding: '0.75rem 1.5rem',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        flex: '1',
-        minWidth: '120px'
-    },
-    disabledButton: {
-        backgroundColor: '#6c757d',
-        cursor: 'not-allowed',
-        opacity: 0.6
-    },
-    connected: {
-        textAlign: 'center'
-    },
-    pesoDisplay: {
-        marginBottom: '1rem',
+    panel: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: '12px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
         padding: '1.5rem',
-        backgroundColor: 'white',
-        borderRadius: '8px',
-        border: '3px solid #28a745',
-        boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+        border: '1px solid #E5E7EB',
+        marginBottom: '2rem',
+        fontFamily: 'Inter, system-ui, sans-serif'
     },
-    pesoLabel: {
-        display: 'block',
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '1.5rem',
+        paddingBottom: '1rem',
+        borderBottom: '1px solid #F3F4F6'
+    },
+    headerTitle: { 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '12px' 
+    },
+    icon: { 
+        fontSize: '1.5rem', 
+        filter: 'grayscale(20%)' 
+    },
+    statusIndicator: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        backgroundColor: '#F9FAFB',
+        padding: '6px 12px',
+        borderRadius: '99px',
+        borderWidth: '1px',
+        borderStyle: 'solid'
+    },
+    led: { 
+        width: '8px', 
+        height: '8px', 
+        borderRadius: '50%', 
+        transition: 'all 0.3s' 
+    },
+    statusText: { 
+        fontSize: '0.7rem', 
+        fontWeight: '700', 
+        color: '#4B5563', 
+        letterSpacing: '0.5px' 
+    },
+    // LCD STYLES
+    lcdContainer: {
+        backgroundColor: '#C4D4C4', // Color base verdoso
+        backgroundImage: 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)',
+        padding: '10px',
+        borderRadius: '8px',
+        marginBottom: '1.5rem',
+        boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.15), 0 1px 0 rgba(255,255,255,0.5)'
+    },
+    lcdGlass: {
+        border: '1px solid rgba(0,0,0,0.1)',
+        borderRadius: '4px',
+        padding: '1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative'
+    },
+    lcdHeader: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        marginBottom: '5px' 
+    },
+    lcdLabel: { 
+        fontSize: '0.65rem', 
+        fontWeight: 'bold', 
+        color: '#2F4F2F', 
+        opacity: 0.8 
+    },
+    lcdTime: { 
+        fontSize: '0.65rem', 
+        fontFamily: 'monospace', 
+        color: '#2F4F2F' 
+    },
+    lcdValue: {
+        fontFamily: "'Courier New', Courier, monospace",
+        fontSize: '3.5rem',
+        fontWeight: '700',
+        color: '#1a2e1a',
+        textAlign: 'right',
+        lineHeight: '1',
+        letterSpacing: '-2px',
+        textShadow: '1px 1px 0 rgba(255,255,255,0.2)'
+    },
+    lcdFooter: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'flex-end', 
+        marginTop: '10px',
+        borderTop: '1px solid rgba(0,0,0,0.05)',
+        paddingTop: '5px'
+    },
+    lcdIndicators: { 
+        display: 'flex', 
+        gap: '8px', 
+        fontSize: '0.6rem', 
+        fontWeight: 'bold', 
+        color: '#2F4F2F' 
+    },
+    systemMessage: { 
+        fontSize: '0.7rem', 
+        fontFamily: 'monospace', 
+        color: '#2F4F2F', 
+        fontWeight: '600' 
+    },
+    // CONTROLS
+    controls: { 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '1rem' 
+    },
+    controlRow: { 
+        display: 'flex', 
+        gap: '1rem', 
+        alignItems: 'flex-end' 
+    },
+    controlLabel: { 
+        display: 'block', 
+        fontSize: '0.7rem', 
+        fontWeight: '700', 
+        color: '#6B7280', 
+        marginBottom: '0.25rem', 
+        textTransform: 'uppercase' 
+    },
+    modernSelect: {
+        width: '100%',
+        padding: '0.6rem',
+        borderRadius: '6px',
+        border: '1px solid #D1D5DB',
+        backgroundColor: '#F9FAFB',
         fontSize: '0.9rem',
-        color: '#666',
-        marginBottom: '0.5rem',
-        fontWeight: 'bold'
-    },
-    pesoValue: {
-        fontSize: '2.5rem',
-        fontWeight: 'bold',
-        color: '#28a745',
-        display: 'block'
-    },
-    infoAdicional: {
-        marginTop: '0.5rem',
-        fontSize: '0.8rem',
-        color: '#666',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.2rem'
-    },
-    velocidadControl: {
-        marginBottom: '1rem',
-        padding: '0.75rem',
-        backgroundColor: '#e9ecef',
-        borderRadius: '4px'
-    },
-    velocidadLabel: {
-        display: 'block',
-        fontSize: '0.85rem',
-        fontWeight: 'bold',
-        marginBottom: '0.5rem',
-        color: '#495057'
-    },
-    velocidadButtons: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-        gap: '0.5rem'
-    },
-    velocidadBtn: {
-        padding: '0.5rem',
-        fontSize: '0.75rem',
-        border: '1px solid #6c757d',
-        borderRadius: '4px',
-        backgroundColor: 'white',
         cursor: 'pointer',
-        transition: 'all 0.2s'
+        height: '42px' // Altura fija para alinear con botones
     },
-    velocidadBtnActive: {
-        backgroundColor: '#007bff',
-        color: 'white',
-        borderColor: '#007bff',
-        fontWeight: 'bold'
-    },
-    controlButtons: {
-        display: 'flex',
-        gap: '0.5rem',
-        justifyContent: 'center',
-        marginBottom: '1rem'
-    },
-    disconnectButton: {
-        backgroundColor: '#dc3545',
-        color: 'white',
+    btn: {
+        width: '100%',
+        height: '42px',
+        borderRadius: '6px',
+        fontWeight: '600',
+        fontSize: '0.9rem',
+        cursor: 'pointer',
         border: 'none',
-        padding: '0.75rem 1.5rem',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        flex: '1',
-        minWidth: '120px'
-    },
-    disconnectingButton: {
-        backgroundColor: '#ffc107',
-        color: '#212529',
-        cursor: 'not-allowed'
-    },
-    status: {
-        margin: '1rem 0',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-        fontSize: '0.9rem'
-    },
-    statusConnected: {
-        color: '#28a745',
-        fontWeight: 'bold'
-    },
-    puertoInfo: {
-        color: '#6c757d'
-    },
-    manualSection: {
-        backgroundColor: '#fff3cd',
-        border: '1px solid #ffeaa7',
-        borderRadius: '8px',
-        padding: '1rem'
-    },
-    manualHeader: {
-        textAlign: 'center',
-        marginBottom: '1rem',
-        color: '#856404'
-    },
-    manualInputGroup: {
+        transition: 'all 0.2s',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '0.5rem',
-        marginBottom: '1rem',
-        flexWrap: 'wrap'
+        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
     },
-    manualLabel: {
-        fontWeight: 'bold',
-        color: '#856404'
+    btnPrimary: { 
+        backgroundColor: '#2563EB', 
+        color: 'white', ':hover': { backgroundColor: '#1D4ED8' } },
+    btnDestructive: { 
+        backgroundColor: '#DC2626', 
+        color: 'white' 
+    },
+    btnDisabled: { 
+        opacity: 0.7, 
+        cursor: 'not-allowed' 
+    },
+    manualInputContainer: { 
+        height: '42px' 
     },
     manualInput: {
+        width: '100%',
+        height: '100%',
         padding: '0.5rem',
-        border: '1px solid #ccc',
-        borderRadius: '4px',
-        width: '120px',
-        textAlign: 'center'
+        border: '2px solid #FBBF24',
+        borderRadius: '6px',
+        textAlign: 'right',
+        fontSize: '1.2rem',
+        fontWeight: 'bold',
+        boxSizing: 'border-box',
+        backgroundColor: '#FFFBEB',
+        color: '#92400E'
     },
-    manualUnit: {
-        color: '#856404',
-        fontWeight: 'bold'
+    secondaryActions: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: '0.5rem',
+        borderTop: '1px solid #F3F4F6'
     },
-    manualButtons: {
-        textAlign: 'center',
-        marginBottom: '1rem'
-    },
-    backButton: {
-        backgroundColor: '#6c757d',
-        color: 'white',
+    btnLink: {
+        background: 'none',
         border: 'none',
-        padding: '0.5rem 1rem',
-        borderRadius: '4px',
-        cursor: 'pointer'
-    },
-    pesoPreview: {
-        textAlign: 'center',
-        padding: '0.5rem',
-        backgroundColor: 'white',
-        borderRadius: '4px',
-        border: '1px solid #28a745',
-        color: '#28a745'
-    },
-    helpText: {
-        marginTop: '1rem',
-        color: '#6c757d',
-        fontSize: '0.8rem',
-        textAlign: 'left'
-    },
-    helpList: {
-        margin: '0.5rem 0',
-        paddingLeft: '1.5rem',
-        lineHeight: '1.6'
+        color: '#6B7280',
+        fontSize: '0.85rem',
+        cursor: 'pointer',
+        textDecoration: 'underline'
     }
 };
 

@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class RegistrosScrapController extends Controller
 {
@@ -20,15 +19,15 @@ class RegistrosScrapController extends Controller
         $query = RegistrosScrap::with('operador');
 
         // Filtros
-        if ($request->has('area')) {
+        if ($request->has('area') && $request->area != '') {
             $query->where('area_real', $request->area);
         }
 
-        if ($request->has('turno')) {
+        if ($request->has('turno') && $request->turno != '') {
             $query->where('turno', $request->turno);
         }
 
-        if ($request->has('fecha')) {
+        if ($request->has('fecha') && $request->fecha != '') {
             $query->whereDate('fecha_registro', $request->fecha);
         }
 
@@ -59,27 +58,20 @@ class RegistrosScrapController extends Controller
         return response()->json([
             'areas_maquinas' => $areasMaquinas,
             'tipos_scrap' => $tiposScrap,
-            'turnos' => [1, 2, 3],
-            'config_bascula' => $this->obtenerConfigBascula()
+            'turnos' => [1, 2, 3]
         ]);
-    }
-
-    private function obtenerConfigBascula()
-    {
-        // Usa el Facade Storage en lugar de \Illuminate\Support\Facades\Storage::exists (redundante si ya se importó)
-        if (\Illuminate\Support\Facades\Storage::exists('bascula_config.json')) {
-            return json_decode(\Illuminate\Support\Facades\Storage::get('bascula_config.json'), true);
-        }
-
-        return null;
     }
 
     public function store(Request $request)
     {
+        // 1. Validación
         $validated = $request->validate([
             'turno' => 'required|in:1,2,3',
             'area_real' => 'required|string|max:100',
             'maquina_real' => 'required|string|max:100',
+
+            // Validar que sean números (pueden ser nulos)
+            'peso_cobre' => 'nullable|numeric|min:0',
             'peso_cobre_estanado' => 'nullable|numeric|min:0',
             'peso_purga_pvc' => 'nullable|numeric|min:0',
             'peso_purga_pe' => 'nullable|numeric|min:0',
@@ -92,6 +84,7 @@ class RegistrosScrapController extends Controller
             'peso_cable_aluminio' => 'nullable|numeric|min:0',
             'peso_cable_estanado_pvc' => 'nullable|numeric|min:0',
             'peso_cable_estanado_pe' => 'nullable|numeric|min:0',
+
             'conexion_bascula' => 'boolean',
             'numero_lote' => 'nullable|string|max:50',
             'observaciones' => 'nullable|string'
@@ -99,65 +92,62 @@ class RegistrosScrapController extends Controller
 
         DB::beginTransaction();
         try {
-            // Calcular total
-            $pesoTotal = array_sum([
-                $validated['peso_cobre_estanado'] ?? 0,
-                $validated['peso_purga_pvc'] ?? 0,
-                $validated['peso_purga_pe'] ?? 0,
-                $validated['peso_purga_pur'] ?? 0,
-                $validated['peso_purga_pp'] ?? 0,
-                $validated['peso_cable_pvc'] ?? 0,
-                $validated['peso_cable_pe'] ?? 0,
-                $validated['peso_cable_pur'] ?? 0,
-                $validated['peso_cable_pp'] ?? 0,
-                $validated['peso_cable_aluminio'] ?? 0,
-                $validated['peso_cable_estanado_pvc'] ?? 0,
-                $validated['peso_cable_estanado_pe'] ?? 0
-            ]);
+            // 2. Preparar los datos para guardar
+            // Definimos la lista de campos de peso para iterar y sumar
+            $camposPeso = [
+                'peso_cobre',
+                'peso_cobre_estanado',
+                'peso_purga_pvc',
+                'peso_purga_pe',
+                'peso_purga_pur',
+                'peso_purga_pp',
+                'peso_cable_pvc',
+                'peso_cable_pe',
+                'peso_cable_pur',
+                'peso_cable_pp',
+                'peso_cable_aluminio',
+                'peso_cable_estanado_pvc',
+                'peso_cable_estanado_pe'
+            ];
 
-            $registro = RegistrosScrap::create([
-                'operador_id' => Auth::user()->id,
+            $pesoTotal = 0;
+            $datosGuardar = [
+                'operador_id' => Auth::id(), // Usar el ID del usuario logueado
                 'turno' => $validated['turno'],
                 'area_real' => $validated['area_real'],
                 'maquina_real' => $validated['maquina_real'],
-                'tipo_material' => 'mixto',
-                'tipo_scrap_detallado' => 'registro_completo',
-                'peso_cobre_estanado' => $validated['peso_cobre_estanado'] ?? 0,
-                'peso_purga_pvc' => $validated['peso_purga_pvc'] ?? 0,
-                'peso_purga_pe' => $validated['peso_purga_pe'] ?? 0,
-                'peso_purga_pur' => $validated['peso_purga_pur'] ?? 0,
-                'peso_purga_pp' => $validated['peso_purga_pp'] ?? 0,
-                'peso_cable_pvc' => $validated['peso_cable_pvc'] ?? 0,
-                'peso_cable_pe' => $validated['peso_cable_pe'] ?? 0,
-                'peso_cable_pur' => $validated['peso_cable_pur'] ?? 0,
-                'peso_cable_pp' => $validated['peso_cable_pp'] ?? 0,
-                'peso_cable_aluminio' => $validated['peso_cable_aluminio'] ?? 0,
-                'peso_cable_estanado_pvc' => $validated['peso_cable_estanado_pvc'] ?? 0,
-                'peso_cable_estanado_pe' => $validated['peso_cable_estanado_pe'] ?? 0,
-                'peso_total' => $pesoTotal,
-                'estado' => 'pendiente',
-                'completo' => true,
+                'tipo_material' => 'mixto', // Valor por defecto
                 'conexion_bascula' => $validated['conexion_bascula'] ?? false,
                 'numero_lote' => $validated['numero_lote'] ?? null,
                 'observaciones' => $validated['observaciones'] ?? null,
                 'fecha_registro' => now(),
-            ]);
+            ];
+
+            // Asignar valores y calcular total
+            foreach ($camposPeso as $campo) {
+                $valor = $validated[$campo] ?? 0; // Si viene null, poner 0
+                $datosGuardar[$campo] = $valor;
+                $pesoTotal += $valor;
+            }
+
+            $datosGuardar['peso_total'] = $pesoTotal;
+
+            // 3. Crear el registro
+            $registro = RegistrosScrap::create($datosGuardar);
 
             DB::commit();
 
-            // Solo generar PDF localmente, sin enviar por correo
-            $this->generarReportePDF($registro);
-
             return response()->json([
-                'message' => 'Registro de scrap creado correctamente',
+                'message' => 'Registro de scrap guardado exitosamente',
                 'registro' => $registro->load('operador'),
-                'peso_total' => $pesoTotal,
-                'reporte_generado' => true
+                'peso_total' => $pesoTotal
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+            // Esto escribirá el error real en storage/logs/laravel.log
+            Log::error('Error creando registro scrap: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Error al crear registro: ' . $e->getMessage()
+                'message' => 'Error interno al guardar: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -165,21 +155,15 @@ class RegistrosScrapController extends Controller
     private function generarReportePDF(RegistrosScrap $registro)
     {
         try {
-            // Generar PDF solo para descarga local
             $pdf = PDF::loadView('pdf.registro-scrap', compact('registro'));
             $fileName = "registro_scrap_{$registro->id}_{$registro->fecha_registro->format('Ymd_His')}.pdf";
             $pdfPath = storage_path("app/pdf/{$fileName}");
 
-            // Asegurar que existe el directorio
             if (!file_exists(dirname($pdfPath))) {
                 mkdir(dirname($pdfPath), 0755, true);
             }
 
-            // Guardar PDF localmente
             $pdf->save($pdfPath);
-
-            Log::info("PDF generado localmente para registro {$registro->id}: {$pdfPath}");
-
             return true;
         } catch (\Exception $e) {
             Log::error('Error generando reporte PDF: ' . $e->getMessage());
@@ -212,7 +196,7 @@ class RegistrosScrapController extends Controller
 
         $registros = $query->get();
 
-        // Agrupar como en el PDF original
+        // Agrupar para el PDF
         $agrupado = $this->agruparRegistrosComoPDF($registros);
         $totales = $this->calcularTotales($registros);
 
@@ -233,7 +217,6 @@ class RegistrosScrapController extends Controller
     {
         $agrupado = [];
 
-        // Agrupar por área y máquina como en el PDF original
         foreach ($registros->groupBy(['area_real', 'maquina_real']) as $area => $maquinas) {
             foreach ($maquinas as $maquina => $items) {
                 $agrupado[] = [
@@ -287,7 +270,7 @@ class RegistrosScrapController extends Controller
 
         $registros = $query->get();
 
-        // Agrupar por área y máquina como en el PDF
+        // Agrupar por área y máquina
         $agrupado = [];
         foreach ($registros->groupBy(['area_real', 'maquina_real']) as $area => $maquinas) {
             foreach ($maquinas as $maquina => $items) {
@@ -334,7 +317,6 @@ class RegistrosScrapController extends Controller
         if ($user->role === 'admin') {
             $totalRegistros = RegistrosScrap::count();
             $totalPeso = RegistrosScrap::sum('peso_total');
-            $pendientes = RegistrosScrap::where('estado', 'pendiente')->count();
             $conBascula = RegistrosScrap::where('conexion_bascula', true)->count();
 
             // Totales por área
@@ -344,9 +326,6 @@ class RegistrosScrapController extends Controller
         } else {
             $totalRegistros = RegistrosScrap::where('operador_id', $user->id)->count();
             $totalPeso = RegistrosScrap::where('operador_id', $user->id)->sum('peso_total');
-            $pendientes = RegistrosScrap::where('operador_id', $user->id)
-                ->where('estado', 'pendiente')
-                ->count();
             $conBascula = RegistrosScrap::where('operador_id', $user->id)
                 ->where('conexion_bascula', true)
                 ->count();
@@ -360,7 +339,6 @@ class RegistrosScrapController extends Controller
         return response()->json([
             'total_registros' => $totalRegistros,
             'total_peso_kg' => $totalPeso,
-            'pendientes' => $pendientes,
             'registros_bascula' => $conBascula,
             'por_area' => $porArea,
         ]);
@@ -382,17 +360,7 @@ class RegistrosScrapController extends Controller
 
     public function conectarBascula(Request $request)
     {
-        // **CORRECCIÓN:** Utiliza el BasculaController real en lugar de la simulación
         $basculaController = new BasculaController();
-
-        // Redirigimos la solicitud de lectura de peso al controlador de báscula,
-        // que ahora implementa la lógica de abrir/leer/cerrar en una sola petición.
         return $basculaController->leerPeso($request);
-    }
-
-    private function simularLecturaBascula()
-    {
-        // Simula lectura de báscula entre 0.5 y 50 kg
-        return round(mt_rand(50, 5000) / 100, 2);
     }
 }

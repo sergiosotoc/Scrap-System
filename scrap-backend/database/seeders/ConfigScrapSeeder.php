@@ -9,7 +9,13 @@ class ConfigScrapSeeder extends Seeder
 {
     public function run(): void
     {
-        // Áreas y Máquinas basadas exactamente en el PDF
+        // Limpiar tablas antes de insertar para evitar duplicados
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        DB::table('config_areas_maquinas')->truncate();
+        DB::table('config_tipos_scrap')->truncate();
+        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+        // Áreas y Máquinas
         $areasMaquinas = [
             'TREFILADO' => ['TREF 1', 'TREF 2', 'TREF 3', 'TREF 4', 'TREF 5', 'TREF 6'],
             'BUNCHER' => ['ZONA 1', 'ZONA 2', 'ZONA 3', 'ZONA 4', 'ZONA 5', 'ZONA 6', 'ZONA 7', 'ZONA 8', 'ZONA 9', 'ZONA 10', 'ZONA 11', 'ZONA 12', 'ZONA 13', 'ZONA 14', 'ZONA 15', '800'],
@@ -37,10 +43,11 @@ class ConfigScrapSeeder extends Seeder
             }
         }
 
-        // Tipos de Scrap basados exactamente en el PDF
+        // Tipos de Scrap
         $tiposScrap = [
             'COBRE' => [
-                ['tipo_nombre' => 'cobre estañado', 'columna_db' => 'peso_cobre_estanado'],
+                ['tipo_nombre' => 'COBRE (Desnudo)', 'columna_db' => 'peso_cobre'], // ✅ AGREGADO
+                ['tipo_nombre' => 'Cobre Estañado', 'columna_db' => 'peso_cobre_estanado'],
                 ['tipo_nombre' => 'PURGA PVC', 'columna_db' => 'peso_purga_pvc'],
                 ['tipo_nombre' => 'PURGA PE', 'columna_db' => 'peso_purga_pe'],
                 ['tipo_nombre' => 'PURGA PUR', 'columna_db' => 'peso_purga_pur'],

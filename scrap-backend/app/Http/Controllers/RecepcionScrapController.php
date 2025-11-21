@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RecepcionesScrap;
-use App\Models\RegistrosScrap;
 use App\Models\StockScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -17,7 +16,7 @@ class RecepcionScrapController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $query = RecepcionesScrap::with(['receptor', 'registro.operador']);
+        $query = RecepcionesScrap::with(['receptor']); 
 
         // Filtros
         if ($request->has('origen_tipo') && $request->origen_tipo != '') {
@@ -47,22 +46,7 @@ class RecepcionScrapController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Log para debug
-        \Log::info('Recepciones cargadas para usuario ' . $user->id . ': ' . $recepciones->count());
-
         return response()->json($recepciones);
-    }
-
-    public function registrosPendientes()
-    {
-        $registros = RegistrosScrap::with('operador')
-            ->where('estado', 'pendiente')
-            ->where('completo', true)
-            ->orderBy('fecha_registro', 'asc')
-            ->orderBy('created_at', 'asc')
-            ->get();
-
-        return response()->json($registros);
     }
 
     public function store(Request $request)
@@ -74,18 +58,6 @@ class RecepcionScrapController extends Controller
             'origen_especifico' => 'required|string|max:150',
             'destino' => 'required|in:reciclaje,venta,almacenamiento',
             'observaciones' => 'nullable|string',
-            // **CORRECCIÓN:** Validación de registro_scrap_id con condición de estado 'pendiente'
-            'registro_scrap_id' => [
-                'nullable',
-                // Valida que el ID exista y que su estado sea 'pendiente' si el ID está presente
-                Rule::exists('registros_scrap', 'id')->where(function ($query) use ($request) {
-                    if ($request->input('registro_scrap_id')) {
-                        $query->where('estado', 'pendiente');
-                    }
-                }),
-                // Hace el campo requerido si el origen es 'interna' para asegurar trazabilidad
-                Rule::requiredIf($request->input('origen_tipo') === 'interna')
-            ],
             'lugar_almacenamiento' => 'required_if:destino,almacenamiento|string|max:100'
         ]);
 
@@ -99,7 +71,6 @@ class RecepcionScrapController extends Controller
                 'tipo_material' => $validated['tipo_material'],
                 'origen_tipo' => $validated['origen_tipo'],
                 'origen_especifico' => $validated['origen_especifico'],
-                'registro_scrap_id' => $validated['registro_scrap_id'] ?? null,
                 'receptor_id' => Auth::id(),
                 'destino' => $validated['destino'],
                 'lugar_almacenamiento' => $validated['lugar_almacenamiento'] ?? null,
@@ -110,15 +81,7 @@ class RecepcionScrapController extends Controller
 
             $recepcion = RecepcionesScrap::create($dataToInsert);
 
-            // Actualizar el estado del registro original SOLO si es origen interno y tiene registro
-            if ($validated['origen_tipo'] === 'interna' && isset($validated['registro_scrap_id'])) {
-                $registro = RegistrosScrap::find($validated['registro_scrap_id']);
-                if ($registro) {
-                    $registro->marcarRecibido();
-                }
-            }
-
-            // **CORRECCIÓN LÓGICA DE STOCK:** Crear una nueva entrada de StockScrap (lote/HU)
+            // Crear entrada de StockScrap
             if ($validated['destino'] === 'almacenamiento') {
                 StockScrap::crearNuevoLote(
                     $validated['tipo_material'],
@@ -133,7 +96,7 @@ class RecepcionScrapController extends Controller
 
             DB::commit();
 
-            $recepcion->load(['receptor', 'registro.operador']);
+            $recepcion->load('receptor');
 
             return response()->json([
                 'message' => 'Recepción de scrap creada correctamente',
@@ -151,7 +114,7 @@ class RecepcionScrapController extends Controller
 
     public function imprimirHU($id)
     {
-        $recepcion = RecepcionesScrap::with(['receptor', 'registro.operador'])->findOrFail($id);
+        $recepcion = RecepcionesScrap::with(['receptor'])->findOrFail($id); 
 
         // Verificar permisos
         $user = Auth::user();
@@ -172,7 +135,6 @@ class RecepcionScrapController extends Controller
             return $pdf->download("HU-{$recepcion->numero_hu}.pdf");
         } catch (\Exception $e) {
             \Log::error('Error generando PDF para HU ' . $id . ': ' . $e->getMessage());
-
             return response()->json([
                 'message' => 'Error al generar el PDF: ' . $e->getMessage()
             ], 500);
@@ -183,7 +145,7 @@ class RecepcionScrapController extends Controller
     {
         $user = Auth::user();
 
-        $query = RecepcionesScrap::with(['receptor', 'registro.operador']);
+        $query = RecepcionesScrap::with(['receptor']); 
 
         if ($user->role !== 'admin') {
             $query->where('receptor_id', $user->id);
@@ -259,11 +221,9 @@ class RecepcionScrapController extends Controller
         if ($user->role === 'admin') {
             $totalRecepciones = RecepcionesScrap::count();
             $totalPeso = RecepcionesScrap::sum('peso_kg');
-            $registrosPendientes = RegistrosScrap::where('estado', 'pendiente')->count();
         } else {
             $totalRecepciones = RecepcionesScrap::where('receptor_id', $user->id)->count();
             $totalPeso = RecepcionesScrap::where('receptor_id', $user->id)->sum('peso_kg');
-            $registrosPendientes = RegistrosScrap::where('estado', 'pendiente')->count();
         }
 
         // Distribucion por destino
@@ -277,14 +237,13 @@ class RecepcionScrapController extends Controller
         return response()->json([
             'total_recepciones' => $totalRecepciones,
             'total_peso_kg' => $totalPeso,
-            'registros_pendientes' => $registrosPendientes,
             'destinos' => $destinos,
         ]);
     }
 
     public function show($id)
     {
-        $recepcion = RecepcionesScrap::with(['receptor', 'registro.operador'])->findOrFail($id);
+        $recepcion = RecepcionesScrap::with(['receptor'])->findOrFail($id);
 
         $user = Auth::user();
         if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {

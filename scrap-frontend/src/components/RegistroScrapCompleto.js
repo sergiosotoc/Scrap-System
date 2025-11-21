@@ -1,12 +1,15 @@
-// src/components/RegistroScrapCompleto.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
+import { useToast } from '../context/ToastContext'; // ✅ Hook
 
-const RegistroScrapCompleto = () => {
+const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
+  const { addToast } = useToast();
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [campoBascula, setCampoBascula] = useState('peso_cobre_estanado');
+  const [enviando, setEnviando] = useState(false);
+
   const [formData, setFormData] = useState({
     turno: '',
     area_real: '',
@@ -28,560 +31,277 @@ const RegistroScrapCompleto = () => {
     observaciones: ''
   });
 
-  const [showReporteOptions, setShowReporteOptions] = useState(false);
+  const ultimoPesoRef = useRef(null);
+  const ultimoCampoRef = useRef(null);
 
-  // ✅ CORREGIDO: useEffect para carga inicial
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  // ✅ CORREGIDO: useCallback para evitar recreaciones innecesarias
-  const handlePesoFromBascula = useCallback((peso, campo = campoBascula) => {
-    console.log(`📝 Recibiendo peso ${peso} para campo: ${campo}`);
-    
-    setFormData(prev => {
-      const currentValue = prev[campo];
-      const newValue = peso;
-      
-      if (currentValue === newValue || (parseFloat(currentValue) === parseFloat(newValue))) {
-        console.log('✅ Peso sin cambios, evitando update');
-        return prev;
-      }
-      
-      console.log('🔄 Actualizando formulario con nuevo peso');
-      return {
-        ...prev,
-        [campo]: newValue,
-        conexion_bascula: true
-      };
-    });
-  }, [campoBascula]);
+  useEffect(() => { loadConfig(); }, []);
 
   const loadConfig = async () => {
     try {
       const configData = await apiClient.getRegistrosConfig();
       setConfig(configData);
     } catch (error) {
-      console.error('Error cargando configuración:', error);
-      alert('Error cargando configuración: ' + error.message);
+      addToast('Error cargando configuración: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePesoFromBascula = useCallback((peso, campo = campoBascula) => {
+    if (ultimoPesoRef.current === peso && ultimoCampoRef.current === campo) return;
+    if (peso !== 0 || (ultimoPesoRef.current !== null && ultimoPesoRef.current !== 0)) {
+      setFormData(prev => ({ ...prev, [campo]: peso, conexion_bascula: peso > 0 }));
+      addToast(`Peso actualizado: ${peso}kg en ${campo}`, 'info'); // Feedback sutil
+    }
+    ultimoPesoRef.current = peso;
+    ultimoCampoRef.current = campo;
+  }, [campoBascula, addToast]);
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  const calcularTotal = () => {
-    const total = Object.keys(formData)
-      .filter(key => key.startsWith('peso_'))
-      .reduce((sum, key) => sum + (parseFloat(formData[key]) || 0), 0);
-    
-    return total.toFixed(2);
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const tienePesos = Object.keys(formData).some(key => 
-      key.startsWith('peso_') && parseFloat(formData[key]) > 0
-    );
+    const tienePesos = Object.keys(formData).some(k => k.startsWith('peso_') && parseFloat(formData[k]) > 0);
 
-    if (!tienePesos) {
-      alert('Debe ingresar al menos un peso para algún tipo de scrap.');
-      return;
-    }
+    if (!tienePesos) return addToast('Ingrese al menos un peso válido', 'warning');
+    if (!formData.turno || !formData.area_real || !formData.maquina_real) return addToast('Complete turno, área y máquina', 'warning');
 
+    setEnviando(true);
     try {
-      const datosEnviar = { ...formData };
-      Object.keys(datosEnviar).forEach(key => {
-        if (key.startsWith('peso_') && datosEnviar[key] === '') {
-          datosEnviar[key] = 0;
-        }
+      // Sanitizar números
+      const datos = { ...formData };
+      Object.keys(datos).forEach(k => {
+        if (k.startsWith('peso_')) datos[k] = parseFloat(datos[k]) || 0;
       });
 
-      const resultado = await apiClient.createRegistroScrap(datosEnviar);
-
-      alert('✅ Registro de scrap guardado exitosamente!');
-      setShowReporteOptions(true);
-      
+      await apiClient.createRegistroScrap(datos);
+      // No mostramos toast aquí si el padre (OperadorDashboard) lo maneja, 
+      // pero por seguridad:
+      if (onRegistroCreado) onRegistroCreado();
     } catch (error) {
-      alert('❌ Error: ' + error.message);
+      addToast('Error al guardar: ' + error.message, 'error');
+      setEnviando(false);
     }
   };
 
-  const generarReporteDiario = async () => {
-    try {
-      const fecha = new Date().toISOString().split('T')[0];
-      const turno = formData.turno;
-      
-      const token = localStorage.getItem('authToken');
-      const url = `http://localhost:8000/api/registros-scrap/generar-reporte-diario`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fecha: fecha,
-          turno: turno
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', `reporte_diario_${fecha}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-
-      alert('📄 Reporte PDF generado y descargado exitosamente!');
-      setShowReporteOptions(false);
-
-    } catch (error) {
-      alert('❌ Error generando reporte: ' + error.message);
-    }
-  };
-
-  const limpiarFormulario = () => {
-    setFormData({
-      turno: '',
-      area_real: '',
-      maquina_real: '',
-      peso_cobre_estanado: '',
-      peso_purga_pvc: '',
-      peso_purga_pe: '',
-      peso_purga_pur: '',
-      peso_purga_pp: '',
-      peso_cable_pvc: '',
-      peso_cable_pe: '',
-      peso_cable_pur: '',
-      peso_cable_pp: '',
-      peso_cable_aluminio: '',
-      peso_cable_estanado_pvc: '',
-      peso_cable_estanado_pe: '',
-      conexion_bascula: false,
-      numero_lote: '',
-      observaciones: ''
-    });
-    setShowReporteOptions(false);
-  };
-
-  const continuarSinReporte = () => {
-    setShowReporteOptions(false);
-    limpiarFormulario();
-  };
-
-  if (loading) return <div style={styles.loading}>📋 Cargando configuración...</div>;
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando config...</div>;
 
   return (
     <div style={styles.container}>
-      <h2>📝 Registro de Scrap - Formato Completo</h2>
-      
-      {/* Sección de Báscula */}
-      <div style={styles.basculaSection}>
-        {/* ✅ CORREGIDO: Pasar la función estabilizada */}
-        <BasculaConnection 
+      <div style={styles.basculaPanel}>
+        <BasculaConnection
           onPesoObtenido={handlePesoFromBascula}
           campoDestino={campoBascula}
         />
-        
-        <div style={styles.campoSelector}>
-          <label style={styles.selectorLabel}>Asignar peso a:</label>
+        <div style={styles.selectorContainer}>
+          <label style={styles.label}>Asignar peso a:</label>
           <select
             value={campoBascula}
             onChange={(e) => setCampoBascula(e.target.value)}
-            style={styles.selector}
+            style={styles.select}
           >
-            {config.tipos_scrap && Object.values(config.tipos_scrap).flat().map(tipo => (
-              <option key={tipo.columna_db} value={tipo.columna_db}>
-                {tipo.tipo_nombre}
-              </option>
+            {config?.tipos_scrap && Object.values(config.tipos_scrap).flat().map(t => (
+              <option key={t.columna_db} value={t.columna_db}>{t.tipo_nombre}</option>
             ))}
           </select>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} style={styles.form}>
-        {/* Información Básica */}
+        {/* Datos Básicos */}
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>📋 Información Básica</h3>
-          <div style={styles.formRow}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>🕒 Turno:</label>
-              <select
-                name="turno"
-                value={formData.turno}
-                onChange={handleInputChange}
-                style={styles.select}
-                required
-              >
-                <option value="">Seleccionar turno</option>
-                {config.turnos.map(turno => (
-                  <option key={turno} value={turno}>Turno {turno}</option>
-                ))}
+          <h4 style={styles.sectionTitle}>Datos Operativos</h4>
+          <div style={styles.grid3}>
+            <div>
+              <label style={styles.label}>Turno</label>
+              <select name="turno" value={formData.turno} onChange={handleInputChange} style={styles.select} required>
+                <option value="">Seleccionar...</option>
+                {config?.turnos.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>🏭 Área:</label>
-              <select
-                name="area_real"
-                value={formData.area_real}
-                onChange={handleInputChange}
-                style={styles.select}
-                required
-              >
-                <option value="">Seleccionar área</option>
-                {Object.keys(config.areas_maquinas).map(area => (
-                  <option key={area} value={area}>{area}</option>
-                ))}
+            <div>
+              <label style={styles.label}>Área</label>
+              <select name="area_real" value={formData.area_real} onChange={handleInputChange} style={styles.select} required>
+                <option value="">Seleccionar...</option>
+                {config?.areas_maquinas && Object.keys(config.areas_maquinas).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>⚙️ Máquina:</label>
-              <select
-                name="maquina_real"
-                value={formData.maquina_real}
-                onChange={handleInputChange}
-                style={styles.select}
-                required
-              >
-                <option value="">Seleccionar máquina</option>
-                {formData.area_real && config.areas_maquinas[formData.area_real]?.map(maquina => (
-                  <option key={maquina.maquina_nombre} value={maquina.maquina_nombre}>
-                    {maquina.maquina_nombre}
-                  </option>
+            <div>
+              <label style={styles.label}>Máquina</label>
+              <select name="maquina_real" value={formData.maquina_real} onChange={handleInputChange} style={styles.select} required>
+                <option value="">Seleccionar...</option>
+                {formData.area_real && config?.areas_maquinas[formData.area_real]?.map(m => (
+                  <option key={m.maquina_nombre} value={m.maquina_nombre}>{m.maquina_nombre}</option>
                 ))}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Pesos por Tipo de Scrap */}
+        {/* Grid de Pesos */}
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>⚖️ Pesos por Tipo de Scrap (kg)</h3>
-          
-          {Object.keys(config.tipos_scrap).map(categoria => (
-            <div key={categoria} style={styles.categoria}>
-              <h4 style={styles.categoriaTitle}>{categoria}</h4>
-              <div style={styles.tiposGrid}>
-                {config.tipos_scrap[categoria].map(tipo => (
-                  <div key={tipo.columna_db} style={styles.tipoInput}>
-                    <label style={styles.tipoLabel}>{tipo.tipo_nombre}:</label>
+          <h4 style={styles.sectionTitle}>Detalle de Pesos (kg)</h4>
+          <div style={styles.gridPesos}>
+            {config?.tipos_scrap && Object.entries(config.tipos_scrap).map(([cat, tipos]) => (
+              <div key={cat} style={styles.categoriaGrupo}>
+                <h5 style={styles.catTitle}>{cat}</h5>
+                {tipos.map(t => (
+                  <div key={t.columna_db} style={styles.pesoInputGroup}>
+                    <label style={styles.pesoLabel}>{t.tipo_nombre}</label>
                     <input
                       type="number"
-                      name={tipo.columna_db}
-                      value={formData[tipo.columna_db]}
+                      step="0.001"
+                      name={t.columna_db}
+                      value={formData[t.columna_db]}
                       onChange={handleInputChange}
-                      style={styles.numberInput}
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
+                      style={formData[t.columna_db] > 0 ? styles.inputActivo : styles.input}
+                      placeholder="0.000"
                     />
                   </div>
                 ))}
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Información Adicional */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>📄 Información Adicional</h3>
-          <div style={styles.formRow}>
-            <div style={styles.formGroup}>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  name="conexion_bascula"
-                  checked={formData.conexion_bascula}
-                  onChange={handleInputChange}
-                  style={styles.checkbox}
-                />
-                ✅ Registrado con báscula
-              </label>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>🏷️ Número de Lote:</label>
-              <input
-                type="text"
-                name="numero_lote"
-                value={formData.numero_lote}
-                onChange={handleInputChange}
-                style={styles.input}
-                placeholder="Opcional"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>📝 Observaciones:</label>
-              <input
-                type="text"
-                name="observaciones"
-                value={formData.observaciones}
-                onChange={handleInputChange}
-                style={styles.input}
-                placeholder="Observaciones adicionales"
-              />
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Resumen y Envío */}
-        <div style={styles.resumenSection}>
-          <div style={styles.totalDisplay}>
-            <span style={styles.totalLabel}>PESO TOTAL:</span>
-            <span style={styles.totalValue}>{calcularTotal()} kg</span>
+        <div style={styles.footer}>
+          <div style={styles.resumen}>
+            Total: <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>
+              {Object.keys(formData).filter(k => k.startsWith('peso_')).reduce((acc, k) => acc + (parseFloat(formData[k]) || 0), 0).toFixed(3)} kg
+            </span>
           </div>
-
-          <button type="submit" style={styles.submitButton}>
-            💾 Guardar Registro Completo
-          </button>
+          <div style={styles.actions}>
+            <button type="button" onClick={onCancelar} style={styles.btnCancel}>Cancelar</button>
+            <button type="submit" disabled={enviando} style={styles.btnSubmit}>
+              {enviando ? 'Guardando...' : '💾 Guardar Registro'}
+            </button>
+          </div>
         </div>
       </form>
-
-      {/* Modal de opciones de reporte */}
-      {showReporteOptions && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <h3>📄 Generar Reporte PDF</h3>
-            <p>¿Deseas generar un reporte PDF con el registro realizado?</p>
-            
-            <div style={styles.modalActions}>
-              <button 
-                onClick={generarReporteDiario}
-                style={styles.reporteButton}
-              >
-                📥 Descargar Reporte PDF
-              </button>
-              <button 
-                onClick={continuarSinReporte}
-                style={styles.continuarButton}
-              >
-                ➕ Continuar sin Reporte
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
 const styles = {
   container: {
-    backgroundColor: 'white',
-    padding: '2rem',
-    borderRadius: '8px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    padding: '1rem'
   },
-  loading: {
-    textAlign: 'center',
-    padding: '2rem',
-    fontSize: '1.2rem',
+  basculaPanel: {
+    marginBottom: '2rem'
   },
-  basculaSection: {
-    marginBottom: '2rem',
-    padding: '1rem',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '8px',
-  },
-  campoSelector: {
-    marginTop: '1rem',
+  selectorContainer: {
     display: 'flex',
     alignItems: 'center',
     gap: '1rem',
-  },
-  selectorLabel: {
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  selector: {
-    padding: '0.5rem',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-  },
-  form: {
-    marginTop: '1rem',
+    backgroundColor: '#F3F4F6',
+    padding: '1rem',
+    borderRadius: '8px',
+    marginTop: '-1rem'
   },
   section: {
     marginBottom: '2rem',
-    padding: '1.5rem',
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E5E7EB',
     borderRadius: '8px',
+    padding: '1.5rem'
   },
   sectionTitle: {
-    margin: '0 0 1rem 0',
-    color: '#333',
-    borderBottom: '2px solid #007bff',
-    paddingBottom: '0.5rem',
+    marginTop: 0,
+    marginBottom: '1rem',
+    color: '#111827',
+    borderBottom: '2px solid #E5E7EB',
+    paddingBottom: '0.5rem'
   },
-  formRow: {
+  grid3: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '1rem',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '1rem'
   },
   label: {
-    marginBottom: '0.5rem',
-    fontWeight: 'bold',
-    color: '#333',
+    display: 'block',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '0.25rem'
   },
   select: {
-    padding: '0.75rem',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '1rem',
+    width: '100%',
+    padding: '0.6rem',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB'
+  },
+  gridPesos: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+    gap: '1.5rem'
+  },
+  categoriaGrupo: {
+    backgroundColor: '#F9FAFB',
+    padding: '1rem',
+    borderRadius: '8px'
+  },
+  catTitle: {
+    margin: '0 0 0.5rem 0',
+    color: '#6B7280',
+    fontSize: '0.75rem',
+    textTransform: 'uppercase'
+  },
+  pesoInputGroup: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.5rem'
+  },
+  pesoLabel: {
+    fontSize: '0.85rem',
+    flex: 1
   },
   input: {
-    padding: '0.75rem',
-    border: '1px solid #ddd',
+    width: '100px',
+    padding: '0.4rem',
+    border: '1px solid #D1D5DB',
     borderRadius: '4px',
-    fontSize: '1rem',
+    textAlign: 'right'
   },
-  numberInput: {
-    padding: '0.5rem',
-    border: '1px solid #ddd',
+  inputActivo: {
+    width: '100px',
+    padding: '0.4rem',
+    border: '1px solid #10B981',
+    backgroundColor: '#ECFDF5',
     borderRadius: '4px',
-    fontSize: '1rem',
-    width: '120px',
     textAlign: 'right',
+    fontWeight: 'bold'
   },
-  categoria: {
-    marginBottom: '1.5rem',
-    padding: '1rem',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '4px',
-  },
-  categoriaTitle: {
-    margin: '0 0 1rem 0',
-    color: '#495057',
-    fontSize: '1.1rem',
-  },
-  tiposGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '1rem',
-  },
-  tipoInput: {
+  footer: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0.5rem',
-    backgroundColor: 'white',
-    borderRadius: '4px',
-  },
-  tipoLabel: {
-    fontSize: '0.9rem',
-    color: '#555',
-    flex: 1,
-  },
-  checkboxLabel: {
-    display: 'flex',
     alignItems: 'center',
-    cursor: 'pointer',
-    marginTop: '1.5rem',
-  },
-  checkbox: {
-    marginRight: '0.5rem',
-  },
-  resumenSection: {
     marginTop: '2rem',
-    padding: '1.5rem',
-    backgroundColor: '#e8f5e8',
-    borderRadius: '8px',
-    textAlign: 'center',
+    paddingTop: '1rem',
+    borderTop: '1px solid #E5E7EB'
   },
-  totalDisplay: {
-    marginBottom: '1rem',
-  },
-  totalLabel: {
-    fontSize: '1.2rem',
-    fontWeight: 'bold',
-    color: '#2d5016',
-    marginRight: '1rem',
-  },
-  totalValue: {
-    fontSize: '1.5rem',
-    fontWeight: 'bold',
-    color: '#28a745',
-  },
-  submitButton: {
-    backgroundColor: '#28a745',
-    color: 'white',
-    border: 'none',
-    padding: '1rem 2rem',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '1.1rem',
-    width: '100%',
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  actions: {
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
+    gap: '1rem'
   },
-  modal: {
+  btnCancel: {
+    padding: '0.75rem 1.5rem',
+    border: '1px solid #D1D5DB',
     backgroundColor: 'white',
-    padding: '2rem',
-    borderRadius: '8px',
-    textAlign: 'center',
-    maxWidth: '500px',
-    width: '90%',
+    borderRadius: '6px',
+    cursor: 'pointer'
   },
-  modalActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem',
-    marginTop: '1.5rem',
-  },
-  reporteButton: {
-    backgroundColor: '#007bff',
-    color: 'white',
+  btnSubmit: {
+    padding: '0.75rem 1.5rem',
     border: 'none',
-    padding: '1rem',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '1rem',
-    fontWeight: 'bold',
-  },
-  continuarButton: {
-    backgroundColor: '#6c757d',
+    backgroundColor: '#2563EB',
     color: 'white',
-    border: 'none',
-    padding: '1rem',
-    borderRadius: '4px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '1rem',
-  },
+    fontWeight: '600'
+  }
 };
 
 export default RegistroScrapCompleto;

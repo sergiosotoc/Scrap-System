@@ -1,9 +1,9 @@
 <?php
-// app/Models/StockScrap.php - MEJORADO para manejar Lotes/HU
+// app/Models/StockScrap.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder; // Agregado para tipar scopes
+use Illuminate\Database\Eloquent\Builder;
 
 class StockScrap extends Model
 {
@@ -37,33 +37,22 @@ class StockScrap extends Model
         return $this->hasMany(StockMovimiento::class, 'stock_id');
     }
 
-    /**
-     * @param Builder $query
-     */
     public function scopeDisponible(Builder $query): Builder
     {
         return $query->where('estado', 'disponible')->where('cantidad_kg', '>', 0);
     }
 
-    /**
-     * @param Builder $query
-     * @param string $tipoMaterial
-     */
     public function scopePorTipoMaterial(Builder $query, string $tipoMaterial): Builder
     {
         return $query->where('tipo_material', $tipoMaterial);
     }
 
-    /**
-     * @param Builder $query
-     * @param string $ubicacion
-     */
     public function scopePorUbicacion(Builder $query, string $ubicacion): Builder
     {
         return $query->where('ubicacion', $ubicacion);
     }
 
-    // MÉTODO DE CREACIÓN DE LOTE (sin cambios lógicos)
+    // ✅ CORREGIDO: Paréntesis de cierre agregado
     public static function crearNuevoLote(
         $tipoMaterial, 
         $cantidad, 
@@ -72,8 +61,7 @@ class StockScrap extends Model
         $origenTipo, 
         $origenEspecifico,
         $recepcionId
-    )
-    {
+    ) {
         $stock = self::create([
             'tipo_material' => $tipoMaterial,
             'cantidad_kg' => $cantidad,
@@ -102,7 +90,6 @@ class StockScrap extends Model
         return $stock;
     }
 
-    // Método para actualizar stock (sin cambios lógicos)
     public function actualizarStock($cantidad, $operacion = 'suma', $motivo = 'ajuste', $referenciaId = null, $referenciaTipo = null)
     {
         $cantidadAnterior = $this->cantidad_kg;
@@ -135,7 +122,6 @@ class StockScrap extends Model
         return $this->save();
     }
     
-    // Método para obtener stock por ubicación (sin cambios lógicos)
     public static function getStockPorUbicacion()
     {
         return self::disponible()

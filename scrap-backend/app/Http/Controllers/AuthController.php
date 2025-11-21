@@ -37,7 +37,7 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
-            $user = Auth::guard('sanctum')->user();
+            $user = $request->user();
             
             if ($user) {
                 $user->tokens()->delete();
@@ -47,7 +47,7 @@ class AuthController extends Controller
             }
             
             return response()->json([
-                'message' => 'Usuario no encontrado'
+                'message' => 'Usuario no autenticado'
             ], 401);
         } catch (\Exception $e) {
             return response()->json([

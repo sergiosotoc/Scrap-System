@@ -12,14 +12,11 @@ class UserController extends Controller
     public function index()
     {
         $users = User::orderBy('name')->get();
-
         return response()->json($users);
     }
 
     public function store(Request $request)
     {
-        Log::info('UserController@store called', $request->all());
-        
         $validated = $request->validate([
             'username' => 'required|string|unique:users|max:50',
             'password' => 'required|string|min:6',
@@ -52,8 +49,8 @@ class UserController extends Controller
             'activo' => 'required|boolean',
         ]);
 
-        // Si se proporciona nueva contraseña
-        if ($request->has('password') && $request->password) {
+        // ✅ CORREGIDO: Solo actualizar password si se proporciona
+        if ($request->filled('password')) {
             $validated['password'] = Hash::make($request->password);
         }
 
@@ -68,19 +65,6 @@ class UserController extends Controller
     public function destroy($id)
     {
         $currentUserId = auth()->id();
-        $currentUser = auth()->user();
-
-        Log::info('Verificación de autenticación:', [
-            'current_user_id' => $currentUserId,
-            'current_user' => $currentUser ? $currentUser->username : 'null',
-            'user_to_delete' => $id
-        ]);
-
-        if (!$currentUserId) {
-            return response()->json([
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
 
         if ($id == $currentUserId) {
             return response()->json([
@@ -88,16 +72,8 @@ class UserController extends Controller
             ], 403);
         }
 
-        Log::info('Intentando eliminar usuario:', [
-            'user_id_a_eliminar' => $id,
-            'Usuario_actual' => auth()->id(),
-            'son_iguales' => $id == auth()->id()
-        ]);
-
         $user = User::findOrFail($id);
         $user->delete();
-
-        Log::info('Usuario eliminado exitosamente:', ['user_id' => $id]);
 
         return response()->json([
             'message' => 'Usuario eliminado correctamente'
@@ -106,13 +82,7 @@ class UserController extends Controller
 
     public function toggleStatus($id)
     {
-        Log::info('Intentando cambiar el estado de usuario:', [
-            'user_id' => $id,
-            'usuario_actual' => auth()->id()
-        ]);
-
         if ($id == auth()->id()) {
-            Log::warning('Intento de desactivar usuario actual bloqueado');
             return response()->json([
                 'message' => 'No puedes desactivar tu propio usuario'
             ], 403);
