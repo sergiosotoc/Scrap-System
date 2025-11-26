@@ -101,7 +101,7 @@ const Login = () => {
         
         <div style={styles.demo}>
           <p><strong>Usuarios de prueba:</strong></p>
-          <p>👑 Admin: admin.scrap / scrap2025</p>
+          <p>👑 Admin: admin / scrap2025</p>
           <p>👨‍💼 Operador: operador1 / operador123</p>
           <p>🏷️ Receptor: receptor1 / receptor123</p>
         </div>

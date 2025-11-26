@@ -11,14 +11,14 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
     const [mensaje, setMensaje] = useState('');
     const [ultimaLectura, setUltimaLectura] = useState(null);
     const [cargandoPuertos, setCargandoPuertos] = useState(true);
-    
+
     const intervaloRef = useRef(null);
     const abortControllerRef = useRef(null);
     const estadoRef = useRef(estado);
     const montadoRef = useRef(true);
     const lecturaEnProgresoRef = useRef(false);
     const ultimoPesoEnviadoRef = useRef(null);
-    
+
     const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5'];
 
     useEffect(() => {
@@ -74,11 +74,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
         lecturaEnProgresoRef.current = false;
         setEstado('desconectando');
         setPeso(0);
-        
+
         try {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
             await Promise.race([apiClient.desconectarBascula({ puerto: config.puerto }), timeoutPromise]);
-        } catch (e) { console.warn(e); } 
+        } catch (e) { console.warn(e); }
         finally {
             if (montadoRef.current) {
                 setEstado('desconectado');
@@ -108,7 +108,9 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
 
                 if (onPesoObtenido && nuevoPeso > 0) {
                     const diff = Math.abs((ultimoPesoEnviadoRef.current || 0) - nuevoPeso);
-                    if (diff > 0.001) {
+                    // Reducir el threshold para mayor sensibilidad
+                    if (diff > 0.0001) { // Cambiado de 0.001 a 0.0001
+                        console.log('📤 Enviando peso a componente padre:', { peso: nuevoPeso, campo: campoDestino });
                         onPesoObtenido(nuevoPeso, campoDestino);
                         ultimoPesoEnviadoRef.current = nuevoPeso;
                     }
@@ -219,8 +221,8 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                 <div style={styles.headerTitle}>
                     <span style={styles.icon}>⚖️</span>
                     <div>
-                        <h4 style={{margin:0, fontSize: '1rem', fontWeight: '700', color: '#374151'}}>MÓDULO DE PESAJE</h4>
-                        <small style={{color: '#6B7280', fontSize: '0.75rem', letterSpacing: '0.5px'}}>
+                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#374151' }}>MÓDULO DE PESAJE</h4>
+                        <small style={{ color: '#6B7280', fontSize: '0.75rem', letterSpacing: '0.5px' }}>
                             SERIAL INTERFACE RS232
                         </small>
                     </div>
@@ -250,17 +252,17 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                             {ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}
                         </span>
                     </div>
-                    
+
                     <div style={styles.lcdValue}>
                         {peso.toFixed(3)}
                     </div>
-                    
+
                     <div style={styles.lcdFooter}>
                         <div style={styles.lcdIndicators}>
-                            <span style={{opacity: modoManual ? 1 : 0.2}}>MAN</span>
-                            <span style={{opacity: !modoManual && estado === 'conectado' ? 1 : 0.2}}>AUTO</span>
-                            <span style={{opacity: peso === 0 ? 1 : 0.2}}>ZERO</span>
-                            <span style={{opacity: estado === 'conectado' ? 1 : 0.2}}>STABLE</span>
+                            <span style={{ opacity: modoManual ? 1 : 0.2 }}>MAN</span>
+                            <span style={{ opacity: !modoManual && estado === 'conectado' ? 1 : 0.2 }}>AUTO</span>
+                            <span style={{ opacity: peso === 0 ? 1 : 0.2 }}>ZERO</span>
+                            <span style={{ opacity: estado === 'conectado' ? 1 : 0.2 }}>STABLE</span>
                         </div>
                         <div style={styles.systemMessage}>
                             {mensaje.toUpperCase()}
@@ -272,48 +274,48 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
             {/* Panel de Control */}
             <div style={styles.controls}>
                 <div style={styles.controlRow}>
-                    <div style={{flex: 1}}>
+                    <div style={{ flex: 1 }}>
                         <label style={styles.controlLabel}>PUERTO COM</label>
-                        <select 
-                            style={styles.modernSelect} 
+                        <select
+                            style={styles.modernSelect}
                             value={config.puerto}
                             disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos}
                             onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
                         >
-                            {cargandoPuertos ? <option>Cargando...</option> : 
+                            {cargandoPuertos ? <option>Cargando...</option> :
                                 puertos.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                     </div>
-                    
-                    <div style={{flex: 1}}>
-                         <label style={styles.controlLabel}>ACCIÓN</label>
-                         {!modoManual && estado !== 'conectado' && (
-                            <button 
-                                onClick={conectarBascula} 
+
+                    <div style={{ flex: 1 }}>
+                        <label style={styles.controlLabel}>ACCIÓN</label>
+                        {!modoManual && estado !== 'conectado' && (
+                            <button
+                                onClick={conectarBascula}
                                 disabled={estado === 'conectando'}
-                                style={{...styles.btn, ...styles.btnPrimary, ...(estado === 'conectando' && styles.btnDisabled)}}
+                                style={{ ...styles.btn, ...styles.btnPrimary, ...(estado === 'conectando' && styles.btnDisabled) }}
                             >
                                 {estado === 'conectando' ? 'CONECTANDO...' : '🔌 CONECTAR'}
                             </button>
                         )}
-                        
+
                         {estado === 'conectado' && (
-                            <button onClick={desconectarBascula} style={{...styles.btn, ...styles.btnDestructive}}>
+                            <button onClick={desconectarBascula} style={{ ...styles.btn, ...styles.btnDestructive }}>
                                 🛑 DESCONECTAR
                             </button>
                         )}
 
                         {modoManual && (
-                             <div style={styles.manualInputContainer}>
-                                <input 
-                                    type="number" 
+                            <div style={styles.manualInputContainer}>
+                                <input
+                                    type="number"
                                     step="0.001"
-                                    value={peso} 
+                                    value={peso}
                                     onChange={handleManualChange}
                                     style={styles.manualInput}
                                     placeholder="0.000"
                                 />
-                             </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -322,7 +324,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                     <button onClick={toggleManual} style={styles.btnLink}>
                         {modoManual ? '↩️ Volver a Modo Automático' : '✍️ Ingresar Peso Manualmente'}
                     </button>
-                    <span style={{fontSize: '0.75rem', color: '#9CA3AF'}}>Target: {campoDestino}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>Target: {campoDestino}</span>
                 </div>
             </div>
         </div>
@@ -347,14 +349,14 @@ const styles = {
         paddingBottom: '1rem',
         borderBottom: '1px solid #F3F4F6'
     },
-    headerTitle: { 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '12px' 
+    headerTitle: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
     },
-    icon: { 
-        fontSize: '1.5rem', 
-        filter: 'grayscale(20%)' 
+    icon: {
+        fontSize: '1.5rem',
+        filter: 'grayscale(20%)'
     },
     statusIndicator: {
         display: 'flex',
@@ -366,17 +368,17 @@ const styles = {
         borderWidth: '1px',
         borderStyle: 'solid'
     },
-    led: { 
-        width: '8px', 
-        height: '8px', 
-        borderRadius: '50%', 
-        transition: 'all 0.3s' 
+    led: {
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        transition: 'all 0.3s'
     },
-    statusText: { 
-        fontSize: '0.7rem', 
-        fontWeight: '700', 
-        color: '#4B5563', 
-        letterSpacing: '0.5px' 
+    statusText: {
+        fontSize: '0.7rem',
+        fontWeight: '700',
+        color: '#4B5563',
+        letterSpacing: '0.5px'
     },
     // LCD STYLES
     lcdContainer: {
@@ -395,21 +397,21 @@ const styles = {
         flexDirection: 'column',
         position: 'relative'
     },
-    lcdHeader: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        marginBottom: '5px' 
+    lcdHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '5px'
     },
-    lcdLabel: { 
-        fontSize: '0.65rem', 
-        fontWeight: 'bold', 
-        color: '#2F4F2F', 
-        opacity: 0.8 
+    lcdLabel: {
+        fontSize: '0.65rem',
+        fontWeight: 'bold',
+        color: '#2F4F2F',
+        opacity: 0.8
     },
-    lcdTime: { 
-        fontSize: '0.65rem', 
-        fontFamily: 'monospace', 
-        color: '#2F4F2F' 
+    lcdTime: {
+        fontSize: '0.65rem',
+        fontFamily: 'monospace',
+        color: '#2F4F2F'
     },
     lcdValue: {
         fontFamily: "'Courier New', Courier, monospace",
@@ -421,45 +423,45 @@ const styles = {
         letterSpacing: '-2px',
         textShadow: '1px 1px 0 rgba(255,255,255,0.2)'
     },
-    lcdFooter: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'flex-end', 
+    lcdFooter: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
         marginTop: '10px',
         borderTop: '1px solid rgba(0,0,0,0.05)',
         paddingTop: '5px'
     },
-    lcdIndicators: { 
-        display: 'flex', 
-        gap: '8px', 
-        fontSize: '0.6rem', 
-        fontWeight: 'bold', 
-        color: '#2F4F2F' 
+    lcdIndicators: {
+        display: 'flex',
+        gap: '8px',
+        fontSize: '0.6rem',
+        fontWeight: 'bold',
+        color: '#2F4F2F'
     },
-    systemMessage: { 
-        fontSize: '0.7rem', 
-        fontFamily: 'monospace', 
-        color: '#2F4F2F', 
-        fontWeight: '600' 
+    systemMessage: {
+        fontSize: '0.7rem',
+        fontFamily: 'monospace',
+        color: '#2F4F2F',
+        fontWeight: '600'
     },
     // CONTROLS
-    controls: { 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: '1rem' 
+    controls: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1rem'
     },
-    controlRow: { 
-        display: 'flex', 
-        gap: '1rem', 
-        alignItems: 'flex-end' 
+    controlRow: {
+        display: 'flex',
+        gap: '1rem',
+        alignItems: 'flex-end'
     },
-    controlLabel: { 
-        display: 'block', 
-        fontSize: '0.7rem', 
-        fontWeight: '700', 
-        color: '#6B7280', 
-        marginBottom: '0.25rem', 
-        textTransform: 'uppercase' 
+    controlLabel: {
+        display: 'block',
+        fontSize: '0.7rem',
+        fontWeight: '700',
+        color: '#6B7280',
+        marginBottom: '0.25rem',
+        textTransform: 'uppercase'
     },
     modernSelect: {
         width: '100%',
@@ -485,19 +487,20 @@ const styles = {
         justifyContent: 'center',
         boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
     },
-    btnPrimary: { 
-        backgroundColor: '#2563EB', 
-        color: 'white', ':hover': { backgroundColor: '#1D4ED8' } },
-    btnDestructive: { 
-        backgroundColor: '#DC2626', 
-        color: 'white' 
+    btnPrimary: {
+        backgroundColor: '#2563EB',
+        color: 'white', ':hover': { backgroundColor: '#1D4ED8' }
     },
-    btnDisabled: { 
-        opacity: 0.7, 
-        cursor: 'not-allowed' 
+    btnDestructive: {
+        backgroundColor: '#DC2626',
+        color: 'white'
     },
-    manualInputContainer: { 
-        height: '42px' 
+    btnDisabled: {
+        opacity: 0.7,
+        cursor: 'not-allowed'
+    },
+    manualInputContainer: {
+        height: '42px'
     },
     manualInput: {
         width: '100%',

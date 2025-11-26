@@ -30,7 +30,7 @@ export const ToastProvider = ({ children }) => {
     <ToastContext.Provider value={{ addToast }}>
       {children}
       
-      {/* Contenedor de Notificaciones */}
+      {/* Contenedor de Notificaciones - AHORA ARRIBA */}
       <div style={styles.toastContainer}>
         {toasts.map((toast) => (
           <div key={toast.id} className="toast-enter" style={{...styles.toast, ...styles[toast.type]}}>
@@ -52,12 +52,13 @@ export const ToastProvider = ({ children }) => {
 const styles = {
   toastContainer: {
     position: 'fixed',
-    bottom: '24px',
+    top: '80px', // CAMBIO: Arriba para no tapar el footer
     right: '24px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
     zIndex: 9999,
+    pointerEvents: 'none', // IMPORTANTE: Permite hacer clic a través del contenedor vacío
   },
   toast: {
     minWidth: '300px',
@@ -71,11 +72,13 @@ const styles = {
     color: '#fff',
     fontSize: '0.95rem',
     lineHeight: '1.5',
+    pointerEvents: 'auto', // Reactiva los clics en la tarjeta
+    animation: 'slideInRight 0.3s ease',
   },
-  success: { backgroundColor: '#10B981' }, // Verde moderno
-  error:   { backgroundColor: '#EF4444' }, // Rojo moderno
-  warning: { backgroundColor: '#F59E0B' }, // Naranja
-  info:    { backgroundColor: '#3B82F6' }, // Azul
+  success: { backgroundColor: '#10B981' }, 
+  error:   { backgroundColor: '#EF4444' }, 
+  warning: { backgroundColor: '#F59E0B' }, 
+  info:    { backgroundColor: '#3B82F6' }, 
   icon: { fontSize: '1.2rem' },
   message: { margin: 0, flex: 1, fontWeight: '500' },
   closeBtn: {
@@ -89,3 +92,5 @@ const styles = {
     marginTop: '-4px'
   }
 };
+
+export default ToastProvider;

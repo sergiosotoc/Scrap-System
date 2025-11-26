@@ -1,3 +1,4 @@
+/* src/App.css */
 .App {
   text-align: center;
 }
@@ -37,7 +38,7 @@
   }
 }
 
-/* Animación para las notificaciones Toast */
+/* Animaciones para las notificaciones Toast */
 @keyframes slideInRight {
   from {
     transform: translateX(100%);
@@ -49,11 +50,33 @@
   }
 }
 
-.toast-enter {
-  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+@keyframes slideInDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
-/* Inputs Modernos (Reemplaza el borde gris aburrido) */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.toast-enter {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Scroll suave */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Inputs Modernos */
 .modern-input:focus,
 .modern-select:focus,
 .modern-textarea:focus {
@@ -69,4 +92,29 @@
 .hover-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Mejora para móviles */
+@media (max-width: 768px) {
+  .toast-container {
+    top: 60px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .toast {
+    min-width: auto;
+    max-width: none;
+  }
+  
+  .quick-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .save-container {
+    margin-left: 0;
+    justify-content: center;
+  }
 }

@@ -1,5 +1,4 @@
 <?php
-// routes/api.php - ACTUALIZADO
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -9,6 +8,7 @@ use App\Http\Controllers\RecepcionScrapController;
 use App\Http\Controllers\RegistrosScrapController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BasculaController;
+use App\Http\Controllers\ExcelReportController;
 
 Route::middleware('api')->group(function () {
     // Autenticación
@@ -51,18 +51,28 @@ Route::middleware('api')->group(function () {
         Route::get('/reportes/acumulados', [RegistrosScrapController::class, 'reportesAcumulados']);
         Route::get('/stats', [RegistrosScrapController::class, 'stats']);
         Route::get('/{id}', [RegistrosScrapController::class, 'show']);
-        Route::post('/generar-reporte-diario', [RegistrosScrapController::class, 'generarReporteDiario']);
+
+        // Preguardado de pesos
+        Route::post('/preguardar-pesos', [RegistrosScrapController::class, 'preguardarPesos']);
+        Route::get('/obtener-preguardado', [RegistrosScrapController::class, 'obtenerPreguardado']);
+        Route::post('/limpiar-preguardado', [RegistrosScrapController::class, 'limpiarPreguardado']);
+        Route::post('/actualizar-peso-material', [RegistrosScrapController::class, 'actualizarPesoMaterial']);
     });
 
     // Recepciones de scrap
     Route::middleware('auth:sanctum')->prefix('recepciones-scrap')->group(function () {
         Route::get('/', [RecepcionScrapController::class, 'index']);
-        // ✅ ELIMINADO: Ruta de registros pendientes
         Route::post('/', [RecepcionScrapController::class, 'store']);
-        Route::get('/{id}/imprimir-hu', [RecepcionScrapController::class, 'imprimirHU']);
         Route::get('/reportes/recepcion', [RecepcionScrapController::class, 'reporteRecepcion']);
         Route::get('/stock/disponible', [RecepcionScrapController::class, 'stockDisponible']);
         Route::get('/stats', [RecepcionScrapController::class, 'stats']);
         Route::get('/{id}', [RecepcionScrapController::class, 'show']);
+    });
+
+    // Reportes Excel
+    Route::middleware('auth:sanctum')->prefix('excel')->group(function () {
+        Route::get('/export-registros', [ExcelReportController::class, 'exportRegistrosScrap']);
+        Route::get('/export-recepciones', [ExcelReportController::class, 'exportRecepcionesScrap']);
+        Route::get('/export-reporte-diario', [ExcelReportController::class, 'exportReporteDiario']);
     });
 });

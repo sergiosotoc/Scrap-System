@@ -126,10 +126,10 @@ class BasculaController extends Controller
 
             // ✅ CORREGIDO: Pasar timeout correctamente al script
             $process = new Process([
-                $pythonPath, 
-                $scriptPath, 
-                'conectar', 
-                $puerto, 
+                $pythonPath,
+                $scriptPath,
+                'conectar',
+                $puerto,
                 (string)$timeout
             ]);
             $process->setTimeout($timeout + 10);
@@ -202,8 +202,8 @@ class BasculaController extends Controller
             $puerto = $request->input('puerto', $currentConfig['puerto']);
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
-            // ✅ CORREGIDO: Validar timeout
-            $timeout = min(max($timeout, 1), 10); // Entre 1 y 10 segundos
+            // Validar timeout
+            $timeout = min(max($timeout, 1), 10);
 
             Log::info("⚖️ Leyendo peso desde: {$puerto} con timeout: {$timeout}s");
 
@@ -222,6 +222,7 @@ class BasculaController extends Controller
                 (string)$currentConfig['baudios'],
                 (string)$timeout
             ]);
+
             $process->setTimeout($timeout + 5);
             $process->run();
 
@@ -244,17 +245,18 @@ class BasculaController extends Controller
             }
 
             if ($resultado['success']) {
-                Log::debug("✅ Peso leído: {$resultado['peso']} kg desde {$puerto}");
+                $peso = $resultado['peso'] ?? 0;
+                Log::debug("✅ Peso leído: {$peso} kg desde {$puerto}");
 
                 return response()->json([
                     'success' => true,
-                    'peso_kg' => $resultado['peso'],
+                    'peso_kg' => $peso,
                     'timestamp' => now()->toISOString(),
                     'puerto' => $puerto,
                     'formato_detectado' => $resultado['formato_detectado'] ?? 'desconocido',
                     'metodo' => $resultado['metodo'] ?? 'desconocido',
                     'raw_data' => $resultado['raw_data'] ?? null,
-                    'mensaje' => $resultado['mensaje'] ?? null
+                    'mensaje' => $resultado['mensaje'] ?? "Peso leído: {$peso} kg"
                 ]);
             } else {
                 Log::warning("❌ Error leyendo peso: " . ($resultado['error'] ?? 'Error desconocido'));

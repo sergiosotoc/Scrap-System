@@ -1,9 +1,11 @@
-// src/pages/OperadorDashboard.js
+/* src/pages/OperadorDashboard.js */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import RegistroScrapCompleto from '../components/RegistroScrapCompleto';
+import ExcelExportButtons from '../components/ExcelExportButtons';
+
 const OperadorDashboard = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
@@ -11,12 +13,11 @@ const OperadorDashboard = () => {
   const [registros, setRegistros] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [cargandoRegistros, setCargandoRegistros] = useState(true);
 
   const [filtros, setFiltros] = useState({ area: '', turno: '', fecha: '' });
 
   const loadOperadorData = useCallback(async () => {
-    setCargandoRegistros(true);
+    setLoading(true);
     try {
       const [registrosData, statsData] = await Promise.all([
         apiClient.getRegistrosScrap(filtros),
@@ -28,7 +29,6 @@ const OperadorDashboard = () => {
       addToast('Error cargando datos: ' + error.message, 'error');
     } finally {
       setLoading(false);
-      setCargandoRegistros(false);
     }
   }, [filtros, addToast]);
 
@@ -40,16 +40,19 @@ const OperadorDashboard = () => {
     setFiltros(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const generarReporteGeneral = async () => {
+  // NUEVA FUNCIÓN: Exportar a Excel
+  const exportarAExcel = async () => {
     try {
-      const fecha = new Date().toISOString().split('T')[0];
       const token = localStorage.getItem('authToken');
-      const url = `http://localhost:8000/api/registros-scrap/generar-reporte-diario`;
+      const params = new URLSearchParams(filtros).toString();
+      const url = `http://localhost:8000/api/excel/export-registros?${params}`;
 
       const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: fecha })
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
       });
 
       if (!response.ok) throw new Error(`Error ${response.status}`);
@@ -57,14 +60,25 @@ const OperadorDashboard = () => {
       const blob = await response.blob();
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `reporte_general_${fecha}.pdf`);
+
+      // Obtener nombre del archivo del header
+      const contentDisposition = response.headers.get('content-disposition');
+      let fileName = 'registros_scrap.xlsx';
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (fileNameMatch) {
+          fileName = fileNameMatch[1];
+        }
+      }
+
+      link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      addToast('Reporte PDF generado exitosamente', 'success');
+      addToast('Reporte Excel generado exitosamente', 'success');
     } catch (error) {
-      addToast('Error generando reporte: ' + error.message, 'error');
+      addToast('Error generando reporte Excel: ' + error.message, 'error');
     }
   };
 
@@ -84,8 +98,12 @@ const OperadorDashboard = () => {
           <p style={styles.subtitle}>Hola, {user.name}</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={generarReporteGeneral} style={styles.secondaryButton}>📄 Reporte PDF</button>
-          <button onClick={() => setShowModal(true)} style={styles.primaryButton}>➕ Nuevo Registro</button>
+          <button onClick={exportarAExcel} style={styles.secondaryButton}>
+            📊 Exportar Excel
+          </button>
+          <button onClick={() => setShowModal(true)} style={styles.primaryButton}>
+            ➕ Nuevo Registro
+          </button>
         </div>
       </div>
 
@@ -114,7 +132,6 @@ const OperadorDashboard = () => {
               <option value="">Todas Áreas</option>
               <option value="TREFILADO">Trefilado</option>
               <option value="EXTRUSION">Extrusión</option>
-              {/* ... resto de opciones ... */}
             </select>
             <select name="turno" onChange={handleFiltroChange} style={styles.smallSelect}>
               <option value="">Todos Turnos</option>
@@ -122,6 +139,10 @@ const OperadorDashboard = () => {
               <option value="2">Turno 2</option>
               <option value="3">Turno 3</option>
             </select>
+            <ExcelExportButtons
+              tipo="registros"
+              filters={filtros}
+            />
           </div>
         </div>
 
@@ -181,7 +202,6 @@ const OperadorDashboard = () => {
   );
 };
 
-// ESTILOS OPERADOR
 const styles = {
   container: {
     padding: '2rem',
@@ -248,7 +268,8 @@ const styles = {
   },
   filters: {
     display: 'flex',
-    gap: '10px'
+    gap: '10px',
+    alignItems: 'center'
   },
   smallSelect: {
     padding: '0.5rem',
@@ -330,7 +351,7 @@ const styles = {
     backgroundColor: 'white',
     borderRadius: '12px',
     width: '95%',
-    maxWidth: '900px',
+    maxWidth: '1200px',
     maxHeight: '95vh',
     overflowY: 'auto'
   },

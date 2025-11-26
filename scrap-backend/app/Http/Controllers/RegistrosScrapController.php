@@ -1,5 +1,6 @@
 <?php
-// app/Http/Controllers/RegistrosScrapController.php
+/* app/Http/Controllers/RegistrosScrapController.php */
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -8,8 +9,8 @@ use App\Models\ConfigAreaMaquina;
 use App\Models\ConfigTipoScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class RegistrosScrapController extends Controller
 {
@@ -64,14 +65,15 @@ class RegistrosScrapController extends Controller
 
     public function store(Request $request)
     {
-        // ✅ AGREGAR LOGGING PARA DEBUG
         Log::info('📥 Datos recibidos en store:', $request->all());
-        
-        // 1. Validación
+
+        // 1. Validación MEJORADA
         $validated = $request->validate([
             'turno' => 'required|in:1,2,3',
             'area_real' => 'required|string|max:100',
             'maquina_real' => 'required|string|max:100',
+            'material_seleccionado' => 'required|string', // NUEVO: para saber qué material actualizar
+            'peso_actual' => 'nullable|numeric|min:0', // NUEVO: peso leído de la báscula
 
             // Validar que sean números (pueden ser nulos)
             'peso_cobre' => 'nullable|numeric|min:0',
@@ -97,41 +99,47 @@ class RegistrosScrapController extends Controller
 
         DB::beginTransaction();
         try {
-            // 2. Preparar los datos para guardar
-            // Definimos la lista de campos de peso para iterar y sumar
-            $camposPeso = [
-                'peso_cobre',
-                'peso_cobre_estanado',
-                'peso_purga_pvc',
-                'peso_purga_pe',
-                'peso_purga_pur',
-                'peso_purga_pp',
-                'peso_cable_pvc',
-                'peso_cable_pe',
-                'peso_cable_pur',
-                'peso_cable_pp',
-                'peso_cable_aluminio',
-                'peso_cable_estanado_pvc',
-                'peso_cable_estanado_pe'
+            // 2. Mapeo de materiales a campos de base de datos
+            $mapeoMateriales = [
+                'cobre' => 'peso_cobre',
+                'cobre_estanado' => 'peso_cobre_estanado',
+                'purga_pvc' => 'peso_purga_pvc',
+                'purga_pe' => 'peso_purga_pe',
+                'purga_pur' => 'peso_purga_pur',
+                'purga_pp' => 'peso_purga_pp',
+                'cable_pvc' => 'peso_cable_pvc',
+                'cable_pe' => 'peso_cable_pe',
+                'cable_pur' => 'peso_cable_pur',
+                'cable_pp' => 'peso_cable_pp',
+                'cable_aluminio' => 'peso_cable_aluminio',
+                'cable_estanado_pvc' => 'peso_cable_estanado_pvc',
+                'cable_estanado_pe' => 'peso_cable_estanado_pe'
             ];
 
+            // 3. Preparar datos para guardar
             $pesoTotal = 0;
             $datosGuardar = [
-                'operador_id' => Auth::id(), // Usar el ID del usuario logueado
+                'operador_id' => Auth::id(),
                 'turno' => $validated['turno'],
                 'area_real' => $validated['area_real'],
                 'maquina_real' => $validated['maquina_real'],
-                // ❌ REMOVER 'tipo_material' => 'mixto', // Esta columna no existe
                 'conexion_bascula' => $validated['conexion_bascula'] ?? false,
                 'numero_lote' => $validated['numero_lote'] ?? null,
                 'observaciones' => $validated['observaciones'] ?? null,
                 'fecha_registro' => now(),
             ];
 
-            // Asignar valores y calcular total
-            foreach ($camposPeso as $campo) {
-                $valor = $validated[$campo] ?? 0; // Si viene null, poner 0
-                $datosGuardar[$campo] = $valor;
+            // 4. Asignar valores y calcular total - CORREGIDO
+            foreach ($mapeoMateriales as $material => $campoDb) {
+                // Si es el material seleccionado y tenemos peso actual, usar ese peso
+                if ($material === $validated['material_seleccionado'] && isset($validated['peso_actual'])) {
+                    $valor = $validated['peso_actual'];
+                    Log::info("🎯 Actualizando material seleccionado: {$material} con peso: {$valor}");
+                } else {
+                    $valor = $validated[$campoDb] ?? 0;
+                }
+
+                $datosGuardar[$campoDb] = $valor;
                 $pesoTotal += $valor;
             }
 
@@ -139,8 +147,12 @@ class RegistrosScrapController extends Controller
 
             Log::info('💾 Datos a guardar en BD:', $datosGuardar);
 
-            // 3. Crear el registro
+            // 5. Crear el registro
             $registro = RegistrosScrap::create($datosGuardar);
+
+            // 6. Limpiar preguardado después de guardar exitosamente
+            $cacheKey = 'preguardado_scrap_' . Auth::id() . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
+            Cache::forget($cacheKey);
 
             DB::commit();
 
@@ -149,11 +161,11 @@ class RegistrosScrapController extends Controller
             return response()->json([
                 'message' => 'Registro de scrap guardado exitosamente',
                 'registro' => $registro->load('operador'),
-                'peso_total' => $pesoTotal
+                'peso_total' => $pesoTotal,
+                'material_actualizado' => $validated['material_seleccionado']
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            // Esto escribirá el error real en storage/logs/laravel.log
             Log::error('❌ Error creando registro scrap: ' . $e->getMessage());
             Log::error('📋 Stack trace: ' . $e->getTraceAsString());
             return response()->json([
@@ -162,103 +174,168 @@ class RegistrosScrapController extends Controller
         }
     }
 
-    private function generarReportePDF(RegistrosScrap $registro)
+    public function actualizarPesoMaterial(Request $request)
     {
         try {
-            $pdf = PDF::loadView('pdf.registro-scrap', compact('registro'));
-            $fileName = "registro_scrap_{$registro->id}_{$registro->fecha_registro->format('Ymd_His')}.pdf";
-            $pdfPath = storage_path("app/pdf/{$fileName}");
+            $validated = $request->validate([
+                'material' => 'required|string',
+                'peso_kg' => 'required|numeric|min:0',
+                'area_real' => 'required|string',
+                'maquina_real' => 'required|string',
+                'turno' => 'required|in:1,2,3'
+            ]);
 
-            if (!file_exists(dirname($pdfPath))) {
-                mkdir(dirname($pdfPath), 0755, true);
+            $user = Auth::user();
+
+            // Mapeo de materiales
+            $mapeoMateriales = [
+                'cobre' => 'peso_cobre',
+                'cobre_estanado' => 'peso_cobre_estanado',
+                'purga_pvc' => 'peso_purga_pvc',
+                'purga_pe' => 'peso_purga_pe',
+                'purga_pur' => 'peso_purga_pur',
+                'purga_pp' => 'peso_purga_pp',
+                'cable_pvc' => 'peso_cable_pvc',
+                'cable_pe' => 'peso_cable_pe',
+                'cable_pur' => 'peso_cable_pur',
+                'cable_pp' => 'peso_cable_pp',
+                'cable_aluminio' => 'peso_cable_aluminio',
+                'cable_estanado_pvc' => 'peso_cable_estanado_pvc',
+                'cable_estanado_pe' => 'peso_cable_estanado_pe'
+            ];
+
+            if (!isset($mapeoMateriales[$validated['material']])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Material no válido'
+                ], 400);
             }
 
-            $pdf->save($pdfPath);
-            return true;
+            $campoMaterial = $mapeoMateriales[$validated['material']];
+
+            // Preguardar en cache
+            $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
+
+            $preguardado = Cache::get($cacheKey, [
+                'turno' => $validated['turno'],
+                'area_real' => $validated['area_real'],
+                'maquina_real' => $validated['maquina_real'],
+                'pesos' => [],
+                'timestamp' => now(),
+                'user_id' => $user->id
+            ]);
+
+            // Actualizar el peso del material específico
+            $preguardado['pesos'][$validated['material']] = $validated['peso_kg'];
+            $preguardado['timestamp'] = now();
+
+            Cache::put($cacheKey, $preguardado, 7200);
+
+            Log::info("📝 Peso actualizado para material {$validated['material']}: {$validated['peso_kg']} kg");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Peso actualizado correctamente',
+                'material' => $validated['material'],
+                'peso_kg' => $validated['peso_kg'],
+                'cache_key' => $cacheKey,
+                'timestamp' => now()->format('H:i:s')
+            ]);
         } catch (\Exception $e) {
-            Log::error('Error generando reporte PDF: ' . $e->getMessage());
-            return false;
+            Log::error('Error en actualizarPesoMaterial: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar peso: ' . $e->getMessage()
+            ], 500);
         }
     }
 
-    public function generarReporteDiario(Request $request)
+    /**
+     * Preguardar pesos temporalmente
+     */
+    public function preguardarPesos(Request $request)
     {
-        $validated = $request->validate([
-            'fecha' => 'required|date',
-            'turno' => 'nullable|in:1,2,3'
-        ]);
-
         $user = Auth::user();
-        $fecha = $validated['fecha'];
-        $turno = $validated['turno'] ?? null;
 
-        $query = RegistrosScrap::with('operador')
-            ->whereDate('fecha_registro', $fecha)
-            ->where('completo', true);
-
-        if ($turno) {
-            $query->where('turno', $turno);
-        }
-
-        if ($user->role !== 'admin') {
-            $query->where('operador_id', $user->id);
-        }
-
-        $registros = $query->get();
-
-        // Agrupar para el PDF
-        $agrupado = $this->agruparRegistrosComoPDF($registros);
-        $totales = $this->calcularTotales($registros);
-
-        // Generar PDF para descarga
-        $pdf = PDF::loadView('pdf.reporte-diario', [
-            'registros' => $registros,
-            'agrupado' => $agrupado,
-            'totales' => $totales,
-            'fecha' => $fecha,
-            'turno' => $turno,
-            'user' => $user
+        $validated = $request->validate([
+            'turno' => 'required|in:1,2,3',
+            'area_real' => 'required|string|max:100',
+            'maquina_real' => 'required|string|max:100',
+            'pesos' => 'required|array'
         ]);
 
-        return $pdf->download("reporte_diario_{$fecha}.pdf");
+        // Crear clave única para el preguardado
+        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
+
+        // Guardar en cache por 2 horas
+        $preguardado = [
+            'turno' => $validated['turno'],
+            'area_real' => $validated['area_real'],
+            'maquina_real' => $validated['maquina_real'],
+            'pesos' => $validated['pesos'],
+            'timestamp' => now(),
+            'user_id' => $user->id
+        ];
+
+        Cache::put($cacheKey, $preguardado, 7200); // 2 horas
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pesos preguardados correctamente',
+            'cache_key' => $cacheKey,
+            'timestamp' => now()->format('H:i:s')
+        ]);
     }
 
-    private function agruparRegistrosComoPDF($registros)
+    /**
+     * Obtener pesos preguardados
+     */
+    public function obtenerPreguardado(Request $request)
     {
-        $agrupado = [];
+        $user = Auth::user();
 
-        foreach ($registros->groupBy(['area_real', 'maquina_real']) as $area => $maquinas) {
-            foreach ($maquinas as $maquina => $items) {
-                $agrupado[] = [
-                    'area' => $area,
-                    'maquina' => $maquina,
-                    'total_kg' => $items->sum('peso_total'),
-                    'registros' => $items->count(),
-                    'detalles' => $items
-                ];
-            }
+        $validated = $request->validate([
+            'area_real' => 'required|string|max:100',
+            'maquina_real' => 'required|string|max:100'
+        ]);
+
+        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
+        $preguardado = Cache::get($cacheKey);
+
+        if ($preguardado) {
+            return response()->json([
+                'success' => true,
+                'preguardado' => $preguardado,
+                'existe' => true
+            ]);
         }
 
-        return $agrupado;
+        return response()->json([
+            'success' => true,
+            'existe' => false,
+            'preguardado' => null
+        ]);
     }
 
-    private function calcularTotales($registros)
+    /**
+     * Limpiar preguardado
+     */
+    public function limpiarPreguardado(Request $request)
     {
-        return [
-            'peso_cobre_estanado' => $registros->sum('peso_cobre_estanado'),
-            'peso_purga_pvc' => $registros->sum('peso_purga_pvc'),
-            'peso_purga_pe' => $registros->sum('peso_purga_pe'),
-            'peso_purga_pur' => $registros->sum('peso_purga_pur'),
-            'peso_purga_pp' => $registros->sum('peso_purga_pp'),
-            'peso_cable_pvc' => $registros->sum('peso_cable_pvc'),
-            'peso_cable_pe' => $registros->sum('peso_cable_pe'),
-            'peso_cable_pur' => $registros->sum('peso_cable_pur'),
-            'peso_cable_pp' => $registros->sum('peso_cable_pp'),
-            'peso_cable_aluminio' => $registros->sum('peso_cable_aluminio'),
-            'peso_cable_estanado_pvc' => $registros->sum('peso_cable_estanado_pvc'),
-            'peso_cable_estanado_pe' => $registros->sum('peso_cable_estanado_pe'),
-            'peso_total_general' => $registros->sum('peso_total'),
-        ];
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'area_real' => 'required|string|max:100',
+            'maquina_real' => 'required|string|max:100'
+        ]);
+
+        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
+        Cache::forget($cacheKey);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Preguardado limpiado correctamente'
+        ]);
     }
 
     public function reportesAcumulados(Request $request)
@@ -267,8 +344,7 @@ class RegistrosScrapController extends Controller
         $fecha = $request->fecha ?? now()->format('Y-m-d');
         $turno = $request->turno;
 
-        $query = RegistrosScrap::whereDate('fecha_registro', $fecha)
-            ->where('completo', true);
+        $query = RegistrosScrap::whereDate('fecha_registro', $fecha);
 
         if ($turno) {
             $query->where('turno', $turno);

@@ -1,5 +1,5 @@
 /* src/pages/ReceptorDashboard.js */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext'; 
@@ -13,12 +13,7 @@ const ReceptorDashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  const [filtros, setFiltros] = useState({
-    origen_tipo: '',
-    destino: '',
-    fecha_inicio: '',
-    fecha_fin: ''
-  });
+  // Estado de filtros ELIMINADO - no se necesita en receptor
 
   const [formData, setFormData] = useState({
     peso_kg: '',
@@ -33,14 +28,11 @@ const ReceptorDashboard = () => {
   const [tiposMaterial, setTiposMaterial] = useState(['cobre', 'aluminio', 'mixto', 'cobre_estanado']);
   const [showMaterialDropdown, setShowMaterialDropdown] = useState(false);
 
-  useEffect(() => {
-    loadReceptorData();
-  }, [filtros]);
-
-  const loadReceptorData = async () => {
+  // ✅ CORREGIDO: useCallback para loadReceptorData
+  const loadReceptorData = useCallback(async () => {
     try {
       const [recepcionesData, statsData, stockData] = await Promise.all([
-        apiClient.getRecepcionesScrap(filtros),
+        apiClient.getRecepcionesScrap(), // Sin filtros
         apiClient.getRecepcionScrapStats(),
         apiClient.getStockDisponible()
       ]);
@@ -52,11 +44,11 @@ const ReceptorDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
 
-  const handleFiltroChange = (e) => {
-    setFiltros({ ...filtros, [e.target.name]: e.target.value });
-  };
+  useEffect(() => {
+    loadReceptorData();
+  }, [loadReceptorData]); // ✅ CORREGIDO: dependencia correcta
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -161,8 +153,7 @@ const ReceptorDashboard = () => {
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <h3>📋 Historial de Recepciones</h3>
-          <div style={styles.filters}>
-          </div>
+          {/* ✅ ELIMINADO: Sección de filtros - no se necesita en receptor */}
         </div>
         <div style={styles.tableContainer}>
           <table style={styles.table}>

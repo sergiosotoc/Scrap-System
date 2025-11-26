@@ -1,5 +1,5 @@
 /* src/services/api.js */
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 const getAuthToken = () => localStorage.getItem('authToken');
 
@@ -105,6 +105,26 @@ export const apiClient = {
 
     async getRegistroScrapStats() {
         return this.request('/registros-scrap/stats');
+    },
+
+    // Preguardado
+    async preguardarPesos(data) {
+        return this.request('/registros-scrap/preguardar-pesos', { 
+            method: 'POST', 
+            body: data 
+        });
+    },
+
+    async obtenerPreguardado(params) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/registros-scrap/obtener-preguardado?${query}`);
+    },
+
+    async limpiarPreguardado(data) {
+        return this.request('/registros-scrap/limpiar-preguardado', { 
+            method: 'POST', 
+            body: data 
+        });
     },
 
     // Recepciones

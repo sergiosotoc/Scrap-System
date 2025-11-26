@@ -1,5 +1,5 @@
 <?php
-// app/Http/Controllers/RecepcionScrapController.php
+/* app/Http/Controllers/RecepcionScrapController.php */
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -8,8 +8,6 @@ use App\Models\StockScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Validation\Rule;
 
 class RecepcionScrapController extends Controller
 {
@@ -108,35 +106,6 @@ class RecepcionScrapController extends Controller
             \Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Error interno del servidor: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function imprimirHU($id)
-    {
-        $recepcion = RecepcionesScrap::with(['receptor'])->findOrFail($id); 
-
-        // Verificar permisos
-        $user = Auth::user();
-        if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {
-            return response()->json([
-                'message' => 'No tienes permiso para imprimir esta HU'
-            ], 403);
-        }
-
-        try {
-            // Generar PDF
-            $pdf = PDF::loadView('pdf.hu', compact('recepcion'));
-
-            // Marcar como impreso
-            $recepcion->marcarImpreso();
-
-            // Devolver el PDF como descarga
-            return $pdf->download("HU-{$recepcion->numero_hu}.pdf");
-        } catch (\Exception $e) {
-            \Log::error('Error generando PDF para HU ' . $id . ': ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error al generar el PDF: ' . $e->getMessage()
             ], 500);
         }
     }
