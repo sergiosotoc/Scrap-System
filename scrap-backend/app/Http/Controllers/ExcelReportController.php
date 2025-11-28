@@ -5,16 +5,15 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RegistrosScrap;
-use App\Models\RecepcionesScrap;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Exports\RegistrosScrapExport;
 use App\Exports\FormatoScrapEmpresaExport;
-use App\Exports\ReporteDiarioExport;
+use Carbon\Carbon;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExcelReportController extends Controller
 {
-    public function exportFormatoEmpresa(Request $request)
+    public function exportFormatoEmpresa(Request $request): BinaryFileResponse
     {
         try {
             \Log::info('📊 Iniciando exportación formato empresa');
@@ -44,19 +43,24 @@ class ExcelReportController extends Controller
             \Log::info("📈 Encontrados {$registros->count()} registros para formato empresa");
 
             if ($registros->count() === 0) {
-                return response()->json(['error' => 'No hay registros para la fecha seleccionada'], 404);
+                abort(404, 'No hay registros para la fecha seleccionada');
             }
 
-            $fileName = 'formato_scrap_empresa_' . $fecha . ($turno ? '_turno_' . $turno : '') . '.xlsx';
+            // FORZAR nombre con fecha actual
+            $fechaActual = Carbon::now()->format('Y-m-d');
+            $turnoTexto = $turno ? "_TURNO_{$turno}" : '';
+            $fileName = "CONTROL_SCRAP_{$fechaActual}{$turnoTexto}.xlsx";
 
-            return Excel::download(new FormatoScrapEmpresaExport($registros, $fecha, $turno, $user), $fileName);
+            \Log::info("📁 Generando archivo: {$fileName}");
+
+            return Excel::download(
+                new FormatoScrapEmpresaExport($registros, $fecha, $turno, $user), 
+                $fileName
+            );
+
         } catch (\Exception $e) {
             \Log::error('❌ Error en exportFormatoEmpresa: ' . $e->getMessage());
-            \Log::error('📋 Stack trace: ' . $e->getTraceAsString());
-
-            return response()->json([
-                'error' => 'Error al generar el formato empresarial: ' . $e->getMessage()
-            ], 500);
+            throw $e;
         }
     }
 }

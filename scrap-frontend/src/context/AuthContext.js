@@ -34,26 +34,70 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   };
 
+  // Función para analizar errores del servidor
+  const parseAuthError = (error) => {
+    console.log('🔍 Parseando error de autenticación:', error);
+
+    // Si el error ya tiene un mensaje específico del backend, usarlo directamente
+    if (error.message) {
+      return error;
+    }
+
+    // Si es un error de red
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return new Error('Error de conexión. Verifica tu internet o contacta al administrador');
+    }
+
+    // Si no se puede determinar el error, devolver genérico
+    return new Error('Error desconocido al iniciar sesión');
+  };
+
   const login = async (username, password) => {
     try {
-      console.log('AuthContext - Iniciando login para:', username);
-      const response = await apiClient.login(username, password);
+      console.log('🔐 AuthContext - Iniciando login para:', username);
 
-      console.log('AuthContext - Login exitoso', response);
-      
+      // Validaciones básicas del lado del cliente
+      if (!username.trim() || !password.trim()) {
+        throw new Error('Usuario y contraseña son requeridos');
+      }
+
+      if (password.length < 6) {
+        throw new Error('La contraseña debe tener al menos 6 caracteres');
+      }
+
+      const response = await apiClient.login(username, password);
+      console.log('✅ AuthContext - Login exitoso', response);
+
+      if (!response.token) {
+        throw new Error('No se recibió token de autenticación');
+      }
+
+      if (!response.user) {
+        throw new Error('No se recibió información del usuario');
+      }
+
       localStorage.setItem('authToken', response.token);
       setUser(response.user);
-      
+
       return { success: true, user: response.user };
 
     } catch (error) {
-      console.log('AuthContext - Error en login:', error);
-      return { success: false, error: error.message };
+      console.error('❌ AuthContext - Error en login:', error);
+
+      // Parsear el error para dar un mensaje más específico
+      const parsedError = parseAuthError(error);
+
+      return {
+        success: false,
+        error: parsedError.message,
+        originalError: error
+      };
     }
   };
 
   const logout = async () => {
     try {
+      console.log('🚪 AuthContext - Cerrando sesión');
       await apiClient.logout();
     } catch (error) {
       console.error('Error en logout:', error);

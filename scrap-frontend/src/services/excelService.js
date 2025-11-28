@@ -1,4 +1,4 @@
-/* src/services/excelService.js */
+/* src/services/excelService.js - AGREGAR LOGS */
 export const excelService = {
     exportFormatoEmpresa: async (fecha, turno = null) => {
         try {
@@ -26,16 +26,25 @@ export const excelService = {
 
             const blob = await response.blob();
             
+            // DEBUG: Ver headers
+            console.log('📋 Headers de respuesta:', {
+                'content-disposition': response.headers.get('content-disposition'),
+                'content-type': response.headers.get('content-type')
+            });
+
             const contentDisposition = response.headers.get('content-disposition');
-            let fileName = 'formato_scrap_empresa.xlsx';
+            let fileName = 'CONTROL_SCRAP_' + new Date().toISOString().split('T')[0] + '.xlsx';
             
             if (contentDisposition) {
                 const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
                 if (fileNameMatch && fileNameMatch.length === 2) {
                     fileName = fileNameMatch[1];
+                    console.log('📁 Nombre de archivo desde header:', fileName);
                 }
             }
 
+            console.log('✅ Archivo listo para descargar:', fileName);
+            
             return {
                 data: blob,
                 headers: {

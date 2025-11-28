@@ -1,8 +1,9 @@
 /* src/components/BasculaConnection.js */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../services/api';
+import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 
-const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado', modoInicial = "desconectado" }) => {
+const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
     const [estado, setEstado] = useState(modoInicial);
     const [peso, setPeso] = useState(0);
     const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 2 });
@@ -108,8 +109,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
 
                 if (onPesoObtenido && nuevoPeso > 0) {
                     const diff = Math.abs((ultimoPesoEnviadoRef.current || 0) - nuevoPeso);
-                    // Reducir el threshold para mayor sensibilidad
-                    if (diff > 0.0001) { // Cambiado de 0.001 a 0.0001
+                    if (diff > 0.0001) {
                         console.log('📤 Enviando peso a componente padre:', { peso: nuevoPeso, campo: campoDestino });
                         onPesoObtenido(nuevoPeso, campoDestino);
                         ultimoPesoEnviadoRef.current = nuevoPeso;
@@ -197,8 +197,8 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
             setMensaje('Modo Automático');
         } else {
             detenerLecturaCompleta();
-            estadoRef.current = 'desconectado'; // Forzar desconexión lógica
-            setEstado('desconectado'); // UI desconectada
+            estadoRef.current = 'desconectado';
+            setEstado('desconectado');
             setModoManual(true);
             setPeso(0);
             setMensaje('Modo Manual Activado');
@@ -211,9 +211,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
         if (onPesoObtenido) onPesoObtenido(val, campoDestino);
     };
 
-    // ==========================================
-    // 2. NUEVA INTERFAZ DE USUARIO (UI)
-    // ==========================================
     return (
         <div style={styles.panel}>
             {/* Cabecera del Instrumento */}
@@ -221,8 +218,10 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                 <div style={styles.headerTitle}>
                     <span style={styles.icon}>⚖️</span>
                     <div>
-                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#374151' }}>MÓDULO DE PESAJE</h4>
-                        <small style={{ color: '#6B7280', fontSize: '0.75rem', letterSpacing: '0.5px' }}>
+                        <h4 style={styles.headerText}>
+                            MÓDULO DE PESAJE
+                        </h4>
+                        <small style={styles.headerSubtext}>
                             SERIAL INTERFACE RS232
                         </small>
                     </div>
@@ -230,15 +229,18 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                 {/* Indicador LED */}
                 <div style={{
                     ...styles.statusIndicator,
-                    borderColor: estado === 'conectado' ? '#10B981' : (estado === 'error' ? '#EF4444' : '#E5E7EB')
+                    borderColor: estado === 'conectado' ? colors.success :
+                        (estado === 'error' ? colors.error : colors.gray300)
                 }}>
                     <span style={{
                         ...styles.led,
-                        backgroundColor: estado === 'conectado' ? '#10B981' : (estado === 'error' ? '#EF4444' : '#9CA3AF'),
-                        boxShadow: estado === 'conectado' ? '0 0 8px #10B981' : 'none'
+                        backgroundColor: estado === 'conectado' ? colors.success :
+                            (estado === 'error' ? colors.error : colors.gray400),
+                        boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none'
                     }} />
                     <span style={styles.statusText}>
-                        {estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}
+                        {estado === 'conectado' ? 'ONLINE' :
+                            (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}
                     </span>
                 </div>
             </div>
@@ -274,10 +276,10 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
             {/* Panel de Control */}
             <div style={styles.controls}>
                 <div style={styles.controlRow}>
-                    <div style={{ flex: 1 }}>
+                    <div style={styles.controlGroup}>
                         <label style={styles.controlLabel}>PUERTO COM</label>
                         <select
-                            style={styles.modernSelect}
+                            style={styles.select}
                             value={config.puerto}
                             disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos}
                             onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
@@ -287,21 +289,25 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                         </select>
                     </div>
 
-                    <div style={{ flex: 1 }}>
+                    <div style={styles.controlGroup}>
                         <label style={styles.controlLabel}>ACCIÓN</label>
                         {!modoManual && estado !== 'conectado' && (
                             <button
                                 onClick={conectarBascula}
                                 disabled={estado === 'conectando'}
-                                style={{ ...styles.btn, ...styles.btnPrimary, ...(estado === 'conectando' && styles.btnDisabled) }}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.primaryButton,
+                                    ...(estado === 'conectando' && styles.disabledButton)
+                                }}
                             >
-                                {estado === 'conectando' ? 'CONECTANDO...' : '🔌 CONECTAR'}
+                                {estado === 'conectando' ? 'Conectando...' : '🔌 Conectar'}
                             </button>
                         )}
 
                         {estado === 'conectado' && (
-                            <button onClick={desconectarBascula} style={{ ...styles.btn, ...styles.btnDestructive }}>
-                                🛑 DESCONECTAR
+                            <button onClick={desconectarBascula} style={{ ...styles.button, ...styles.destructiveButton }}>
+                                🛑 Desconectar
                             </button>
                         )}
 
@@ -312,7 +318,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                                     step="0.001"
                                     value={peso}
                                     onChange={handleManualChange}
-                                    style={styles.manualInput}
+                                    style={styles.input}
                                     placeholder="0.000"
                                 />
                             </div>
@@ -321,10 +327,12 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
                 </div>
 
                 <div style={styles.secondaryActions}>
-                    <button onClick={toggleManual} style={styles.btnLink}>
-                        {modoManual ? '↩️ Volver a Modo Automático' : '✍️ Ingresar Peso Manualmente'}
+                    <button onClick={toggleManual} style={styles.linkButton}>
+                        {modoManual ? '↩️ Volver a Automático' : '✍️ Ingresar Manualmente'}
                     </button>
-                    <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>Target: {campoDestino}</span>
+                    <span style={styles.targetText}>
+                        Campo: {campoDestino}
+                    </span>
                 </div>
             </div>
         </div>
@@ -333,26 +341,33 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre_estanado
 
 const styles = {
     panel: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: '12px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-        padding: '1.5rem',
-        border: '1px solid #E5E7EB',
-        marginBottom: '2rem',
-        fontFamily: 'Inter, system-ui, sans-serif'
+        ...baseComponents.card,
+        padding: spacing.lg,
+        marginBottom: spacing.lg
     },
     header: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '1.5rem',
-        paddingBottom: '1rem',
-        borderBottom: '1px solid #F3F4F6'
+        marginBottom: spacing.md,
+        paddingBottom: spacing.sm,
+        borderBottom: `1px solid ${colors.gray200}`
     },
     headerTitle: {
         display: 'flex',
         alignItems: 'center',
-        gap: '12px'
+        gap: spacing.sm
+    },
+    headerText: {
+        margin: 0,
+        fontSize: typography.sizes.base,
+        fontWeight: typography.weights.bold,
+        color: colors.gray800
+    },
+    headerSubtext: {
+        color: colors.gray500,
+        fontSize: typography.sizes.xs,
+        letterSpacing: '0.5px'
     },
     icon: {
         fontSize: '1.5rem',
@@ -361,175 +376,245 @@ const styles = {
     statusIndicator: {
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        backgroundColor: '#F9FAFB',
-        padding: '6px 12px',
-        borderRadius: '99px',
-        borderWidth: '1px',
-        borderStyle: 'solid'
+        gap: spacing.xs,
+        backgroundColor: colors.gray50,
+        padding: `${spacing.xs} ${spacing.sm}`,
+        borderRadius: radius.full,
+        border: `1px solid ${colors.gray300}`,
+        transition: 'all 0.3s ease'
     },
     led: {
         width: '8px',
         height: '8px',
         borderRadius: '50%',
-        transition: 'all 0.3s'
+        transition: 'all 0.3s ease'
     },
     statusText: {
-        fontSize: '0.7rem',
-        fontWeight: '700',
-        color: '#4B5563',
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.gray700,
         letterSpacing: '0.5px'
     },
     // LCD STYLES
     lcdContainer: {
-        backgroundColor: '#C4D4C4', // Color base verdoso
-        backgroundImage: 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)',
-        padding: '10px',
-        borderRadius: '8px',
-        marginBottom: '1.5rem',
-        boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.15), 0 1px 0 rgba(255,255,255,0.5)'
+        backgroundColor: colors.lcdBase,
+        background: colors.lcdGradient,
+        padding: spacing.sm,
+        borderRadius: radius.md,
+        marginBottom: spacing.md,
+        boxShadow: `${shadows.inner}, 0 1px 0 rgba(255,255,255,0.5)`,
+        border: `1px solid ${colors.gray300}`
     },
     lcdGlass: {
-        border: '1px solid rgba(0,0,0,0.1)',
-        borderRadius: '4px',
-        padding: '1rem',
+        border: `1px solid rgba(0,0,0,0.1)`,
+        borderRadius: radius.sm,
+        padding: spacing.md,
         display: 'flex',
         flexDirection: 'column',
-        position: 'relative'
+        position: 'relative',
+        backgroundColor: 'rgba(255,255,255,0.1)'
     },
     lcdHeader: {
         display: 'flex',
         justifyContent: 'space-between',
-        marginBottom: '5px'
+        marginBottom: spacing.xs
     },
     lcdLabel: {
-        fontSize: '0.65rem',
-        fontWeight: 'bold',
-        color: '#2F4F2F',
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText,
         opacity: 0.8
     },
     lcdTime: {
-        fontSize: '0.65rem',
-        fontFamily: 'monospace',
-        color: '#2F4F2F'
+        fontSize: typography.sizes.xs,
+        fontFamily: typography.fontMono,
+        color: colors.lcdText
     },
     lcdValue: {
-        fontFamily: "'Courier New', Courier, monospace",
+        fontFamily: typography.fontMono,
         fontSize: '3.5rem',
-        fontWeight: '700',
-        color: '#1a2e1a',
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText,
         textAlign: 'right',
         lineHeight: '1',
         letterSpacing: '-2px',
-        textShadow: '1px 1px 0 rgba(255,255,255,0.2)'
+        textShadow: '1px 1px 0 rgba(255,255,255,0.2)',
+        margin: `${spacing.xs} 0`
     },
     lcdFooter: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
-        marginTop: '10px',
-        borderTop: '1px solid rgba(0,0,0,0.05)',
-        paddingTop: '5px'
+        marginTop: spacing.sm,
+        borderTop: `1px solid rgba(0,0,0,0.05)`,
+        paddingTop: spacing.xs
     },
     lcdIndicators: {
         display: 'flex',
-        gap: '8px',
-        fontSize: '0.6rem',
-        fontWeight: 'bold',
-        color: '#2F4F2F'
+        gap: spacing.sm,
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText
     },
     systemMessage: {
-        fontSize: '0.7rem',
-        fontFamily: 'monospace',
-        color: '#2F4F2F',
-        fontWeight: '600'
+        fontSize: typography.sizes.xs,
+        fontFamily: typography.fontMono,
+        color: colors.lcdText,
+        fontWeight: typography.weights.semibold
     },
-    // CONTROLS
+    // CONTROLES CON ESTILO CONSISTENTE
     controls: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '1rem'
+        gap: spacing.md
     },
     controlRow: {
         display: 'flex',
-        gap: '1rem',
+        gap: spacing.md,
         alignItems: 'flex-end'
+    },
+    controlGroup: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column'
     },
     controlLabel: {
         display: 'block',
-        fontSize: '0.7rem',
-        fontWeight: '700',
-        color: '#6B7280',
-        marginBottom: '0.25rem',
-        textTransform: 'uppercase'
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.semibold,
+        color: colors.gray600,
+        marginBottom: spacing.xs,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
     },
-    modernSelect: {
+    // INPUTS Y SELECTS CON ESTILO CONSISTENTE CON OPERADORDASHBOARD
+    select: {
         width: '100%',
-        padding: '0.6rem',
-        borderRadius: '6px',
-        border: '1px solid #D1D5DB',
-        backgroundColor: '#F9FAFB',
-        fontSize: '0.9rem',
+        padding: `0 ${spacing.sm}`,
+        height: '36px',
+        borderRadius: radius.md,
+        border: `1px solid ${colors.gray300}`,
+        fontSize: typography.sizes.sm,
+        fontFamily: typography.fontFamily,
+        backgroundColor: colors.surface,
         cursor: 'pointer',
-        height: '42px' // Altura fija para alinear con botones
+        transition: 'all 0.2s ease',
+        outline: 'none',
+        boxSizing: 'border-box',
+        lineHeight: '36px',
+        appearance: 'none',
+        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+        backgroundPosition: `right ${spacing.xs} center`,
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '14px 14px',
+        paddingRight: '32px',
+        ':focus': {
+            borderColor: colors.primary,
+            boxShadow: `0 0 0 3px ${colors.primaryLight}`
+        }
     },
-    btn: {
+    input: {
         width: '100%',
-        height: '42px',
-        borderRadius: '6px',
-        fontWeight: '600',
-        fontSize: '0.9rem',
-        cursor: 'pointer',
+        padding: `0 ${spacing.sm}`,
+        height: '36px',
+        borderRadius: radius.md,
+        border: `1px solid ${colors.gray300}`,
+        fontSize: typography.sizes.sm,
+        fontFamily: typography.fontFamily,
+        backgroundColor: colors.surface,
+        transition: 'all 0.2s ease',
+        outline: 'none',
+        boxSizing: 'border-box',
+        lineHeight: '36px',
+        textAlign: 'right',
+        fontWeight: typography.weights.bold,
+        fontFamily: typography.fontMono,
+        border: `2px solid ${colors.warning}`,
+        backgroundColor: '#FFFBEB',
+        color: '#92400E',
+        ':focus': {
+            borderColor: colors.primary,
+            boxShadow: `0 0 0 3px ${colors.primaryLight}`
+        }
+    },
+    // BOTONES CON ESTILO CONSISTENTE CON OPERADORDASHBOARD
+    button: {
+        backgroundColor: colors.primary,
+        color: '#FFFFFF',
+        padding: `${spacing.sm} ${spacing.md}`,
+        borderRadius: radius.md,
         border: 'none',
-        transition: 'all 0.2s',
-        display: 'flex',
+        fontWeight: typography.weights.semibold,
+        fontSize: typography.sizes.sm,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        boxShadow: shadows.sm,
+        display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        gap: spacing.xs,
+        width: '100%',
+        height: '36px',
+        ':hover': {
+            backgroundColor: colors.primaryHover,
+            transform: 'translateY(-1px)',
+            boxShadow: shadows.md
+        },
+        ':disabled': {
+            backgroundColor: colors.gray400,
+            cursor: 'not-allowed',
+            transform: 'none'
+        }
     },
-    btnPrimary: {
-        backgroundColor: '#2563EB',
-        color: 'white', ':hover': { backgroundColor: '#1D4ED8' }
+    primaryButton: {
+        backgroundColor: colors.primary,
+        ':hover': {
+            backgroundColor: colors.primaryHover
+        }
     },
-    btnDestructive: {
-        backgroundColor: '#DC2626',
-        color: 'white'
+    destructiveButton: {
+        backgroundColor: colors.error,
+        ':hover': {
+            backgroundColor: '#DC2626'
+        }
     },
-    btnDisabled: {
-        opacity: 0.7,
-        cursor: 'not-allowed'
+    disabledButton: {
+        opacity: 0.6,
+        cursor: 'not-allowed',
+        transform: 'none',
+        ':hover': {
+            transform: 'none',
+            backgroundColor: colors.gray400
+        }
     },
     manualInputContainer: {
-        height: '42px'
-    },
-    manualInput: {
-        width: '100%',
-        height: '100%',
-        padding: '0.5rem',
-        border: '2px solid #FBBF24',
-        borderRadius: '6px',
-        textAlign: 'right',
-        fontSize: '1.2rem',
-        fontWeight: 'bold',
-        boxSizing: 'border-box',
-        backgroundColor: '#FFFBEB',
-        color: '#92400E'
+        height: '36px'
     },
     secondaryActions: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: '0.5rem',
-        borderTop: '1px solid #F3F4F6'
+        paddingTop: spacing.sm,
+        borderTop: `1px solid ${colors.gray200}`
     },
-    btnLink: {
+    linkButton: {
         background: 'none',
         border: 'none',
-        color: '#6B7280',
-        fontSize: '0.85rem',
+        color: colors.gray600,
+        fontSize: typography.sizes.sm,
         cursor: 'pointer',
-        textDecoration: 'underline'
+        textDecoration: 'underline',
+        padding: spacing.xs,
+        borderRadius: radius.sm,
+        transition: 'all 0.2s ease',
+        ':hover': {
+            backgroundColor: colors.gray100,
+            color: colors.gray700
+        }
+    },
+    targetText: {
+        fontSize: typography.sizes.xs,
+        color: colors.gray400
     }
 };
-
 export default BasculaConnection;

@@ -15,23 +15,43 @@ class AuthController extends Controller
             'password' => 'required|string'
         ]);
 
-        $user = User::where('username', $request->username)
-                   ->where('activo', true)
-                   ->first();
+        // Primero buscar el usuario sin importar si está activo
+        $user = User::where('username', $request->username)->first();
 
-        if ($user && password_verify($request->password, $user->password)) {
-            $token = $user->createToken('scrap-system')->plainTextToken;
-            
+        if (!$user) {
             return response()->json([
-                'message' => 'Login exitoso',
-                'user' => $user,
-                'token' => $token
-            ]);
+                'message' => 'El usuario no existe en el sistema'
+            ], 401);
         }
 
+        // Verificar si el usuario está activo
+        if (!$user->activo) {
+            return response()->json([
+                'message' => 'El usuario está desactivado. Contacta al administrador'
+            ], 401);
+        }
+
+        // Verificar contraseña
+        if (!password_verify($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Contraseña incorrecta'
+            ], 401);
+        }
+
+        // Si todo está correcto, generar token
+        $token = $user->createToken('scrap-system')->plainTextToken;
+        
         return response()->json([
-            'message' => 'Credenciales incorrectas o usuario inactivo'
-        ], 401);
+            'message' => 'Login exitoso',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'role' => $user->role,
+                'activo' => $user->activo
+            ],
+            'token' => $token
+        ]);
     }
 
     public function logout(Request $request)
@@ -58,8 +78,16 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
+        $user = $request->user();
+        
         return response()->json([
-            'user' => $request->user(),
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'role' => $user->role,
+                'activo' => $user->activo
+            ],
             'message' => 'Usuario autenticado'
         ]);
     }

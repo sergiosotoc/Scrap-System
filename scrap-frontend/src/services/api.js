@@ -3,6 +3,44 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api
 
 const getAuthToken = () => localStorage.getItem('authToken');
 
+// Función para parsear errores específicos del API
+const parseApiError = async (response) => {
+    const status = response.status;
+
+    try {
+        const errorData = await response.json();
+        console.log('📋 Datos de error del servidor:', errorData);
+
+        // Usar directamente el mensaje del backend
+        if (errorData.message) {
+            return new Error(errorData.message);
+        }
+
+        // Mensajes por defecto según el código HTTP
+        switch (status) {
+            case 401:
+                return new Error('No autorizado');
+            case 403:
+                return new Error('No tienes permisos para esta acción');
+            case 404:
+                return new Error('Recurso no encontrado');
+            case 422:
+                // Error de validación - username duplicado
+                if (errorData.errors && errorData.errors.username) {
+                    return new Error('El nombre de usuario ya está en uso. Por favor elige otro.');
+                }
+                return new Error('Error de validación en los datos');
+            case 500:
+                return new Error('Error interno del servidor');
+            default:
+                return new Error(`Error ${status}: ${response.statusText}`);
+        }
+    } catch (parseError) {
+        console.warn('No se pudo parsear el cuerpo del error:', parseError);
+        return new Error(`Error ${status}: ${response.statusText}`);
+    }
+};
+
 export const apiClient = {
     async request(endpoint, options = {}) {
         const url = `${API_BASE_URL}${endpoint}`;
@@ -24,37 +62,78 @@ export const apiClient = {
         }
 
         try {
-            console.log(`📤 API Request: ${url}`, config);
+            console.log(`📤 API Request: ${url}`, {
+                method: config.method || 'GET',
+                headers: config.headers,
+                body: config.body ? JSON.parse(config.body) : undefined
+            });
+
             const response = await fetch(url, config);
-            
-            if (response.status === 401) {
-                localStorage.removeItem('authToken');
-                throw new Error('Sesión expirada');
-            }
 
+            console.log(`📥 API Response: ${url}`, {
+                status: response.status,
+                statusText: response.statusText,
+                ok: response.ok
+            });
+
+            // Manejar errores HTTP
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`❌ API Error ${response.status}:`, errorText);
-                throw new Error(`Error ${response.status}: ${response.statusText}`);
+                const apiError = await parseApiError(response);
+
+                // Si es error 401, limpiar el token
+                if (response.status === 401) {
+                    localStorage.removeItem('authToken');
+                    console.log('🔐 Token removido por error 401');
+                }
+
+                throw apiError;
             }
 
+            // Procesar respuesta exitosa
             const data = await response.json();
-            console.log(`✅ API Response: ${url}`, data);
+            console.log(`✅ API Success: ${url}`, data);
             return data;
+
         } catch (error) {
             console.error(`💥 Error en ${url}:`, error);
+
+            // Si es un error de red (no HTTP)
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                const networkError = new Error('Error de conexión. Verifica tu internet o contacta al administrador');
+                networkError.originalError = error;
+                throw networkError;
+            }
+
+            // Re-lanzar el error ya parseado
             throw error;
         }
     },
 
     // ✅ MÉTODOS ESENCIALES SOLAMENTE
     async login(username, password) {
-        return this.request('/login', { method: 'POST', body: { username, password } });
+        try {
+            console.log('🔐 Iniciando proceso de login...');
+            const response = await this.request('/login', {
+                method: 'POST',
+                body: { username, password }
+            });
+            console.log('✅ Login exitoso en API');
+            return response;
+        } catch (error) {
+            console.error('❌ Error en login API:', error);
+            throw error;
+        }
     },
 
     async logout() {
-        await this.request('/logout', { method: 'POST' });
-        localStorage.removeItem('authToken');
+        try {
+            await this.request('/logout', { method: 'POST' });
+        } catch (error) {
+            console.warn('⚠️ Error en logout (puede ser normal si el servidor no responde):', error);
+        } finally {
+            localStorage.removeItem('authToken');
+            console.log('🔐 Token removido del localStorage');
+        }
     },
 
     async getUser() {
@@ -91,9 +170,9 @@ export const apiClient = {
     async createRegistroScrap(data) {
         console.log('📤 Enviando datos al backend:', data);
         try {
-            const response = await this.request('/registros-scrap', { 
-                method: 'POST', 
-                body: data 
+            const response = await this.request('/registros-scrap', {
+                method: 'POST',
+                body: data
             });
             console.log('✅ Respuesta del backend:', response);
             return response;

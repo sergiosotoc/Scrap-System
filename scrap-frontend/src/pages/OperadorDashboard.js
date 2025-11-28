@@ -5,6 +5,7 @@ import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import RegistroScrapCompleto from '../components/RegistroScrapCompleto';
 import ExcelExportButtons from '../components/ExcelExportButtons';
+import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 
 const OperadorDashboard = () => {
   const { user } = useAuth();
@@ -13,11 +14,12 @@ const OperadorDashboard = () => {
   const [registros, setRegistros] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalLoading, setModalLoading] = useState(false); // ✅ NUEVO ESTADO PARA CARGA DEL MODAL
 
-  const [filtros, setFiltros] = useState({ 
-    area: '', 
-    turno: '', 
-    fecha: new Date().toISOString().split('T')[0] 
+  const [filtros, setFiltros] = useState({
+    area: '',
+    turno: '',
+    fecha: new Date().toISOString().split('T')[0]
   });
 
   const loadOperadorData = useCallback(async () => {
@@ -50,6 +52,18 @@ const OperadorDashboard = () => {
     loadOperadorData();
   };
 
+  // ✅ NUEVA FUNCIÓN PARA MANEJAR LA APERTURA DEL MODAL
+  const handleOpenModal = () => {
+    setModalLoading(true); // Activar loading del modal
+    setShowModal(true);
+    // El loading se desactivará cuando el componente RegistroScrapCompleto termine de cargar
+  };
+
+  // ✅ NUEVA FUNCIÓN PARA MANEJAR CUANDO EL MODAL TERMINA DE CARGAR
+  const handleModalLoaded = () => {
+    setModalLoading(false);
+  };
+
   if (loading) {
     return (
       <div style={styles.loading}>
@@ -69,36 +83,9 @@ const OperadorDashboard = () => {
           <p style={styles.subtitle}>Hola, {user.name} 👋</p>
         </div>
         <div style={styles.headerActions}>
-          <button onClick={() => setShowModal(true)} style={styles.primaryButton}>
-            ➕ Nuevo Registro
+          <button onClick={handleOpenModal} style={styles.primaryButton}>
+            <span>➕</span> Nuevo Registro
           </button>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div style={styles.gridStats}>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>📊</div>
-          <span style={styles.statLabel}>Registros Totales</span>
-          <span style={styles.statNumber}>{stats?.total_registros || 0}</span>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>⚖️</div>
-          <span style={styles.statLabel}>Peso Total</span>
-          <span style={styles.statNumber}>
-            {stats?.total_peso_kg ? parseFloat(stats.total_peso_kg).toFixed(2) : '0.00'} 
-            <small style={styles.unit}>kg</small>
-          </span>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>🔌</div>
-          <span style={styles.statLabel}>Con Báscula</span>
-          <span style={styles.statNumber}>{stats?.registros_bascula || 0}</span>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>📅</div>
-          <span style={styles.statLabel}>Registros Hoy</span>
-          <span style={styles.statNumber}>{stats?.registros_hoy || 0}</span>
         </div>
       </div>
 
@@ -107,47 +94,59 @@ const OperadorDashboard = () => {
         <div style={styles.cardHeader}>
           <h3 style={styles.cardTitle}>📋 Registros Recientes</h3>
           <div style={styles.filters}>
-            <select 
-              name="area" 
-              value={filtros.area}
-              onChange={handleFiltroChange} 
-              style={styles.smallSelect}
-            >
-              <option value="">Todas Áreas</option>
-              <option value="TREFILADO">Trefilado</option>
-              <option value="BUNCHER">Buncher</option>
-              <option value="EXTRUSION">Extrusión</option>
-              <option value="XLPE">XLPE</option>
-              <option value="EBEAM">E-Beam</option>
-              <option value="RWD">RWD</option>
-              <option value="BATERIA">Batería</option>
-              <option value="CABALLE">Caballe</option>
-              <option value="OTHERS">Otros</option>
-              <option value="FPS">FPS</option>
-            </select>
-            <select 
-              name="turno" 
-              value={filtros.turno}
-              onChange={handleFiltroChange} 
-              style={styles.smallSelect}
-            >
-              <option value="">Todos Turnos</option>
-              <option value="1">Turno 1</option>
-              <option value="2">Turno 2</option>
-              <option value="3">Turno 3</option>
-            </select>
-            <input
-              type="date"
-              name="fecha"
-              value={filtros.fecha}
-              onChange={handleFiltroChange}
-              style={styles.smallSelect}
-            />
-            
-            {/* SOLO FORMATO EMPRESA */}
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Área:</label>
+              <select
+                name="area"
+                value={filtros.area}
+                onChange={handleFiltroChange}
+                style={styles.select}
+              >
+                <option value="">Todas</option>
+                <option value="TREFILADO">Trefilado</option>
+                <option value="BUNCHER">Buncher</option>
+                <option value="EXTRUSION">Extrusión</option>
+                <option value="XLPE">XLPE</option>
+                <option value="EBEAM">E-Beam</option>
+                <option value="RWD">RWD</option>
+                <option value="BATERIA">Batería</option>
+                <option value="CABALLE">Caballe</option>
+                <option value="OTHERS">Otros</option>
+                <option value="FPS">FPS</option>
+              </select>
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Turno:</label>
+              <select
+                name="turno"
+                value={filtros.turno}
+                onChange={handleFiltroChange}
+                style={styles.select}
+              >
+                <option value="">Todos</option>
+                <option value="1">Turno 1</option>
+                <option value="2">Turno 2</option>
+                <option value="3">Turno 3</option>
+              </select>
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Fecha:</label>
+              <input
+                type="date"
+                name="fecha"
+                value={filtros.fecha}
+                onChange={handleFiltroChange}
+                style={styles.input}
+              />
+            </div>
+
             <ExcelExportButtons
               tipo="formato-empresa"
               filters={filtros}
+              buttonText="📊 Generar Reporte"
+              buttonStyle={styles.reportButton}
             />
           </div>
         </div>
@@ -175,8 +174,8 @@ const OperadorDashboard = () => {
               </thead>
               <tbody>
                 {registros.map(r => (
-                  <tr 
-                    key={r.id} 
+                  <tr
+                    key={r.id}
                     style={{
                       ...styles.tr,
                       ...(r.conexion_bascula ? styles.basculaRow : styles.manualRow)
@@ -186,9 +185,9 @@ const OperadorDashboard = () => {
                       {new Date(r.fecha_registro).toLocaleDateString('es-ES')}
                     </td>
                     <td style={styles.td}>
-                      {new Date(r.fecha_registro).toLocaleTimeString('es-ES', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
+                      {new Date(r.fecha_registro).toLocaleTimeString('es-ES', {
+                        hour: '2-digit',
+                        minute: '2-digit'
                       })}
                     </td>
                     <td style={styles.td}>
@@ -248,7 +247,7 @@ const OperadorDashboard = () => {
               <p style={styles.emptyStateSubtext}>
                 No se encontraron registros con los filtros seleccionados
               </p>
-              <button 
+              <button
                 onClick={() => setShowModal(true)}
                 style={styles.primaryButton}
               >
@@ -283,7 +282,7 @@ const OperadorDashboard = () => {
               <span style={styles.resumenLabel}>Promedio por registro:</span>
               <span style={styles.resumenValue}>
                 {(
-                  registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0) / 
+                  registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0) /
                   registros.length
                 ).toFixed(2)} kg
               </span>
@@ -297,9 +296,12 @@ const OperadorDashboard = () => {
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Registro Masivo de Scrap</h3>
-              <button 
-                onClick={() => setShowModal(false)} 
+              <div>
+                <h3 style={styles.modalTitle}>Registro Completo de Scrap</h3>
+                <p style={styles.modalSubtitle}>Complete los datos de producción para todas las máquinas</p>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
                 style={styles.closeBtn}
                 aria-label="Cerrar modal"
               >
@@ -307,9 +309,17 @@ const OperadorDashboard = () => {
               </button>
             </div>
             <div style={styles.modalContent}>
+              {/* ✅ MOSTRAR SPINNER MIENTRAS CARGA EL MODAL */}
+              {modalLoading && (
+                <div style={styles.modalLoading}>
+                  <div style={styles.modalSpinner}></div>
+                  <p style={styles.modalLoadingText}>Cargando configuración de máquinas...</p>
+                </div>
+              )}
               <RegistroScrapCompleto
                 onRegistroCreado={handleRegistroCreado}
                 onCancelar={() => setShowModal(false)}
+                onLoadComplete={handleModalLoaded} // ✅ PROP NUEVA PARA NOTIFICAR CUANDO TERMINA DE CARGAR
               />
             </div>
           </div>
@@ -321,423 +331,400 @@ const OperadorDashboard = () => {
 
 const styles = {
   container: {
-    padding: '2rem',
-    backgroundColor: '#F3F4F6',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
     minHeight: '100vh',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    fontFamily: typography.fontFamily
   },
-
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '2rem',
+    marginBottom: spacing.lg,
     flexWrap: 'wrap',
-    gap: '1rem'
+    gap: spacing.md
   },
-
   headerActions: {
     display: 'flex',
-    gap: '1rem',
+    gap: spacing.md,
     alignItems: 'center'
   },
-
   title: {
-    fontSize: '2rem',
-    fontWeight: '800',
-    color: '#111827',
+    fontSize: typography.sizes['3xl'],
+    fontWeight: typography.weights.extrabold,
+    color: colors.gray900,
     margin: 0,
-    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text'
   },
-
   subtitle: {
-    color: '#6B7280',
-    fontSize: '1.1rem',
-    margin: '0.5rem 0 0 0',
-    fontWeight: '500'
+    color: colors.gray600,
+    fontSize: typography.sizes.lg,
+    margin: `${spacing.xs} 0 0 0`,
+    fontWeight: typography.weights.medium
   },
-
   loading: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
-    backgroundColor: '#F3F4F6'
+    backgroundColor: colors.background
   },
-
   loadingContent: {
     textAlign: 'center',
-    color: '#6B7280'
+    color: colors.gray500
   },
-
   spinner: {
     width: '40px',
     height: '40px',
-    border: '4px solid #E5E7EB',
-    borderTop: '4px solid #2563EB',
+    border: `4px solid ${colors.gray200}`,
+    borderTop: `4px solid ${colors.primary}`,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
-    margin: '0 auto 1rem'
+    margin: `0 auto ${spacing.md}`
   },
-
-  gridStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '1.5rem',
-    marginBottom: '2rem'
+  
+  // ✅ NUEVOS ESTILOS PARA EL LOADING DEL MODAL
+  modalLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    borderRadius: radius.lg
   },
-
-  statCard: {
-    backgroundColor: 'white',
-    padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    textAlign: 'center',
-    border: '1px solid #E5E7EB',
-    transition: 'all 0.3s ease',
-    position: 'relative',
-    overflow: 'hidden'
+  modalSpinner: {
+    width: '50px',
+    height: '50px',
+    border: `4px solid ${colors.gray200}`,
+    borderTop: `4px solid ${colors.primary}`,
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    marginBottom: spacing.md
   },
-
-  statIcon: {
-    fontSize: '2rem',
-    marginBottom: '0.5rem',
-    opacity: 0.8
+  modalLoadingText: {
+    fontSize: typography.sizes.lg,
+    color: colors.gray600,
+    fontWeight: typography.weights.medium,
+    textAlign: 'center'
   },
-
-  statLabel: {
-    fontSize: '0.875rem',
-    color: '#6B7280',
-    fontWeight: '600',
-    display: 'block',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '0.5rem'
-  },
-
-  statNumber: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: '#111827',
-    display: 'block'
-  },
-
-  unit: {
-    fontSize: '1rem',
-    fontWeight: '400',
-    color: '#6B7280',
-    marginLeft: '0.25rem'
-  },
-
   card: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    ...baseComponents.card,
     overflow: 'hidden',
-    border: '1px solid #E5E7EB',
-    marginBottom: '2rem'
+    marginBottom: spacing.lg
   },
-
   cardHeader: {
-    padding: '1.5rem',
-    borderBottom: '1px solid #E5E7EB',
+    padding: spacing.md,
+    borderBottom: `1px solid ${colors.gray200}`,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: '1rem',
-    backgroundColor: '#F9FAFB'
+    gap: spacing.md,
+    backgroundColor: colors.gray50
   },
-
   cardTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.semibold,
+    color: colors.gray800,
     margin: 0,
     display: 'flex',
     alignItems: 'center',
-    gap: '0.5rem'
+    gap: spacing.xs
   },
-
   filters: {
     display: 'flex',
-    gap: '0.75rem',
-    alignItems: 'center',
+    gap: spacing.md,
+    alignItems: 'flex-end', // Alinear al fondo para que coincida con los labels
     flexWrap: 'wrap'
   },
-
-  smallSelect: {
-    padding: '0.5rem 0.75rem',
-    borderRadius: '8px',
-    border: '1px solid #D1D5DB',
-    fontSize: '0.875rem',
-    minWidth: '140px',
-    backgroundColor: 'white',
-    transition: 'all 0.2s ease',
-    fontFamily: 'inherit',
-    ':focus': {
-      outline: 'none',
-      borderColor: '#3B82F6',
-      boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
+  filterGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xs
+  },
+  filterLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.gray600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  // SELECTS MÁS PEQUEÑOS
+  select: {
+    ...baseComponents.select,
+    padding: `0 ${spacing.sm}`,
+    height: '36px',
+    minWidth: '120px',
+    maxWidth: '140px',
+    boxSizing: 'border-box',
+    fontSize: typography.sizes.sm,
+    lineHeight: '36px',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+    backgroundPosition: `right ${spacing.xs} center`,
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '14px 14px',
+    paddingRight: '32px'
+  },
+  // INPUT MÁS PEQUEÑO
+  input: {
+    ...baseComponents.input,
+    padding: `0 ${spacing.sm}`,
+    height: '36px',
+    minWidth: '120px',
+    maxWidth: '140px',
+    boxSizing: 'border-box',
+    fontSize: typography.sizes.sm,
+    lineHeight: '36px'
+  },
+  reportButton: {
+    ...baseComponents.buttonPrimary,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: `${spacing.sm} ${spacing.md}`,
+    height: '36px',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    backgroundColor: colors.success,
+    border: `1px solid ${colors.success}`,
+    ':hover': {
+      backgroundColor: colors.secondaryHover,
+      transform: 'translateY(-1px)',
+      boxShadow: shadows.md
     }
   },
-
+  primaryButton: {
+    ...baseComponents.buttonPrimary,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: `${spacing.sm} ${spacing.lg}`,
+    height: '42px'
+  },
   tableContainer: {
     overflowX: 'auto',
     maxHeight: '600px'
   },
-
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-    minWidth: '1400px',
-    fontSize: '0.875rem'
+    minWidth: '1400px'
   },
-
   th: {
-    padding: '0.875rem 0.75rem',
+    padding: spacing.md,
     textAlign: 'left',
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    color: '#374151',
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    color: colors.gray600,
     textTransform: 'uppercase',
-    backgroundColor: '#F9FAFB',
-    borderBottom: '2px solid #E5E7EB',
+    backgroundColor: colors.gray50,
+    borderBottom: `2px solid ${colors.gray200}`,
     position: 'sticky',
     top: 0,
     zIndex: 10,
     letterSpacing: '0.05em',
     whiteSpace: 'nowrap'
   },
-
   tr: {
-    borderBottom: '1px solid #F3F4F6',
+    borderBottom: `1px solid ${colors.gray200}`,
     transition: 'background-color 0.2s ease'
   },
-
   basculaRow: {
-    backgroundColor: '#F0F9FF',
-    borderLeft: '3px solid #0EA5E9'
+    backgroundColor: colors.primaryLight + '20',
+    borderLeft: `3px solid ${colors.primary}`
   },
-
   manualRow: {
-    backgroundColor: '#FFFBEB',
-    borderLeft: '3px solid #F59E0B'
+    backgroundColor: colors.warning + '10',
+    borderLeft: `3px solid ${colors.warning}`
   },
-
   td: {
-    padding: '0.875rem 0.75rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    borderBottom: '1px solid #F3F4F6',
+    padding: spacing.md,
+    fontSize: typography.sizes.sm,
+    color: colors.gray700,
+    borderBottom: `1px solid ${colors.gray200}`,
     whiteSpace: 'nowrap'
   },
-
   numericCell: {
     textAlign: 'right',
-    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
-    fontWeight: '500'
+    fontFamily: typography.fontMono,
+    fontWeight: typography.weights.medium
   },
-
   totalCell: {
     textAlign: 'right',
-    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
-    fontWeight: '700',
-    color: '#059669'
+    fontFamily: typography.fontMono,
+    fontWeight: typography.weights.bold,
+    color: colors.success
   },
-
   turnoBadge: {
-    backgroundColor: '#E5E7EB',
-    color: '#374151',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '6px',
-    fontSize: '0.75rem',
-    fontWeight: '600'
+    backgroundColor: colors.gray200,
+    color: colors.gray700,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold
   },
-
   areaTag: {
-    backgroundColor: '#DBEAFE',
-    color: '#1E40AF',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '6px',
-    fontSize: '0.75rem',
-    fontWeight: '600',
+    backgroundColor: colors.primaryLight,
+    color: colors.primary,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
     textTransform: 'uppercase'
   },
-
   badgeSuccess: {
-    backgroundColor: '#D1FAE5',
-    color: '#065F46',
-    padding: '0.375rem 0.75rem',
-    borderRadius: '6px',
-    fontSize: '0.75rem',
-    fontWeight: '600',
+    backgroundColor: colors.secondaryLight,
+    color: colors.secondary,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.375rem'
+    gap: spacing.xs
   },
-
   badgeWarn: {
-    backgroundColor: '#FEF3C7',
-    color: '#92400E',
-    padding: '0.375rem 0.75rem',
-    borderRadius: '6px',
-    fontSize: '0.75rem',
-    fontWeight: '600',
+    backgroundColor: colors.warning + '20',
+    color: colors.warning,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.375rem'
+    gap: spacing.xs
   },
-
   loteCode: {
-    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
-    fontSize: '0.75rem',
-    backgroundColor: '#F3F4F6',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '4px',
-    color: '#6B7280'
+    fontFamily: typography.fontMono,
+    fontSize: typography.sizes.xs,
+    backgroundColor: colors.gray100,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm,
+    color: colors.gray600
   },
-
-  primaryButton: {
-    backgroundColor: '#2563EB',
-    color: 'white',
-    padding: '0.75rem 1.5rem',
-    borderRadius: '8px',
-    border: 'none',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-    transition: 'all 0.2s ease',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-    textDecoration: 'none',
-    ':hover': {
-      backgroundColor: '#1D4ED8',
-      transform: 'translateY(-1px)',
-      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-    }
-  },
-
   resumenContainer: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '1rem',
-    padding: '1.25rem 1.5rem',
-    backgroundColor: '#F8FAFC',
-    borderTop: '1px solid #E5E7EB'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.gray50,
+    borderTop: `1px solid ${colors.gray200}`
   },
-
   resumenItem: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '0.5rem',
+    gap: spacing.xs,
     textAlign: 'center'
   },
-
   resumenLabel: {
-    fontSize: '0.75rem',
-    color: '#6B7280',
-    fontWeight: '600',
+    fontSize: typography.sizes.xs,
+    color: colors.gray600,
+    fontWeight: typography.weights.semibold,
     textTransform: 'uppercase',
     letterSpacing: '0.05em'
   },
-
   resumenValue: {
-    fontSize: '1.125rem',
-    color: '#111827',
-    fontWeight: '700'
+    fontSize: typography.sizes.lg,
+    color: colors.gray900,
+    fontWeight: typography.weights.bold
   },
-
   emptyState: {
-    padding: '4rem 2rem',
+    padding: spacing.xl,
     textAlign: 'center',
-    color: '#6B7280'
+    color: colors.gray500
   },
-
   emptyStateIcon: {
     fontSize: '4rem',
-    marginBottom: '1rem',
+    marginBottom: spacing.md,
     opacity: 0.5
   },
-
   emptyStateText: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
-    marginBottom: '0.5rem',
-    color: '#374151'
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.xs,
+    color: colors.gray700
   },
-
   emptyStateSubtext: {
-    fontSize: '1rem',
+    fontSize: typography.sizes.base,
     opacity: 0.7,
-    marginBottom: '2rem'
+    marginBottom: spacing.lg
   },
-
-  modalOverlay: {
+   modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)', // Más oscuro para mejor contraste
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000, // Z-index más alto
-    padding: '1rem',
+    zIndex: 1000,
+    padding: spacing.md,
     backdropFilter: 'blur(4px)'
   },
-
   modal: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     width: '95%',
     maxWidth: '1400px',
     maxHeight: '95vh',
     overflow: 'hidden',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-    border: '1px solid #E5E7EB',
+    boxShadow: shadows.xl,
+    border: `1px solid ${colors.gray200}`,
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    position: 'relative' // ✅ IMPORTANTE: Para posicionar el loading absoluto
   },
-
   modalHeader: {
-    padding: '1.5rem',
-    borderBottom: '1px solid #E5E7EB',
+    padding: spacing.lg,
+    borderBottom: `1px solid ${colors.gray200}`,
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    flexShrink: 0 // Evita que se encoja
+    alignItems: 'flex-start',
+    backgroundColor: colors.gray50,
+    flexShrink: 0
   },
-
   modalTitle: {
-    fontSize: '1.5rem',
-    fontWeight: '600',
-    color: '#111827',
-    margin: 0
+    fontSize: typography.sizes['2xl'],
+    fontWeight: typography.weights.semibold,
+    color: colors.gray900,
+    margin: 0,
+    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
   },
-
+  modalSubtitle: {
+    fontSize: typography.sizes.lg,
+    color: colors.gray600,
+    margin: `${spacing.xs} 0 0 0`
+  },
   modalContent: {
     flex: 1,
-    overflow: 'auto', // Permite scroll si es necesario
-    padding: 0
+    overflow: 'auto',
+    padding: 0,
+    position: 'relative' // ✅ IMPORTANTE: Para posicionar el loading absoluto
   },
-
   closeBtn: {
     background: 'none',
     border: 'none',
     fontSize: '1.5rem',
     cursor: 'pointer',
-    color: '#6B7280',
-    padding: '0.25rem',
-    borderRadius: '4px',
+    color: colors.gray500,
+    padding: spacing.xs,
+    borderRadius: radius.sm,
     transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
@@ -745,13 +732,21 @@ const styles = {
     width: '2.5rem',
     height: '2.5rem',
     ':hover': {
-      backgroundColor: '#F3F4F6',
-      color: '#374151'
+      backgroundColor: colors.gray200,
+      color: colors.gray700
     }
+  },
+  primaryButton: {
+    ...baseComponents.buttonPrimary,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: `${spacing.sm} ${spacing.lg}`,
+    height: '42px'
   }
 };
 
-// Agregar keyframes para la animación del spinner
+// Agregar la animación del spinner
 const styleSheet = document.styleSheets[0];
 if (styleSheet) {
   styleSheet.insertRule(`

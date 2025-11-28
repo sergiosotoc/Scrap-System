@@ -1,5 +1,6 @@
 /* src/context/ToastContext.js */
 import React, { createContext, useState, useContext, useCallback } from 'react';
+import { colors, shadows, radius, spacing, typography } from '../styles/designSystem';
 
 const ToastContext = createContext();
 
@@ -26,71 +27,156 @@ export const ToastProvider = ({ children }) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Estilos modernizados para toasts
+  const toastStyles = {
+    container: {
+      position: 'fixed',
+      top: '80px',
+      right: spacing.lg,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: spacing.sm,
+      zIndex: 9999,
+      pointerEvents: 'none',
+    },
+    toast: {
+      minWidth: '320px',
+      maxWidth: '400px',
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      boxShadow: shadows.lg,
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+      color: colors.surface,
+      fontSize: typography.sizes.sm,
+      lineHeight: 1.5,
+      pointerEvents: 'auto',
+      animation: 'slideInRight 0.3s ease',
+      border: '1px solid rgba(255,255,255,0.1)',
+      transform: 'translateX(0)',
+      opacity: 1,
+      transition: 'all 0.3s ease'
+    },
+    success: { 
+      backgroundColor: colors.success,
+      borderLeft: `4px solid ${colors.secondaryHover}`
+    },
+    error: { 
+      backgroundColor: colors.error,
+      borderLeft: `4px solid #DC2626`
+    },
+    warning: { 
+      backgroundColor: colors.warning,
+      borderLeft: `4px solid #D97706`
+    },
+    info: { 
+      backgroundColor: colors.info,
+      borderLeft: `4px solid #2563EB`
+    },
+    icon: { 
+      fontSize: '1.2rem',
+      flexShrink: 0,
+      marginTop: '2px'
+    },
+    message: { 
+      margin: 0, 
+      flex: 1, 
+      fontWeight: typography.weights.medium 
+    },
+    closeBtn: {
+      background: 'transparent',
+      border: 'none',
+      color: 'rgba(255,255,255,0.8)',
+      fontSize: '1.5rem',
+      cursor: 'pointer',
+      padding: '0',
+      lineHeight: '1',
+      marginTop: '-2px',
+      flexShrink: 0,
+      borderRadius: radius.sm,
+      width: '24px',
+      height: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'background-color 0.2s ease',
+      ':hover': {
+        backgroundColor: 'rgba(255,255,255,0.1)'
+      }
+    }
+  };
+
+  // Agregar estilos de animación al documento
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
+      @keyframes slideOutRight {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+      
+      .toast-exit {
+        animation: slideOutRight 0.3s ease forwards;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   return (
-    <ToastContext.Provider value={{ addToast }}>
+    <ToastContext.Provider value={{ addToast, removeToast }}>
       {children}
       
-      {/* Contenedor de Notificaciones - AHORA ARRIBA */}
-      <div style={styles.toastContainer}>
+      {/* Contenedor de Notificaciones */}
+      <div style={toastStyles.container}>
         {toasts.map((toast) => (
-          <div key={toast.id} className="toast-enter" style={{...styles.toast, ...styles[toast.type]}}>
-            <span style={styles.icon}>
+          <div 
+            key={toast.id} 
+            style={{
+              ...toastStyles.toast,
+              ...toastStyles[toast.type]
+            }}
+          >
+            <span style={toastStyles.icon}>
               {toast.type === 'success' && '✅'}
               {toast.type === 'error' && '❌'}
               {toast.type === 'warning' && '⚠️'}
               {toast.type === 'info' && 'ℹ️'}
             </span>
-            <p style={styles.message}>{toast.message}</p>
-            <button onClick={() => removeToast(toast.id)} style={styles.closeBtn}>×</button>
+            <p style={toastStyles.message}>{toast.message}</p>
+            <button 
+              onClick={() => removeToast(toast.id)} 
+              style={toastStyles.closeBtn}
+              aria-label="Cerrar notificación"
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>
     </ToastContext.Provider>
   );
-};
-
-const styles = {
-  toastContainer: {
-    position: 'fixed',
-    top: '80px', // CAMBIO: Arriba para no tapar el footer
-    right: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    zIndex: 9999,
-    pointerEvents: 'none', // IMPORTANTE: Permite hacer clic a través del contenedor vacío
-  },
-  toast: {
-    minWidth: '300px',
-    maxWidth: '400px',
-    padding: '16px',
-    borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
-    color: '#fff',
-    fontSize: '0.95rem',
-    lineHeight: '1.5',
-    pointerEvents: 'auto', // Reactiva los clics en la tarjeta
-    animation: 'slideInRight 0.3s ease',
-  },
-  success: { backgroundColor: '#10B981' }, 
-  error:   { backgroundColor: '#EF4444' }, 
-  warning: { backgroundColor: '#F59E0B' }, 
-  info:    { backgroundColor: '#3B82F6' }, 
-  icon: { fontSize: '1.2rem' },
-  message: { margin: 0, flex: 1, fontWeight: '500' },
-  closeBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: '1.5rem',
-    cursor: 'pointer',
-    padding: '0',
-    lineHeight: '1',
-    marginTop: '-4px'
-  }
 };
 
 export default ToastProvider;
