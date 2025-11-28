@@ -1,4 +1,5 @@
 <?php
+// routes/api.php
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -51,12 +52,6 @@ Route::middleware('api')->group(function () {
         Route::get('/reportes/acumulados', [RegistrosScrapController::class, 'reportesAcumulados']);
         Route::get('/stats', [RegistrosScrapController::class, 'stats']);
         Route::get('/{id}', [RegistrosScrapController::class, 'show']);
-
-        // Preguardado de pesos
-        Route::post('/preguardar-pesos', [RegistrosScrapController::class, 'preguardarPesos']);
-        Route::get('/obtener-preguardado', [RegistrosScrapController::class, 'obtenerPreguardado']);
-        Route::post('/limpiar-preguardado', [RegistrosScrapController::class, 'limpiarPreguardado']);
-        Route::post('/actualizar-peso-material', [RegistrosScrapController::class, 'actualizarPesoMaterial']);
     });
 
     // Recepciones de scrap
@@ -71,8 +66,6 @@ Route::middleware('api')->group(function () {
 
     // Reportes Excel
     Route::middleware('auth:sanctum')->prefix('excel')->group(function () {
-        Route::get('/export-registros', [ExcelReportController::class, 'exportRegistrosScrap']);
-        Route::get('/export-recepciones', [ExcelReportController::class, 'exportRecepcionesScrap']);
-        Route::get('/export-reporte-diario', [ExcelReportController::class, 'exportReporteDiario']);
+        Route::get('/export-formato-empresa', [ExcelReportController::class, 'exportFormatoEmpresa']);
     });
 });

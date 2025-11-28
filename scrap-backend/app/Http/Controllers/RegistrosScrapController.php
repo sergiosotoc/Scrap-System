@@ -10,7 +10,6 @@ use App\Models\ConfigTipoScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 
 class RegistrosScrapController extends Controller
 {
@@ -72,8 +71,8 @@ class RegistrosScrapController extends Controller
             'turno' => 'required|in:1,2,3',
             'area_real' => 'required|string|max:100',
             'maquina_real' => 'required|string|max:100',
-            'material_seleccionado' => 'required|string', // NUEVO: para saber qué material actualizar
-            'peso_actual' => 'nullable|numeric|min:0', // NUEVO: peso leído de la báscula
+            'material_seleccionado' => 'required|string',
+            'peso_actual' => 'nullable|numeric|min:0',
 
             // Validar que sean números (pueden ser nulos)
             'peso_cobre' => 'nullable|numeric|min:0',
@@ -129,7 +128,7 @@ class RegistrosScrapController extends Controller
                 'fecha_registro' => now(),
             ];
 
-            // 4. Asignar valores y calcular total - CORREGIDO
+            // 4. Asignar valores y calcular total
             foreach ($mapeoMateriales as $material => $campoDb) {
                 // Si es el material seleccionado y tenemos peso actual, usar ese peso
                 if ($material === $validated['material_seleccionado'] && isset($validated['peso_actual'])) {
@@ -150,10 +149,6 @@ class RegistrosScrapController extends Controller
             // 5. Crear el registro
             $registro = RegistrosScrap::create($datosGuardar);
 
-            // 6. Limpiar preguardado después de guardar exitosamente
-            $cacheKey = 'preguardado_scrap_' . Auth::id() . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
-            Cache::forget($cacheKey);
-
             DB::commit();
 
             Log::info('✅ Registro creado exitosamente ID: ' . $registro->id);
@@ -172,170 +167,6 @@ class RegistrosScrapController extends Controller
                 'message' => 'Error interno al guardar: ' . $e->getMessage()
             ], 500);
         }
-    }
-
-    public function actualizarPesoMaterial(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'material' => 'required|string',
-                'peso_kg' => 'required|numeric|min:0',
-                'area_real' => 'required|string',
-                'maquina_real' => 'required|string',
-                'turno' => 'required|in:1,2,3'
-            ]);
-
-            $user = Auth::user();
-
-            // Mapeo de materiales
-            $mapeoMateriales = [
-                'cobre' => 'peso_cobre',
-                'cobre_estanado' => 'peso_cobre_estanado',
-                'purga_pvc' => 'peso_purga_pvc',
-                'purga_pe' => 'peso_purga_pe',
-                'purga_pur' => 'peso_purga_pur',
-                'purga_pp' => 'peso_purga_pp',
-                'cable_pvc' => 'peso_cable_pvc',
-                'cable_pe' => 'peso_cable_pe',
-                'cable_pur' => 'peso_cable_pur',
-                'cable_pp' => 'peso_cable_pp',
-                'cable_aluminio' => 'peso_cable_aluminio',
-                'cable_estanado_pvc' => 'peso_cable_estanado_pvc',
-                'cable_estanado_pe' => 'peso_cable_estanado_pe'
-            ];
-
-            if (!isset($mapeoMateriales[$validated['material']])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Material no válido'
-                ], 400);
-            }
-
-            $campoMaterial = $mapeoMateriales[$validated['material']];
-
-            // Preguardar en cache
-            $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
-
-            $preguardado = Cache::get($cacheKey, [
-                'turno' => $validated['turno'],
-                'area_real' => $validated['area_real'],
-                'maquina_real' => $validated['maquina_real'],
-                'pesos' => [],
-                'timestamp' => now(),
-                'user_id' => $user->id
-            ]);
-
-            // Actualizar el peso del material específico
-            $preguardado['pesos'][$validated['material']] = $validated['peso_kg'];
-            $preguardado['timestamp'] = now();
-
-            Cache::put($cacheKey, $preguardado, 7200);
-
-            Log::info("📝 Peso actualizado para material {$validated['material']}: {$validated['peso_kg']} kg");
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Peso actualizado correctamente',
-                'material' => $validated['material'],
-                'peso_kg' => $validated['peso_kg'],
-                'cache_key' => $cacheKey,
-                'timestamp' => now()->format('H:i:s')
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error en actualizarPesoMaterial: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al actualizar peso: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Preguardar pesos temporalmente
-     */
-    public function preguardarPesos(Request $request)
-    {
-        $user = Auth::user();
-
-        $validated = $request->validate([
-            'turno' => 'required|in:1,2,3',
-            'area_real' => 'required|string|max:100',
-            'maquina_real' => 'required|string|max:100',
-            'pesos' => 'required|array'
-        ]);
-
-        // Crear clave única para el preguardado
-        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
-
-        // Guardar en cache por 2 horas
-        $preguardado = [
-            'turno' => $validated['turno'],
-            'area_real' => $validated['area_real'],
-            'maquina_real' => $validated['maquina_real'],
-            'pesos' => $validated['pesos'],
-            'timestamp' => now(),
-            'user_id' => $user->id
-        ];
-
-        Cache::put($cacheKey, $preguardado, 7200); // 2 horas
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pesos preguardados correctamente',
-            'cache_key' => $cacheKey,
-            'timestamp' => now()->format('H:i:s')
-        ]);
-    }
-
-    /**
-     * Obtener pesos preguardados
-     */
-    public function obtenerPreguardado(Request $request)
-    {
-        $user = Auth::user();
-
-        $validated = $request->validate([
-            'area_real' => 'required|string|max:100',
-            'maquina_real' => 'required|string|max:100'
-        ]);
-
-        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
-        $preguardado = Cache::get($cacheKey);
-
-        if ($preguardado) {
-            return response()->json([
-                'success' => true,
-                'preguardado' => $preguardado,
-                'existe' => true
-            ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'existe' => false,
-            'preguardado' => null
-        ]);
-    }
-
-    /**
-     * Limpiar preguardado
-     */
-    public function limpiarPreguardado(Request $request)
-    {
-        $user = Auth::user();
-
-        $validated = $request->validate([
-            'area_real' => 'required|string|max:100',
-            'maquina_real' => 'required|string|max:100'
-        ]);
-
-        $cacheKey = 'preguardado_scrap_' . $user->id . '_' . $validated['area_real'] . '_' . $validated['maquina_real'];
-        Cache::forget($cacheKey);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Preguardado limpiado correctamente'
-        ]);
     }
 
     public function reportesAcumulados(Request $request)

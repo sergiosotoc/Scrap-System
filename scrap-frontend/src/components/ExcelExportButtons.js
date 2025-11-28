@@ -12,18 +12,11 @@ const ExcelExportButtons = ({ tipo, filters = {} }) => {
         try {
             let resultado;
             
-            switch (tipo) {
-                case 'registros':
-                    resultado = await excelService.exportRegistros(filters);
-                    break;
-                case 'recepciones':
-                    resultado = await excelService.exportRecepciones(filters);
-                    break;
-                case 'diario':
-                    resultado = await excelService.exportReporteDiario(filters.fecha, filters.turno);
-                    break;
-                default:
-                    throw new Error('Tipo de exportación no válido');
+            // Solo formato empresa
+            if (tipo === 'formato-empresa') {
+                resultado = await excelService.exportFormatoEmpresa(filters.fecha, filters.turno);
+            } else {
+                throw new Error('Tipo de exportación no válido');
             }
 
             // Crear URL para descarga
@@ -36,7 +29,7 @@ const ExcelExportButtons = ({ tipo, filters = {} }) => {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
 
-            addToast(`✅ Reporte Excel generado exitosamente: ${resultado.fileName}`, 'success');
+            addToast(`✅ Formato empresa generado exitosamente: ${resultado.fileName}`, 'success');
             
         } catch (error) {
             console.error('❌ Error exportando Excel:', error);
@@ -44,7 +37,7 @@ const ExcelExportButtons = ({ tipo, filters = {} }) => {
             if (error.message.includes('404')) {
                 addToast('⚠️ No hay datos para exportar con los filtros seleccionados', 'warning');
             } else if (error.message.includes('500')) {
-                addToast('❌ Error del servidor al generar el reporte', 'error');
+                addToast('❌ Error del servidor al generar el formato empresa', 'error');
             } else {
                 addToast(`❌ Error al exportar: ${error.message}`, 'error');
             }
@@ -54,18 +47,17 @@ const ExcelExportButtons = ({ tipo, filters = {} }) => {
     };
 
     const getButtonText = () => {
-        const baseText = '📊 Exportar Excel';
         if (exportando) {
             return '⏳ Generando...';
         }
-        return baseText;
+        return '🏢 Formato Empresa';
     };
 
     return (
         <button 
             onClick={handleExport}
             disabled={exportando}
-            title="Exportar a Excel"
+            title="Exportar Formato Empresa"
             style={{
                 backgroundColor: exportando ? '#6B7280' : '#10B981',
                 color: 'white',

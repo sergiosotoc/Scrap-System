@@ -9,115 +9,16 @@ use App\Models\RecepcionesScrap;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RegistrosScrapExport;
-use App\Exports\RecepcionesScrapExport;
+use App\Exports\FormatoScrapEmpresaExport;
 use App\Exports\ReporteDiarioExport;
 
 class ExcelReportController extends Controller
 {
-    public function exportRegistrosScrap(Request $request)
+    public function exportFormatoEmpresa(Request $request)
     {
         try {
-            \Log::info('📊 Iniciando exportación de registros scrap');
+            \Log::info('📊 Iniciando exportación formato empresa');
 
-            $user = Auth::user();
-            $query = RegistrosScrap::with('operador');
-
-            // Filtros básicos
-            if ($request->has('area') && $request->area != '') {
-                $query->where('area_real', $request->area);
-            }
-
-            if ($request->has('turno') && $request->turno != '') {
-                $query->where('turno', $request->turno);
-            }
-
-            if ($request->has('fecha') && $request->fecha != '') {
-                $query->whereDate('fecha_registro', $request->fecha);
-            }
-
-            // Control de acceso por rol
-            if ($user->role !== 'admin') {
-                $query->where('operador_id', $user->id);
-            }
-
-            $registros = $query->orderBy('fecha_registro', 'desc')->get();
-
-            \Log::info("📈 Encontrados {$registros->count()} registros para exportar");
-
-            if ($registros->count() === 0) {
-                return response()->json(['error' => 'No hay registros para exportar'], 404);
-            }
-
-            $fileName = 'registros_scrap_' . now()->format('Y_m_d_His') . '.xlsx';
-
-            return Excel::download(new RegistrosScrapExport($registros), $fileName);
-        } catch (\Exception $e) {
-            \Log::error('❌ Error en exportRegistrosScrap: ' . $e->getMessage());
-            \Log::error('📋 Stack trace: ' . $e->getTraceAsString());
-
-            return response()->json([
-                'error' => 'Error al generar el reporte Excel: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function exportRecepcionesScrap(Request $request)
-    {
-        try {
-            \Log::info('📊 Iniciando exportación de recepciones scrap');
-
-            $user = Auth::user();
-            $query = RecepcionesScrap::with('receptor');
-
-            // Filtros básicos
-            if ($request->has('origen_tipo') && $request->origen_tipo != '') {
-                $query->where('origen_tipo', $request->origen_tipo);
-            }
-
-            if ($request->has('destino') && $request->destino != '') {
-                $query->where('destino', $request->destino);
-            }
-
-            if (
-                $request->has('fecha_inicio') && $request->has('fecha_fin') &&
-                $request->fecha_inicio != '' && $request->fecha_fin != ''
-            ) {
-                $query->whereBetween('fecha_entrada', [
-                    $request->fecha_inicio,
-                    $request->fecha_fin
-                ]);
-            }
-
-            // Control de acceso por rol
-            if ($user->role !== 'admin') {
-                $query->where('receptor_id', $user->id);
-            }
-
-            $recepciones = $query->orderBy('fecha_entrada', 'desc')->get();
-
-            \Log::info("📈 Encontradas {$recepciones->count()} recepciones para exportar");
-
-            if ($recepciones->count() === 0) {
-                return response()->json(['error' => 'No hay recepciones para exportar'], 404);
-            }
-
-            $fileName = 'recepciones_scrap_' . now()->format('Y_m_d_His') . '.xlsx';
-
-            // ✅ CORREGIDO: Usar el export correcto para recepciones
-            return Excel::download(new RecepcionesScrapExport($recepciones), $fileName);
-        } catch (\Exception $e) {
-            \Log::error('❌ Error en exportRecepcionesScrap: ' . $e->getMessage());
-            \Log::error('📋 Stack trace: ' . $e->getTraceAsString());
-
-            return response()->json([
-                'error' => 'Error al generar el reporte Excel de recepciones: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function exportReporteDiario(Request $request)
-    {
-        try {
             $validated = $request->validate([
                 'fecha' => 'required|date',
                 'turno' => 'nullable|in:1,2,3'
@@ -138,18 +39,24 @@ class ExcelReportController extends Controller
                 $query->where('operador_id', $user->id);
             }
 
-            $registros = $query->get();
+            $registros = $query->orderBy('area_real')->orderBy('maquina_real')->get();
+
+            \Log::info("📈 Encontrados {$registros->count()} registros para formato empresa");
 
             if ($registros->count() === 0) {
                 return response()->json(['error' => 'No hay registros para la fecha seleccionada'], 404);
             }
 
-            $fileName = 'reporte_diario_' . $fecha . ($turno ? '_turno_' . $turno : '') . '.xlsx';
+            $fileName = 'formato_scrap_empresa_' . $fecha . ($turno ? '_turno_' . $turno : '') . '.xlsx';
 
-            return Excel::download(new ReporteDiarioExport($registros, $fecha, $turno, $user), $fileName);
+            return Excel::download(new FormatoScrapEmpresaExport($registros, $fecha, $turno, $user), $fileName);
         } catch (\Exception $e) {
-            \Log::error('❌ Error en exportReporteDiario: ' . $e->getMessage());
-            return response()->json(['error' => 'Error al generar el reporte diario'], 500);
+            \Log::error('❌ Error en exportFormatoEmpresa: ' . $e->getMessage());
+            \Log::error('📋 Stack trace: ' . $e->getTraceAsString());
+
+            return response()->json([
+                'error' => 'Error al generar el formato empresarial: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

@@ -1,9 +1,8 @@
-/* src/components/RegistroScrapCompleto.js */
+/* src/components/RegistroScrapCompleto.js - VERSIÓN SIN PREGUARDADO */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
 import { useToast } from '../context/ToastContext';
-import { usePreguardado } from '../hooks/usePreguardado';
 
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
   const { addToast } = useToast();
@@ -12,7 +11,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
   const [campoBasculaActivo, setCampoBasculaActivo] = useState('peso_cobre_estanado');
   const [enviando, setEnviando] = useState(false);
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
-
 
   // Estado para el formulario principal
   const [formData, setFormData] = useState({
@@ -32,16 +30,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
 
   const ultimoPesoRef = useRef(null);
 
-  // Hook de preguardado
-  const { preguardado, cargando: cargandoPreguardado, guardarPreguardado, limpiarPreguardado } =
-    usePreguardado(filtroArea, filtroMaquina);
-
   // Cargar configuración
   const loadConfig = useCallback(async () => {
     try {
+      console.log('🔧 Cargando configuración...');
       const configData = await apiClient.getRegistrosConfig();
+      console.log('📋 Configuración recibida:', configData);
       setConfig(configData);
-      // ✅ CORREGIDO: Mover inicializarTablaData dentro del callback
+      
       if (configData?.areas_maquinas) {
         const data = [];
         const areas = [];
@@ -73,74 +69,19 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
 
         setTablaData(data);
         setAreasDisponibles(areas);
+        console.log('📊 Tabla inicializada con', data.length, 'filas');
       }
     } catch (error) {
+      console.error('❌ Error cargando configuración:', error);
       addToast('Error cargando configuración: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
   }, [addToast]);
 
-  const inicializarTablaData = useCallback((configData) => {
-    if (!configData?.areas_maquinas) return;
-
-    const data = [];
-    const areas = [];
-
-    Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
-      areas.push(areaNombre);
-      maquinas.forEach(maquina => {
-        data.push({
-          area_real: areaNombre,
-          maquina_real: maquina.maquina_nombre,
-          peso_cobre: 0,
-          peso_cobre_estanado: 0,
-          peso_purga_pvc: 0,
-          peso_purga_pe: 0,
-          peso_purga_pur: 0,
-          peso_purga_pp: 0,
-          peso_cable_pvc: 0,
-          peso_cable_pe: 0,
-          peso_cable_pur: 0,
-          peso_cable_pp: 0,
-          peso_cable_aluminio: 0,
-          peso_cable_estanado_pvc: 0,
-          peso_cable_estanado_pe: 0,
-          peso_total: 0,
-          conexion_bascula: false
-        });
-      });
-    });
-
-    setTablaData(data);
-    setAreasDisponibles(areas);
-  }, []);
-
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
-
-  // Cargar preguardado cuando esté disponible
-  useEffect(() => {
-    if (preguardado && !cargandoPreguardado) {
-      // Aplicar preguardado a la tabla
-      setTablaData(prev => prev.map(fila => {
-        if (fila.area_real === preguardado.area_real && fila.maquina_real === preguardado.maquina_real) {
-          return {
-            ...fila,
-            ...preguardado.pesos,
-            peso_total: calcularTotalFila({ ...fila, ...preguardado.pesos })
-          };
-        }
-        return fila;
-      }));
-
-      // Actualizar turno
-      setFormData(prev => ({ ...prev, turno: preguardado.turno }));
-
-      addToast('Pesos preguardados cargados correctamente', 'success');
-    }
-  }, [preguardado, cargandoPreguardado, addToast]);
 
   // Filtrar maquinas cuando cambia el área
   useEffect(() => {
@@ -152,20 +93,12 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
     const maquinas = config.areas_maquinas[filtroArea]?.map(m => m.maquina_nombre) || [];
     setMaquinasDisponibles(maquinas);
 
-    // Si hay solo una máquina, seleccionarla automáticamente
     if (maquinas.length === 1) {
       setFiltroMaquina(maquinas[0]);
     } else {
       setFiltroMaquina('');
     }
   }, [filtroArea, config]);
-
-  // Efecto para activar automáticamente la máquina cuando se selecciona
-  useEffect(() => {
-    if (filtroArea && filtroMaquina && campoBasculaActivo) {
-      seleccionarAreaMaquina(filtroArea, filtroMaquina);
-    }
-  }, [filtroArea, filtroMaquina, campoBasculaActivo]);
 
   // Manejar peso desde báscula
   const handlePesoFromBascula = useCallback((peso, campo = campoBasculaActivo) => {
@@ -187,7 +120,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
 
       setTablaData(prev => {
         const newData = [...prev];
-
         if (newData[areaIndex]) {
           const nuevoValor = parseFloat(peso) || 0;
           newData[areaIndex] = {
@@ -196,19 +128,12 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
             conexion_bascula: nuevoValor > 0,
             peso_total: calcularTotalFila({ ...newData[areaIndex], [campo]: nuevoValor })
           };
-
-          console.log('✅ Peso asignado a celda específica:', {
-            maquina: newData[areaIndex].maquina_real,
-            campo,
-            peso: nuevoValor
-          });
         }
-
         return newData;
       });
 
       if (peso > 0) {
-        addToast(`✅ Peso ${peso}kg asignado a ${campo} en ${tablaData[celdaActiva.areaIndex]?.maquina_real}`, 'success');
+        addToast(`✅ Peso ${peso}kg asignado a ${campo}`, 'success');
       }
     }
     // Si no hay celda activa pero tenemos filtros de área/máquina, actualizar esa fila
@@ -227,69 +152,30 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
             conexion_bascula: nuevoValor > 0,
             peso_total: calcularTotalFila({ ...newData[index], [campo]: nuevoValor })
           };
-
-          console.log('✅ Peso asignado por filtro:', {
-            maquina: newData[index].maquina_real,
-            campo,
-            peso: nuevoValor
-          });
-
           return newData;
         });
 
-        // Activar automáticamente la celda
         setCeldaActiva({ areaIndex: index, campo });
-
         if (peso > 0) {
           addToast(`✅ Peso ${peso}kg asignado a ${campo} en ${filtroMaquina}`, 'success');
         }
       }
     }
     else {
-      console.warn('⚠️ No hay celda activa ni filtros seleccionados');
       addToast('⚠️ Selecciona un área y máquina primero', 'warning');
     }
 
     ultimoPesoRef.current = peso;
   }, [pesoBloqueado, celdaActiva, campoBasculaActivo, addToast, tablaData, filtroArea, filtroMaquina]);
 
-  // Función para seleccionar automáticamente cuando cambian los filtros
-  useEffect(() => {
-    if (filtroArea && filtroMaquina && campoBasculaActivo) {
-      const index = tablaData.findIndex(fila =>
-        fila.area_real === filtroArea && fila.maquina_real === filtroMaquina
-      );
-
-      if (index !== -1) {
-        setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
-        console.log('🎯 Celda activada automáticamente:', {
-          area: filtroArea,
-          maquina: filtroMaquina,
-          campo: campoBasculaActivo,
-          index
-        });
-      }
-    }
-  }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData]);
-
   // Calcular total por fila
   const calcularTotalFila = (fila) => {
     const camposPeso = [
-      'peso_cobre',
-      'peso_cobre_estanado',
-      'peso_purga_pvc',
-      'peso_purga_pe',
-      'peso_purga_pur',
-      'peso_purga_pp',
-      'peso_cable_pvc',
-      'peso_cable_pe',
-      'peso_cable_pur',
-      'peso_cable_pp',
-      'peso_cable_aluminio',
-      'peso_cable_estanado_pvc',
-      'peso_cable_estanado_pe'
+      'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
+      'peso_purga_pur', 'peso_purga_pp', 'peso_cable_pvc', 'peso_cable_pe',
+      'peso_cable_pur', 'peso_cable_pp', 'peso_cable_aluminio',
+      'peso_cable_estanado_pvc', 'peso_cable_estanado_pe'
     ];
-
     return camposPeso.reduce((total, campo) => total + (parseFloat(fila[campo]) || 0), 0);
   };
 
@@ -310,82 +196,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
   const activarCeldaParaBascula = (areaIndex, campo) => {
     setCeldaActiva({ areaIndex, campo });
     setCampoBasculaActivo(campo);
-  };
-
-  // Función para seleccionar área/máquina rápidamente
-  const seleccionarAreaMaquina = (area, maquina) => {
-    if (!area || !maquina) return;
-
-    // Encontrar el índice de la fila que coincide con área y máquina
-    const index = tablaData.findIndex(fila =>
-      fila.area_real === area && fila.maquina_real === maquina
-    );
-
-    if (index !== -1 && campoBasculaActivo) {
-      setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
-      addToast(`✅ ${maquina} seleccionada - Listo para báscula en ${campoBasculaActivo}`, 'success');
-    }
-  };
-
-  // Preguardar pesos
-  const handlePreguardar = async () => {
-    if (!filtroArea || !filtroMaquina || !formData.turno) {
-      addToast('Seleccione área, máquina y turno para preguardar', 'warning');
-      return;
-    }
-
-    const fila = tablaData.find(fila =>
-      fila.area_real === filtroArea && fila.maquina_real === filtroMaquina
-    );
-
-    if (!fila) {
-      addToast('No se encontró la fila para preguardar', 'error');
-      return;
-    }
-
-    // ✅ CORREGIDO: Bloquear el peso antes de preguardar
-    setPesoBloqueado(true);
-
-    const pesos = {
-      peso_cobre: fila.peso_cobre || 0,
-      peso_cobre_estanado: fila.peso_cobre_estanado || 0,
-      peso_purga_pvc: fila.peso_purga_pvc || 0,
-      peso_purga_pe: fila.peso_purga_pe || 0,
-      peso_purga_pur: fila.peso_purga_pur || 0,
-      peso_purga_pp: fila.peso_purga_pp || 0,
-      peso_cable_pvc: fila.peso_cable_pvc || 0,
-      peso_cable_pe: fila.peso_cable_pe || 0,
-      peso_cable_pur: fila.peso_cable_pur || 0,
-      peso_cable_pp: fila.peso_cable_pp || 0,
-      peso_cable_aluminio: fila.peso_cable_aluminio || 0,
-      peso_cable_estanado_pvc: fila.peso_cable_estanado_pvc || 0,
-      peso_cable_estanado_pe: fila.peso_cable_estanado_pe || 0,
-    };
-
-    try {
-      const success = await guardarPreguardado(formData.turno, pesos);
-      if (success) {
-        addToast('Pesos preguardados correctamente. El peso está bloqueado.', 'success');
-      } else {
-        addToast('Error al preguardar los pesos', 'error');
-        setPesoBloqueado(false); // Desbloquear si hay error
-      }
-    } catch (error) {
-      console.error('❌ Error en handlePreguardar:', error);
-      addToast('Error al preguardar: ' + error.message, 'error');
-      setPesoBloqueado(false); // Desbloquear si hay error
-    }
-  };
-  const handleDesbloquearPeso = () => {
-    setPesoBloqueado(false);
-    addToast('✅ Peso desbloqueado - La báscula actualizará de nuevo', 'info');
-  };
-  // Limpiar preguardado
-  const handleLimpiarPreguardado = async () => {
-    const success = await limpiarPreguardado();
-    if (success) {
-      addToast('Preguardado limpiado correctamente', 'info');
-    }
   };
 
   // Enviar todos los registros
@@ -409,7 +219,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
     setEnviando(true);
     try {
       const promises = filasConPeso.map(fila => {
-        // Preparar datos específicos para el backend
         const datosEnvio = {
           turno: formData.turno,
           area_real: fila.area_real,
@@ -417,24 +226,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
           conexion_bascula: fila.conexion_bascula || false,
           numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           observaciones: 'Registro múltiple desde tabla',
-          // Incluir el material seleccionado si está disponible
           material_seleccionado: campoBasculaActivo,
           peso_actual: fila[campoBasculaActivo] || 0,
-          // Incluir todos los pesos
           ...fila
         };
-
-        console.log('📤 Enviando registro:', datosEnvio);
         return apiClient.createRegistroScrap(datosEnvio);
       });
 
       const resultados = await Promise.all(promises);
-
-      // Limpiar preguardado después de guardar exitosamente
-      if (filtroArea && filtroMaquina) {
-        await limpiarPreguardado();
-      }
-
       addToast(`${resultados.length} registros guardados exitosamente`, 'success');
 
       if (onRegistroCreado) {
@@ -464,7 +263,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
     });
 
     totales.general = tablaData.reduce((sum, fila) => sum + (parseFloat(fila.peso_total) || 0), 0);
-
     return totales;
   };
 
@@ -475,7 +273,12 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
     return true;
   });
 
-  if (loading) return <div style={styles.loading}>Cargando configuración...</div>;
+  if (loading) return (
+    <div style={styles.loading}>
+      <div style={styles.spinner}></div>
+      <p>Cargando configuración de máquinas...</p>
+    </div>
+  );
 
   const totales = calcularTotalesColumnas();
   const tiposScrap = config?.tipos_scrap ? Object.values(config.tipos_scrap).flat() : [];
@@ -488,12 +291,12 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
         <p style={styles.subtitle}>Complete los datos de producción para todas las máquinas</p>
       </div>
 
-      <form onSubmit={handleSubmit} style={styles.formPrincipal}>
+      <form onSubmit={handleSubmit} style={styles.form}>
 
-        {/* PANEL SUPERIOR: CONTROLES PRINCIPALES */}
-        <div style={styles.controlsPanel}>
-          {/* Sección de Báscula */}
-          <div style={styles.basculaSection}>
+        {/* CONTROLES PRINCIPALES */}
+        <div style={styles.controls}>
+          {/* Báscula */}
+          <div style={styles.section}>
             <h3 style={styles.sectionTitle}>⚖️ Control de Báscula</h3>
             <BasculaConnection
               onPesoObtenido={handlePesoFromBascula}
@@ -501,11 +304,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
             />
           </div>
 
-          {/* Sección de Configuración */}
-          <div style={styles.configSection}>
+          {/* Configuración */}
+          <div style={styles.section}>
             <h3 style={styles.sectionTitle}>📋 Datos de la Jornada</h3>
             <div style={styles.configGrid}>
-              <div style={styles.configGroup}>
+              <div style={styles.inputGroup}>
                 <label style={styles.label}>Fecha:</label>
                 <input
                   type="date"
@@ -515,7 +318,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
                 />
               </div>
 
-              <div style={styles.configGroup}>
+              <div style={styles.inputGroup}>
                 <label style={styles.label}>Turno:</label>
                 <select
                   value={formData.turno}
@@ -530,7 +333,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
                 </select>
               </div>
 
-              <div style={styles.configGroup}>
+              <div style={styles.inputGroup}>
                 <label style={styles.label}>Tipo de Scrap:</label>
                 <select
                   value={campoBasculaActivo}
@@ -545,8 +348,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
                 </select>
               </div>
 
-              {/* FILTROS INTEGRADOS */}
-              <div style={styles.configGroup}>
+              {/* Filtros */}
+              <div style={styles.inputGroup}>
                 <label style={styles.label}>Área:</label>
                 <select
                   value={filtroArea}
@@ -560,7 +363,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
                 </select>
               </div>
 
-              <div style={styles.configGroup}>
+              <div style={styles.inputGroup}>
                 <label style={styles.label}>Máquina:</label>
                 <select
                   value={filtroMaquina}
@@ -574,222 +377,145 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
                   )}
                 </select>
               </div>
-
-              {/* BOTONES DE PREGUARDADO */}
-              <div style={styles.preguardadoSection}>
-                <div style={styles.preguardadoButtons}>
-                  <button
-                    type="button"
-                    onClick={handlePreguardar}
-                    style={styles.btnPreguardar}
-                    disabled={!filtroArea || !filtroMaquina || !formData.turno}
-                  >
-                    💾 Preguardar Pesos
-                  </button>
-
-                  {pesoBloqueado && (
-                    <button
-                      type="button"
-                      onClick={handleDesbloquearPeso}
-                      style={styles.btnDesbloquear}
-                    >
-                      🔓 Desbloquear Peso
-                    </button>
-                  )}
-
-                  {preguardado && (
-                    <button
-                      type="button"
-                      onClick={handleLimpiarPreguardado}
-                      style={styles.btnLimpiarPreguardado}
-                    >
-                      🗑️ Limpiar
-                    </button>
-                  )}
-                </div>
-
-                {pesoBloqueado && (
-                  <div style={styles.bloqueoInfo}>
-                    <span style={styles.bloqueoText}>⏸️ Peso bloqueado - Use "Desbloquear Peso" para continuar</span>
-                  </div>
-                )}
-
-                {preguardado && (
-                  <div style={styles.preguardadoInfo}>
-                    <span style={styles.preguardadoText}>
-                      📝 Preguardado disponible ({new Date(preguardado.timestamp).toLocaleTimeString()})
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* INDICADOR DE MÁQUINA ACTIVA */}
-              {celdaActiva && (
-                <div style={styles.activeMachineIndicator}>
-                  <div style={styles.indicatorHeader}>
-                    <span style={styles.indicatorIcon}>🎯</span>
-                    <strong style={styles.indicatorTitle}>Máquina Activa</strong>
-                  </div>
-                  <div style={styles.indicatorDetails}>
-                    <span style={styles.indicatorText}>
-                      {tablaData[celdaActiva.areaIndex]?.maquina_real}
-                    </span>
-                    <span style={styles.indicatorSubtext}>
-                      {campoBasculaActivo}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
+
+            {/* Indicador de Máquina Activa */}
+            {celdaActiva && (
+              <div style={styles.activeMachine}>
+                <div style={styles.activeMachineHeader}>
+                  <span style={styles.activeMachineIcon}>🎯</span>
+                  <strong style={styles.activeMachineTitle}>Máquina Activa</strong>
+                </div>
+                <div style={styles.activeMachineDetails}>
+                  <span style={styles.activeMachineText}>
+                    {tablaData[celdaActiva.areaIndex]?.maquina_real}
+                  </span>
+                  <span style={styles.activeMachineSubtext}>
+                    {campoBasculaActivo}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* PANEL DE DATOS */}
-        <div style={styles.dataPanel}>
+        {/* TABLA DE DATOS */}
+        <div style={styles.dataSection}>
           <div style={styles.tableHeader}>
             <h3 style={styles.sectionTitle}>📊 Datos de Producción</h3>
-            <div style={styles.tableStats}>
-              <span style={styles.statItem}>
-                Máquinas: <strong>{datosFiltrados.length}</strong>
-              </span>
-              <span style={styles.statItem}>
-                Con datos: <strong>{filasConPeso}</strong>
-              </span>
-              <span style={styles.statItem}>
-                Total: <strong>{totales.general.toFixed(3)} kg</strong>
-              </span>
+            <div style={styles.stats}>
+              <span>Máquinas: <strong>{datosFiltrados.length}</strong></span>
+              <span>Con datos: <strong>{filasConPeso}</strong></span>
+              <span>Total: <strong>{totales.general.toFixed(3)} kg</strong></span>
             </div>
           </div>
 
-          <div style={styles.tablaContainer}>
-            <div style={styles.tablaWrapper}>
-              <table style={styles.tabla}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>ÁREA</th>
-                    <th style={styles.th}>MÁQUINA</th>
-                    {tiposScrap.map(tipo => (
-                      <th key={tipo.columna_db} style={styles.th}>
-                        {tipo.tipo_nombre}
-                      </th>
-                    ))}
-                    <th style={styles.th}>TOTAL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {datosFiltrados.map((fila, index) => {
-                    const realIndex = tablaData.findIndex(item =>
-                      item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
-                    );
+          <div style={styles.tableContainer}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeaderCell}>ÁREA</th>
+                  <th style={styles.tableHeaderCell}>MÁQUINA</th>
+                  {tiposScrap.map(tipo => (
+                    <th key={tipo.columna_db} style={styles.tableHeaderCell}>
+                      {tipo.tipo_nombre}
+                    </th>
+                  ))}
+                  <th style={styles.tableHeaderCell}>TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {datosFiltrados.map((fila, index) => {
+                  const realIndex = tablaData.findIndex(item =>
+                    item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
+                  );
+                  const estaActiva = celdaActiva?.areaIndex === realIndex;
 
-                    const estaActiva = celdaActiva?.areaIndex === realIndex;
-                    const esMaquinaFiltrada = filtroMaquina && fila.maquina_real === filtroMaquina;
-
-                    return (
-                      <tr
-                        key={`${fila.area_real}-${fila.maquina_real}`}
-                        style={{
-                          ...styles.tr,
-                          ...(estaActiva ? styles.filaActiva : {}),
-                          ...(esMaquinaFiltrada && !estaActiva ? styles.filaSeleccionada : {})
-                        }}
-                      >
-                        <td style={styles.td}>{fila.area_real}</td>
-                        <td style={styles.td}>
-                          <div style={styles.celdaMaquina}>
-                            {fila.maquina_real}
-                            {estaActiva && <span style={styles.indicadorActivo}>🎯</span>}
-                            {esMaquinaFiltrada && !estaActiva && <span style={styles.indicadorSeleccionada}>👉</span>}
-                          </div>
-                        </td>
-
-                        {tiposScrap.map(tipo => {
-                          const valor = fila[tipo.columna_db];
-                          const celdaEstaActiva = estaActiva && campoBasculaActivo === tipo.columna_db;
-                          const esCampoBasculaActivo = campoBasculaActivo === tipo.columna_db;
-
-                          return (
-                            <td key={tipo.columna_db} style={styles.td}>
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={valor || ''}
-                                onChange={(e) => handleInputChangeTabla(realIndex, tipo.columna_db, e.target.value)}
-                                onFocus={() => {
-                                  activarCeldaParaBascula(realIndex, tipo.columna_db);
-                                  setCampoBasculaActivo(tipo.columna_db);
-                                }}
-                                style={{
-                                  ...styles.celdaInput,
-                                  ...(valor > 0 ? styles.celdaConDatos : {}),
-                                  ...(celdaEstaActiva ? styles.celdaInputActiva : {}),
-                                  ...(esCampoBasculaActivo && !celdaEstaActiva ? styles.celdaCampoSeleccionado : {}),
-                                  ...(esMaquinaFiltrada ? styles.celdaMaquinaFiltrada : {})
-                                }}
-                                placeholder="0.0"
-                              />
-                              {celdaEstaActiva && (
-                                <div style={styles.indicadorPesoActivo}>⚖️</div>
-                              )}
-                            </td>
-                          );
-                        })}
-
-                        <td style={styles.tdTotal}>
-                          <strong>{fila.peso_total.toFixed(3)}</strong>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {/* Fila de totales */}
-                  <tr style={styles.trTotal}>
-                    <td style={styles.tdTotal} colSpan="2">
-                      <strong>TOTAL GENERAL</strong>
-                    </td>
-                    {tiposScrap.map(tipo => (
-                      <td key={tipo.columna_db} style={styles.tdTotal}>
-                        <strong>{totales[tipo.columna_db].toFixed(3)}</strong>
+                  return (
+                    <tr key={`${fila.area_real}-${fila.maquina_real}`} style={estaActiva ? styles.activeRow : {}}>
+                      <td style={styles.tableCell}>{fila.area_real}</td>
+                      <td style={styles.tableCell}>
+                        <div style={styles.machineCell}>
+                          {fila.maquina_real}
+                          {estaActiva && <span style={styles.activeIndicator}>🎯</span>}
+                        </div>
                       </td>
-                    ))}
-                    <td style={styles.tdTotalGeneral}>
-                      <strong>{totales.general.toFixed(3)}</strong>
+
+                      {tiposScrap.map(tipo => {
+                        const valor = fila[tipo.columna_db];
+                        const celdaEstaActiva = estaActiva && campoBasculaActivo === tipo.columna_db;
+
+                        return (
+                          <td key={tipo.columna_db} style={styles.tableCell}>
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={valor || ''}
+                              onChange={(e) => handleInputChangeTabla(realIndex, tipo.columna_db, e.target.value)}
+                              onFocus={() => activarCeldaParaBascula(realIndex, tipo.columna_db)}
+                              style={{
+                                ...styles.inputCell,
+                                ...(valor > 0 ? styles.hasData : {}),
+                                ...(celdaEstaActiva ? styles.activeInput : {})
+                              }}
+                              placeholder="0.0"
+                            />
+                          </td>
+                        );
+                      })}
+
+                      <td style={styles.totalCell}>
+                        <strong>{fila.peso_total.toFixed(3)}</strong>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Totales */}
+                <tr style={styles.totalRow}>
+                  <td style={styles.totalCell} colSpan="2">
+                    <strong>TOTAL GENERAL</strong>
+                  </td>
+                  {tiposScrap.map(tipo => (
+                    <td key={tipo.columna_db} style={styles.totalCell}>
+                      <strong>{totales[tipo.columna_db].toFixed(3)}</strong>
                     </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                  ))}
+                  <td style={styles.grandTotalCell}>
+                    <strong>{totales.general.toFixed(3)}</strong>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* PANEL DE ACCIONES */}
-        <div style={styles.actionsPanel}>
-          <div style={styles.actionsContent}>
-            <div style={styles.summary}>
-              <span style={styles.summaryText}>
-                📋 Resumen: <strong>{filasConPeso}</strong> registros listos para guardar |
-                Peso Total: <strong>{totales.general.toFixed(3)} kg</strong>
-              </span>
-            </div>
-            <div style={styles.actions}>
-              <button
-                type="button"
-                onClick={onCancelar}
-                style={styles.btnSecondary}
-              >
-                ❌ Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={enviando || !formData.turno || filasConPeso === 0}
-                style={{
-                  ...styles.btnPrimary,
-                  ...(enviando || !formData.turno || filasConPeso === 0 ? styles.btnDisabled : {})
-                }}
-              >
-                {enviando ? '⏳ Guardando...' : `💾 Guardar ${filasConPeso} Registros`}
-              </button>
-            </div>
+        {/* ACCIONES */}
+        <div style={styles.actions}>
+          <div style={styles.summary}>
+            <span>
+              📋 <strong>{filasConPeso}</strong> registros listos | 
+              Total: <strong>{totales.general.toFixed(3)} kg</strong>
+            </span>
+          </div>
+          <div style={styles.actionButtons}>
+            <button
+              type="button"
+              onClick={onCancelar}
+              style={styles.btnCancel}
+            >
+              ❌ Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={enviando || !formData.turno || filasConPeso === 0}
+              style={{
+                ...styles.btnSave,
+                ...(enviando || !formData.turno || filasConPeso === 0 ? styles.btnDisabled : {})
+              }}
+            >
+              {enviando ? '⏳ Guardando...' : `💾 Guardar ${filasConPeso} Registros`}
+            </button>
           </div>
         </div>
       </form>
@@ -797,72 +523,65 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar }) => {
   );
 };
 
+// ESTILOS (sin cambios, se mantienen igual)
 const styles = {
   container: {
-    padding: '1.5rem',
+    padding: '1rem',
     backgroundColor: '#f8fafc',
     minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.5rem'
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
-
   header: {
     textAlign: 'center',
-    marginBottom: '1rem'
+    marginBottom: '1.5rem'
   },
-
   title: {
-    fontSize: '2rem',
+    fontSize: '1.8rem',
     fontWeight: '700',
     color: '#1e293b',
     margin: 0
   },
-
   subtitle: {
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     color: '#64748b',
     margin: '0.5rem 0 0 0'
   },
-
-  formPrincipal: {
+  form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1.5rem',
-    flex: 1
+    gap: '1.5rem'
   },
-
   loading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: '3rem',
     textAlign: 'center',
-    fontSize: '1.3rem',
     color: '#64748b'
   },
-
-  /* -------------------- PANELES PRINCIPALES -------------------- */
-  controlsPanel: {
+  spinner: {
+    width: '40px',
+    height: '40px',
+    border: '4px solid #e5e7eb',
+    borderTop: '4px solid #3b82f6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '1rem'
+  },
+  controls: {
     display: 'grid',
-    gridTemplateColumns: '1fr 400px',
+    gridTemplateColumns: '1fr 1fr',
     gap: '1.5rem',
     alignItems: 'start'
   },
-
-  basculaSection: {
+  section: {
     backgroundColor: 'white',
     padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
     border: '1px solid #e2e8f0'
   },
-
-  configSection: {
-    backgroundColor: 'white',
-    padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e2e8f0'
-  },
-
   sectionTitle: {
     fontSize: '1.1rem',
     fontWeight: '600',
@@ -872,421 +591,211 @@ const styles = {
     alignItems: 'center',
     gap: '0.5rem'
   },
-
   configGrid: {
-    display: 'flex',
-    flexDirection: 'column',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '1rem'
   },
-
-  configGroup: {
+  inputGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.5rem'
   },
-
-  /* -------------------- SECCIÓN PREGUARDADO -------------------- */
-  preguardadoSection: {
-    gridColumn: '1 / -1',
-    padding: '1rem',
-    backgroundColor: '#f0f9ff',
-    border: '1px solid #bae6fd',
-    borderRadius: '8px',
-    marginTop: '0.5rem'
-  },
-
-  preguardadoButtons: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginBottom: '0.5rem'
-  },
-
-  btnPreguardar: {
-    backgroundColor: '#f59e0b',
-    color: 'white',
-    border: 'none',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
+  label: {
+    fontSize: '0.875rem',
     fontWeight: '600',
-    ':disabled': {
-      backgroundColor: '#9ca3af',
-      cursor: 'not-allowed'
-    }
+    color: '#374151'
   },
-
-  btnLimpiarPreguardado: {
-    backgroundColor: '#ef4444',
-    color: 'white',
-    border: 'none',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-    fontWeight: '600'
-  },
-
-  preguardadoInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-
-  preguardadoText: {
-    fontSize: '0.8rem',
-    color: '#0369a1',
-    fontWeight: '500'
-  },
-
-  btnDesbloquear: {
-    backgroundColor: '#10B981',
-    color: 'white',
-    border: 'none',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-    fontWeight: '600'
-  },
-
-  bloqueoInfo: {
+  input: {
     padding: '0.5rem',
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #F59E0B',
+    border: '1px solid #d1d5db',
     borderRadius: '6px',
-    marginTop: '0.5rem'
+    fontSize: '0.875rem'
   },
-
-  bloqueoText: {
-    fontSize: '0.8rem',
-    color: '#92400E',
-    fontWeight: '500'
+  select: {
+    padding: '0.5rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '0.875rem',
+    backgroundColor: 'white'
   },
-
-  /* -------------------- INDICADOR DE MÁQUINA ACTIVA -------------------- */
-  activeMachineIndicator: {
+  activeMachine: {
+    marginTop: '1rem',
     padding: '1rem',
     backgroundColor: '#f0f9ff',
     border: '2px solid #0ea5e9',
-    borderRadius: '8px',
-    marginTop: '0.5rem'
+    borderRadius: '6px'
   },
-
-  indicatorHeader: {
+  activeMachineHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
     marginBottom: '0.5rem'
   },
-
-  indicatorIcon: {
+  activeMachineIcon: {
     fontSize: '1.2rem'
   },
-
-  indicatorTitle: {
+  activeMachineTitle: {
     color: '#0369a1',
     fontSize: '0.9rem'
   },
-
-  indicatorDetails: {
+  activeMachineDetails: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.25rem'
   },
-
-  indicatorText: {
+  activeMachineText: {
     color: '#1e293b',
     fontWeight: '600',
     fontSize: '1rem'
   },
-
-  indicatorSubtext: {
+  activeMachineSubtext: {
     color: '#64748b',
     fontSize: '0.8rem',
     fontStyle: 'italic'
   },
-
-  /* -------------------- PANEL DE DATOS -------------------- */
-  dataPanel: {
+  dataSection: {
     backgroundColor: 'white',
     padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e2e8f0',
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column'
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    border: '1px solid #e2e8f0'
   },
-
   tableHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '1rem'
   },
-
-  tableStats: {
+  stats: {
     display: 'flex',
-    gap: '1.5rem',
-    fontSize: '0.9rem',
+    gap: '1rem',
+    fontSize: '0.875rem',
     color: '#64748b'
   },
-
-  statItem: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#f8fafc',
-    borderRadius: '6px',
-    border: '1px solid #e2e8f0'
-  },
-
-  /* -------------------- TABLA MEJORADA -------------------- */
-  tablaContainer: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    overflow: 'hidden'
-  },
-
-  tablaWrapper: {
+  tableContainer: {
     overflowX: 'auto',
-    overflowY: 'auto',
-    flex: 1
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px'
   },
-
-  tabla: {
+  table: {
     width: '100%',
     borderCollapse: 'collapse',
     minWidth: '800px'
   },
-
-  th: {
+  tableHeaderCell: {
     backgroundColor: '#1e293b',
     color: 'white',
     padding: '0.75rem',
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     fontWeight: '600',
     textAlign: 'center',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
-    borderRight: '1px solid #334155',
-    whiteSpace: 'nowrap'
+    border: '1px solid #334155'
   },
-
-  tr: {
-    borderBottom: '1px solid #f1f5f9',
-    transition: 'background-color 0.2s'
-  },
-
-  filaActiva: {
-    backgroundColor: '#fffbeb',
-    borderLeft: '4px solid #f59e0b'
-  },
-
-  filaSeleccionada: {
-    backgroundColor: '#f0f9ff',
-    borderLeft: '4px solid #0ea5e9'
-  },
-
-  trTotal: {
-    backgroundColor: '#1e40af',
-    color: 'white',
-    fontWeight: 'bold',
-    position: 'sticky',
-    bottom: 0,
-    zIndex: 5
-  },
-
-  td: {
-    padding: '0.6rem',
+  tableCell: {
+    padding: '0.5rem',
+    border: '1px solid #e2e8f0',
     textAlign: 'center',
-    borderRight: '1px solid #f1f5f9',
-    fontSize: '0.85rem'
+    fontSize: '0.875rem'
   },
-
-  tdTotal: {
+  machineCell: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    fontWeight: '600'
+  },
+  inputCell: {
+    width: '100%',
+    padding: '0.375rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '4px',
+    textAlign: 'right',
+    fontSize: '0.875rem'
+  },
+  hasData: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#bbf7d0'
+  },
+  activeInput: {
+    borderColor: '#3b82f6',
+    boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.1)'
+  },
+  activeRow: {
+    backgroundColor: '#fffbeb'
+  },
+  activeIndicator: {
+    fontSize: '0.75rem'
+  },
+  totalCell: {
     padding: '0.75rem',
     backgroundColor: '#f8fafc',
     fontWeight: '600',
-    fontSize: '0.9rem'
+    textAlign: 'center'
   },
-
-  tdTotalGeneral: {
+  totalRow: {
+    backgroundColor: '#1e40af',
+    color: 'white'
+  },
+  grandTotalCell: {
+    padding: '0.75rem',
     backgroundColor: '#1e40af',
     color: 'white',
     fontWeight: '700',
-    padding: '0.75rem',
-    fontSize: '0.9rem'
+    textAlign: 'center'
   },
-
-  celdaInput: {
-    width: '100%',
-    padding: '0.5rem',
-    borderRadius: '6px',
-    border: '1px solid #d1d5db',
-    backgroundColor: '#fafafa',
-    textAlign: 'right',
-    fontSize: '0.85rem',
-    transition: 'all 0.2s ease',
-    minWidth: '80px'
-  },
-
-  celdaInputActiva: {
-    backgroundColor: 'white',
-    borderWidth: '2px',
-    borderStyle: 'solid',
-    borderColor: '#3b82f6',
-    boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
-  },
-
-  celdaConDatos: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-    fontWeight: '600',
-    borderColor: '#bbf7d0'
-  },
-
-  celdaMaquinaFiltrada: {
-    borderColor: '#0ea5e9',
-    backgroundColor: '#f8fafc'
-  },
-
-  celdaMaquina: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontWeight: '600',
-    fontSize: '0.85rem'
-  },
-
-  indicadorActivo: {
-    fontSize: '0.8rem',
-    animation: 'pulse 2s infinite'
-  },
-
-  indicadorSeleccionada: {
-    fontSize: '0.8rem',
-    color: '#0ea5e9'
-  },
-
-  /* -------------------- PANEL DE ACCIONES -------------------- */
-  actionsPanel: {
+  actions: {
     backgroundColor: 'white',
     padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
     border: '1px solid #e2e8f0',
-    position: 'sticky',
-    bottom: '1rem',
-    marginTop: 'auto'
-  },
-
-  actionsContent: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '1rem'
+    alignItems: 'center'
   },
-
   summary: {
-    flex: 1
-  },
-
-  summaryText: {
     fontSize: '1rem',
     fontWeight: '500',
     color: '#374151'
   },
-
-  actions: {
+  actionButtons: {
     display: 'flex',
     gap: '1rem'
   },
-
-  /* -------------------- COMPONENTES DE FORMULARIO -------------------- */
-  label: {
-    fontSize: '0.85rem',
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: '0.25rem'
-  },
-
-  input: {
-    width: '100%',
-    padding: '0.6rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    transition: 'border-color 0.2s'
-  },
-
-  select: {
-    width: '100%',
-    padding: '0.6rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    backgroundColor: 'white',
-    transition: 'border-color 0.2s'
-  },
-
-  /* -------------------- BOTONES -------------------- */
-  btnPrimary: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#3b82f6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    whiteSpace: 'nowrap'
-  },
-
-  btnSecondary: {
+  btnCancel: {
     padding: '0.75rem 1.5rem',
     backgroundColor: '#f8fafc',
     color: '#374151',
     border: '1px solid #d1d5db',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
+    borderRadius: '6px',
     cursor: 'pointer',
-    transition: 'all 0.2s'
+    fontWeight: '600'
   },
-
+  btnSave: {
+    padding: '0.75rem 1.5rem',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '600'
+  },
   btnDisabled: {
     backgroundColor: '#9ca3af',
-    cursor: 'not-allowed',
-    opacity: 0.6
-  },
-  celdaCampoSeleccionado: {
-    border: '2px solid #f59e0b',
-    backgroundColor: '#fffbeb'
-  },
-
-  indicadorPesoActivo: {
-    position: 'absolute',
-    top: '2px',
-    right: '2px',
-    fontSize: '0.7rem',
-    animation: 'pulse 1s infinite'
-  },
+    cursor: 'not-allowed'
+  }
 };
 
-// Agregar animación CSS para el indicador activo
+// Agregar animación para el spinner
 const styleSheet = document.styleSheets[0];
-styleSheet.insertRule(`
-  @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-`, styleSheet.cssRules.length);
+if (styleSheet) {
+  styleSheet.insertRule(`
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `, styleSheet.cssRules.length);
+}
 
 export default RegistroScrapCompleto;
