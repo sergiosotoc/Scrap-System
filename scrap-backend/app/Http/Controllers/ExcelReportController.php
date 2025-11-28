@@ -5,11 +5,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RegistrosScrap;
-use App\Models\RecepcionesScrap;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RegistrosScrapExport;
-use App\Exports\RecepcionesScrapExport;
 use App\Exports\ReporteDiarioExport;
 
 class ExcelReportController extends Controller
@@ -57,60 +55,6 @@ class ExcelReportController extends Controller
 
             return response()->json([
                 'error' => 'Error al generar el reporte Excel: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function exportRecepcionesScrap(Request $request)
-    {
-        try {
-            \Log::info('📊 Iniciando exportación de recepciones scrap');
-
-            $user = Auth::user();
-            $query = RecepcionesScrap::with('receptor');
-
-            // Filtros básicos
-            if ($request->has('origen_tipo') && $request->origen_tipo != '') {
-                $query->where('origen_tipo', $request->origen_tipo);
-            }
-
-            if ($request->has('destino') && $request->destino != '') {
-                $query->where('destino', $request->destino);
-            }
-
-            if (
-                $request->has('fecha_inicio') && $request->has('fecha_fin') &&
-                $request->fecha_inicio != '' && $request->fecha_fin != ''
-            ) {
-                $query->whereBetween('fecha_entrada', [
-                    $request->fecha_inicio,
-                    $request->fecha_fin
-                ]);
-            }
-
-            // Control de acceso por rol
-            if ($user->role !== 'admin') {
-                $query->where('receptor_id', $user->id);
-            }
-
-            $recepciones = $query->orderBy('fecha_entrada', 'desc')->get();
-
-            \Log::info("📈 Encontradas {$recepciones->count()} recepciones para exportar");
-
-            if ($recepciones->count() === 0) {
-                return response()->json(['error' => 'No hay recepciones para exportar'], 404);
-            }
-
-            $fileName = 'recepciones_scrap_' . now()->format('Y_m_d_His') . '.xlsx';
-
-            // ✅ CORREGIDO: Usar el export correcto para recepciones
-            return Excel::download(new RecepcionesScrapExport($recepciones), $fileName);
-        } catch (\Exception $e) {
-            \Log::error('❌ Error en exportRecepcionesScrap: ' . $e->getMessage());
-            \Log::error('📋 Stack trace: ' . $e->getTraceAsString());
-
-            return response()->json([
-                'error' => 'Error al generar el reporte Excel de recepciones: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -47,7 +47,7 @@ export const apiClient = {
         }
     },
 
-    // ✅ MÉTODOS ESENCIALES SOLAMENTE
+    // Autenticación
     async login(username, password) {
         return this.request('/login', { method: 'POST', body: { username, password } });
     },
@@ -107,31 +107,7 @@ export const apiClient = {
         return this.request('/registros-scrap/stats');
     },
 
-    // Preguardado
-    async preguardarPesos(data) {
-        return this.request('/registros-scrap/preguardar-pesos', { 
-            method: 'POST', 
-            body: data 
-        });
-    },
-
-    async obtenerPreguardado(params) {
-        const query = new URLSearchParams(params).toString();
-        return this.request(`/registros-scrap/obtener-preguardado?${query}`);
-    },
-
-    async limpiarPreguardado(data) {
-        return this.request('/registros-scrap/limpiar-preguardado', { 
-            method: 'POST', 
-            body: data 
-        });
-    },
-
     // Recepciones
-    async getRegistrosPendientes() {
-        return this.request('/recepciones-scrap/registros-pendientes');
-    },
-
     async createRecepcionScrap(data) {
         return this.request('/recepciones-scrap', { method: 'POST', body: data });
     },
