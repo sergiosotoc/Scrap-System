@@ -1,5 +1,5 @@
 <?php
-// app/Models/RecepcionesScrap.php
+// app/Models/RecepcionesScrap.php - VERSIÓN ACTUALIZADA
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -8,15 +8,22 @@ class RecepcionesScrap extends Model
 {
     protected $table = 'recepciones_scrap';
     
+    // ✅ ACTUALIZADO: Solo campos que EXISTEN en tu tabla
     protected $fillable = [
-        'numero_hu', 'peso_kg', 'tipo_material', 'origen_tipo', 'origen_especifico',
-        'receptor_id', 'destino', 'lugar_almacenamiento',
-        'observaciones', 'impreso', 'fecha_entrada', 'fecha_registro'
+        'numero_hu',
+        'peso_kg', 
+        'tipo_material',
+        'origen_tipo',
+        'origen_especifico',
+        'receptor_id',
+        'destino',
+        'impreso',
+        'fecha_entrada'
+        // NO incluir: lugar_almacenamiento, observaciones, fecha_registro
     ];
 
     protected $casts = [
         'fecha_entrada' => 'datetime',
-        'fecha_registro' => 'datetime',
         'impreso' => 'boolean',
     ];
 
@@ -25,6 +32,12 @@ class RecepcionesScrap extends Model
         return $this->belongsTo(User::class, 'receptor_id');
     }
 
+    public function stock()
+    {
+        return $this->hasOne(StockScrap::class, 'recepcion_id');
+    }
+
+    // Métodos de scope
     public function scopePorReceptor($query, $receptorId)
     {
         return $query->where('receptor_id', $receptorId);
@@ -50,5 +63,11 @@ class RecepcionesScrap extends Model
     {
         $this->impreso = true;
         return $this->save();
+    }
+
+    // Accessor para formatear tipo de material
+    public function getTipoMaterialFormateadoAttribute()
+    {
+        return str_replace('_', ' ', ucwords($this->tipo_material));
     }
 }

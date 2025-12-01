@@ -54,10 +54,13 @@ Route::middleware('api')->group(function () {
         Route::get('/{id}', [RegistrosScrapController::class, 'show']);
     });
 
-    // Recepciones de scrap
+    // ✅ RECEPCIONES DE SCRAP ACTUALIZADAS
     Route::middleware('auth:sanctum')->prefix('recepciones-scrap')->group(function () {
         Route::get('/', [RecepcionScrapController::class, 'index']);
         Route::post('/', [RecepcionScrapController::class, 'store']);
+        Route::get('/tipos-material', [RecepcionScrapController::class, 'tiposMaterial']); // ✅ NUEVO
+        Route::get('/registros-pendientes', [RecepcionScrapController::class, 'registrosPendientes']); // ✅ NUEVO
+        Route::get('/{id}/imprimir-hu', [RecepcionScrapController::class, 'imprimirHU']); // ✅ NUEVO
         Route::get('/reportes/recepcion', [RecepcionScrapController::class, 'reporteRecepcion']);
         Route::get('/stock/disponible', [RecepcionScrapController::class, 'stockDisponible']);
         Route::get('/stats', [RecepcionScrapController::class, 'stats']);

@@ -256,12 +256,14 @@ const UserManagement = () => {
       gap: spacing.md
     },
     loadingSpinner: {
-      width: '40px',
-      height: '40px',
-      border: `4px solid ${colors.gray200}`,
-      borderTop: `4px solid ${colors.primary}`,
+      width: '60px',
+      height: '60px',
+      border: `3px solid ${colors.primaryLight}`,
+      borderTop: `3px solid ${colors.primary}`,
+      borderRight: `3px solid ${colors.secondary}`,
+      borderBottom: `3px solid ${colors.secondary}`,
       borderRadius: '50%',
-      animation: 'spin 1s linear infinite'
+      animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
     },
     loadingText: {
       color: colors.gray600,

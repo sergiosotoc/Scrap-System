@@ -1,4 +1,4 @@
-/* src/services/api.js */
+/* src/services/api.js - VERSIÓN CORREGIDA */
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 const getAuthToken = () => localStorage.getItem('authToken');
@@ -186,13 +186,9 @@ export const apiClient = {
         return this.request('/registros-scrap/stats');
     },
 
-    // Recepciones
+    // Recepciones - VERSIÓN ACTUALIZADA
     async getRegistrosPendientes() {
         return this.request('/recepciones-scrap/registros-pendientes');
-    },
-
-    async createRecepcionScrap(data) {
-        return this.request('/recepciones-scrap', { method: 'POST', body: data });
     },
 
     async getRecepcionesScrap(params = {}) {
@@ -200,12 +196,109 @@ export const apiClient = {
         return this.request(`/recepciones-scrap?${query}`);
     },
 
-    async getRecepcionScrapStats() {
-        return this.request('/recepciones-scrap/stats');
+    async getRecepcionScrapStats(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/recepciones-scrap/stats?${query}`);
     },
 
-    async getStockDisponible() {
-        return this.request('/recepciones-scrap/stock/disponible');
+    // ✅ NUEVO: Obtener tipos de material desde el backend
+    async getTiposMaterial() {
+        try {
+            console.log('📋 Obteniendo tipos de material...');
+            const response = await this.request('/recepciones-scrap/tipos-material');
+            console.log('✅ Tipos de material recibidos:', response);
+            return response.tipos || ['cobre', 'aluminio', 'mixto', 'cobre_estanado'];
+        } catch (error) {
+            console.warn('⚠️ Error al obtener tipos de material, usando defaults:', error);
+            return ['cobre', 'aluminio', 'mixto', 'cobre_estanado'];
+        }
+    },
+
+    async createRecepcionScrap(data) {
+        console.log('📤 Enviando datos de recepción:', data);
+
+        // Datos simplificados (sin observaciones ni lugar_almacenamiento)
+        const datosEnvio = {
+            peso_kg: data.peso_kg,
+            tipo_material: data.tipo_material,
+            origen_tipo: data.origen_tipo,
+            origen_especifico: data.origen_especifico,
+            destino: data.destino
+            // NO enviar: ubicacion, stock, etc.
+        };
+
+        try {
+            const response = await this.request('/recepciones-scrap', {
+                method: 'POST',
+                body: datosEnvio
+            });
+            console.log('✅ Recepción creada exitosamente:', response);
+            return response;
+        } catch (error) {
+            console.error('❌ Error al crear recepción:', error);
+            throw error;
+        }
+    },
+
+    async imprimirEtiquetaPdf(id) {
+        const url = `${API_BASE_URL}/recepciones-scrap/${id}/imprimir-hu`;
+        const token = getAuthToken();
+
+        console.log(`🖨️ Generando PDF para recepción ${id}...`);
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/pdf',
+                },
+                credentials: 'include',
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            // Obtener el blob del PDF
+            const blob = await response.blob();
+
+            console.log(`✅ PDF generado: ${blob.size} bytes`);
+            return blob;
+
+        } catch (error) {
+            console.error(`❌ Error al generar PDF:`, error);
+            throw error;
+        }
+    },
+
+    async descargarEtiquetaPdf(id, filename = `etiqueta-${id}.pdf`) {
+        try {
+            const blob = await this.imprimirEtiquetaPdf(id);
+
+            // Crear URL para el blob
+            const blobUrl = window.URL.createObjectURL(blob);
+
+            // Crear link para descarga
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+
+            // Descargar
+            link.click();
+
+            // Limpiar
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+
+            console.log(`📥 PDF descargado como: ${filename}`);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error al descargar PDF:', error);
+            throw error;
+        }
     },
 
     // Usuarios (solo admin)

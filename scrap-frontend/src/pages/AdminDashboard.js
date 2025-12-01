@@ -1,4 +1,4 @@
-/* src/pages/AdminDashboard.js */
+/* src/pages/AdminDashboard.js - VERSIÓN CON SPINNER */
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -17,9 +17,25 @@ const AdminDashboard = () => {
     loadData();
   }, []);
 
+  // Agregar animación de spinner
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   const loadData = async () => {
     try {
-      const data = await apiClient.getDashboardStats(); 
+      const data = await apiClient.getDashboardStats();
       setStats(data);
     } catch (error) {
       addToast('Error cargando dashboard: ' + error.message, 'error');
@@ -29,7 +45,7 @@ const AdminDashboard = () => {
   };
 
   // ==========================================
-  // ESTILOS ORIGINALES - SOLO BOTONES ACTUALIZADOS
+  // ESTILOS CON SPINNER INCLUIDO
   // ==========================================
   const styles = {
     container: {
@@ -59,7 +75,24 @@ const AdminDashboard = () => {
       justifyContent: 'center',
       alignItems: 'center',
       height: '100vh',
-      color: colors.gray500
+      backgroundColor: colors.background,
+      flexDirection: 'column',
+      gap: spacing.md
+    },
+    spinner: {
+      width: '60px',
+      height: '60px',
+      border: `3px solid ${colors.primaryLight}`,
+      borderTop: `3px solid ${colors.primary}`,
+      borderRight: `3px solid ${colors.secondary}`,
+      borderBottom: `3px solid ${colors.secondary}`,
+      borderRadius: '50%',
+      animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
+    },
+    loadingText: {
+      fontSize: typography.sizes.lg,
+      color: colors.gray600,
+      fontWeight: typography.weights.medium
     },
     tabs: {
       display: 'flex',
@@ -71,6 +104,10 @@ const AdminDashboard = () => {
       padding: `${spacing.sm} ${spacing.md}`,
       background: 'none',
       border: 'none',
+      borderTop: 'none',
+      borderRight: 'none',
+      borderLeft: 'none',
+      borderBottom: '1px solid transparent',
       color: colors.gray600,
       cursor: 'pointer',
       borderRadius: `${radius.md} ${radius.md} 0 0`,
@@ -79,19 +116,23 @@ const AdminDashboard = () => {
       transition: 'all 0.2s ease',
       ':hover': {
         backgroundColor: colors.gray100,
-        color: colors.gray700
+        color: colors.gray700,
+        borderBottomColor: colors.gray300
       }
     },
     tabActive: {
       padding: `${spacing.sm} ${spacing.md}`,
       background: 'none',
       border: 'none',
+      borderTop: 'none',
+      borderRight: 'none',
+      borderLeft: 'none',
+      borderBottom: `2px solid ${colors.primary}`,
       color: colors.primary,
       cursor: 'pointer',
       borderRadius: `${radius.md} ${radius.md} 0 0`,
       fontSize: typography.sizes.base,
       fontWeight: typography.weights.semibold,
-      borderBottom: `2px solid ${colors.primary}`,
       marginBottom: '-2px'
     },
     gridStats: {
@@ -152,7 +193,8 @@ const AdminDashboard = () => {
 
   if (loading) return (
     <div style={styles.loading}>
-      <div>Cargando panel de administración...</div>
+      <div style={styles.spinner}></div>
+      <div style={styles.loadingText}>Cargando panel de administración...</div>
     </div>
   );
 
@@ -161,14 +203,14 @@ const AdminDashboard = () => {
       <div style={styles.header}>
         <h1 style={styles.title}>Panel de Control Administrativo</h1>
         <div style={styles.tabs}>
-          <button 
-            onClick={() => setActiveTab('overview')} 
+          <button
+            onClick={() => setActiveTab('overview')}
             style={activeTab === 'overview' ? styles.tabActive : styles.tab}
           >
             Resumen General
           </button>
-          <button 
-            onClick={() => setActiveTab('users')} 
+          <button
+            onClick={() => setActiveTab('users')}
             style={activeTab === 'users' ? styles.tabActive : styles.tab}
           >
             Gestión de Usuarios
@@ -190,7 +232,7 @@ const AdminDashboard = () => {
             <div style={styles.statCard}>
               <span style={styles.statLabel}>Peso Procesado</span>
               <span style={styles.statNumber}>
-                {stats?.total_peso_kg || 0} 
+                {stats?.total_peso_kg || 0}
                 <small style={{ fontSize: typography.sizes.lg, color: colors.gray500 }}> kg</small>
               </span>
             </div>
