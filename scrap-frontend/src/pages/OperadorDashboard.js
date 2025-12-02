@@ -1,4 +1,3 @@
-/* src/pages/OperadorDashboard.js */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -13,17 +12,57 @@ const OperadorDashboard = () => {
   const [showModal, setShowModal] = useState(false);
   const [registros, setRegistros] = useState([]);
   const [stats, setStats] = useState(null);
+  
+  // loading: Solo para la primera vez que entras a la página
   const [loading, setLoading] = useState(true);
-  const [modalLoading, setModalLoading] = useState(false); // ✅ NUEVO ESTADO PARA CARGA DEL MODAL
+  // isFetching: Para cuando cambias filtros (carga de fondo)
+  const [isFetching, setIsFetching] = useState(false);
+  
+  const [modalLoading, setModalLoading] = useState(false);
 
+  // Obtenemos la fecha actual en formato local YYYY-MM-DD
+  const getTodayLocal = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = getTodayLocal();
+
+  // Estado independiente para el input de fecha (visual)
+  const [fechaInput, setFechaInput] = useState(today);
+
+  // Estado para los filtros reales (lógica)
   const [filtros, setFiltros] = useState({
     area: '',
     turno: '',
-    fecha: new Date().toISOString().split('T')[0]
+    fecha: today
   });
 
+  // Lógica de DEBOUNCE para la fecha:
+  // Espera 600ms después del último cambio en el calendario antes de actualizar los filtros.
+  // Esto evita que se refresque la tabla si solo estás cambiando de mes.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFiltros(prev => {
+        // Si la fecha no ha cambiado realmente, no hacemos nada
+        if (prev.fecha === fechaInput) return prev;
+        return { ...prev, fecha: fechaInput };
+      });
+    }, 600); // 600ms de retraso
+
+    return () => clearTimeout(timer); // Limpia el timer si el usuario sigue interactuando
+  }, [fechaInput]);
+
   const loadOperadorData = useCallback(async () => {
-    setLoading(true);
+    // Si la fecha está vacía (usuario borrando), evitamos la llamada
+    if (!filtros.fecha) return;
+
+    // Activamos el indicador de "actualizando"
+    setIsFetching(true);
+    
     try {
       const [registrosData, statsData] = await Promise.all([
         apiClient.getRegistrosScrap(filtros),
@@ -32,18 +71,30 @@ const OperadorDashboard = () => {
       setRegistros(Array.isArray(registrosData) ? registrosData : []);
       setStats(statsData);
     } catch (error) {
-      addToast('Error cargando datos: ' + error.message, 'error');
+      console.error(error);
+      addToast('Error cargando datos: ' + (error.message || 'Error desconocido'), 'error');
     } finally {
+      // Apagamos indicadores
       setLoading(false);
+      setIsFetching(false);
     }
-  }, [filtros, addToast]);
+  }, [filtros, addToast]); 
 
+  // Este useEffect se dispara cuando 'filtros' cambia (ya sea por select o por el debounce de fecha)
   useEffect(() => {
     loadOperadorData();
-  }, [loadOperadorData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filtros)]);
 
-  const handleFiltroChange = (e) => {
-    setFiltros(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  // Manejador para los Selects (Área, Turno) - Actualizan inmediato
+  const handleSelectChange = (e) => {
+    const { name, value } = e.target;
+    setFiltros(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Manejador exclusivo para la Fecha - Actualiza solo el input visual
+  const handleFechaChange = (e) => {
+    setFechaInput(e.target.value);
   };
 
   const handleRegistroCreado = () => {
@@ -52,25 +103,23 @@ const OperadorDashboard = () => {
     loadOperadorData();
   };
 
-  // ✅ NUEVA FUNCIÓN PARA MANEJAR LA APERTURA DEL MODAL
   const handleOpenModal = () => {
-    setModalLoading(true); // Activar loading del modal
+    setModalLoading(true);
     setShowModal(true);
-    // El loading se desactivará cuando el componente RegistroScrapCompleto termine de cargar
   };
 
-  // ✅ NUEVA FUNCIÓN PARA MANEJAR CUANDO EL MODAL TERMINA DE CARGAR
   const handleModalLoaded = () => {
-    setModalLoading(false);
+    setTimeout(() => {
+        setModalLoading(false);
+    }, 100);
   };
 
+  // Solo mostramos pantalla de carga completa si es la PRIMERA carga
   if (loading) {
     return (
       <div style={styles.loading}>
-        <div style={styles.loadingContent}>
-          <div style={styles.spinner}></div>
-          <p>Cargando dashboard...</p>
-        </div>
+        <div style={styles.spinner}></div>
+        <p style={styles.loadingText}>Cargando dashboard...</p>
       </div>
     );
   }
@@ -80,7 +129,7 @@ const OperadorDashboard = () => {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Dashboard Operador</h1>
-          <p style={styles.subtitle}>Hola, {user.name} 👋</p>
+          <p style={styles.subtitle}>Hola, {user?.name || 'Operador'} 👋</p>
         </div>
         <div style={styles.headerActions}>
           <button onClick={handleOpenModal} style={styles.primaryButton}>
@@ -92,14 +141,18 @@ const OperadorDashboard = () => {
       {/* Filtros & Tabla */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={styles.cardTitle}>📋 Registros Recientes</h3>
+          <h3 style={styles.cardTitle}>
+            📋 Registros Recientes
+            {/* Pequeño indicador visual de que se está actualizando */}
+            {isFetching && <span style={styles.miniLoader}>⏳ Actualizando...</span>}
+          </h3>
           <div style={styles.filters}>
             <div style={styles.filterGroup}>
               <label style={styles.filterLabel}>Área:</label>
               <select
                 name="area"
                 value={filtros.area}
-                onChange={handleFiltroChange}
+                onChange={handleSelectChange}
                 style={styles.select}
               >
                 <option value="">Todas</option>
@@ -121,7 +174,7 @@ const OperadorDashboard = () => {
               <select
                 name="turno"
                 value={filtros.turno}
-                onChange={handleFiltroChange}
+                onChange={handleSelectChange}
                 style={styles.select}
               >
                 <option value="">Todos</option>
@@ -136,8 +189,9 @@ const OperadorDashboard = () => {
               <input
                 type="date"
                 name="fecha"
-                value={filtros.fecha}
-                onChange={handleFiltroChange}
+                value={fechaInput} // Vinculado al estado local visual
+                onChange={handleFechaChange} // Solo actualiza visualmente al inicio
+                max={today}
                 style={styles.input}
               />
             </div>
@@ -151,7 +205,8 @@ const OperadorDashboard = () => {
           </div>
         </div>
 
-        <div style={styles.tableContainer}>
+        {/* Agregamos opacidad a la tabla cuando se está filtrando para dar feedback visual */}
+        <div style={{...styles.tableContainer, opacity: isFetching ? 0.6 : 1, transition: 'opacity 0.2s'}}>
           {registros.length > 0 ? (
             <table style={styles.table}>
               <thead>
@@ -309,7 +364,7 @@ const OperadorDashboard = () => {
               </button>
             </div>
             <div style={styles.modalContent}>
-              {/* ✅ MOSTRAR SPINNER MIENTRAS CARGA EL MODAL */}
+              {/* Spinner de carga superpuesto */}
               {modalLoading && (
                 <div style={styles.modalLoading}>
                   <div style={styles.modalSpinner}></div>
@@ -319,7 +374,7 @@ const OperadorDashboard = () => {
               <RegistroScrapCompleto
                 onRegistroCreado={handleRegistroCreado}
                 onCancelar={() => setShowModal(false)}
-                onLoadComplete={handleModalLoaded} // ✅ PROP NUEVA PARA NOTIFICAR CUANDO TERMINA DE CARGAR
+                onLoadComplete={handleModalLoaded}
               />
             </div>
           </div>
@@ -365,52 +420,66 @@ const styles = {
     margin: `${spacing.xs} 0 0 0`,
     fontWeight: typography.weights.medium
   },
+  loadingContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    textAlign: 'center',
+    color: colors.gray500
+  },
   loading: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
-    backgroundColor: colors.background
+    backgroundColor: colors.background,
+    flexDirection: 'column'
   },
-  loadingContent: {
-    textAlign: 'center',
-    color: colors.gray500
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.sizes.lg,
+    color: colors.gray600,
+    fontWeight: typography.weights.medium
   },
   spinner: {
-    width: '40px',
-    height: '40px',
-    border: `4px solid ${colors.gray200}`,
-    borderTop: `4px solid ${colors.primary}`,
+    width: '60px',
+    height: '60px',
+    border: `3px solid ${colors.primaryLight}`,
+    borderTop: `3px solid ${colors.primary}`,
+    borderRight: `3px solid ${colors.secondary}`,
+    borderBottom: `3px solid ${colors.secondary}`,
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    margin: `0 auto ${spacing.md}`
+    animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
   },
-  
-  // ✅ NUEVOS ESTILOS PARA EL LOADING DEL MODAL
+  // ESTILOS LOADING MODAL
   modalLoading: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    zIndex: 20, 
     borderRadius: radius.lg
   },
   modalSpinner: {
-    width: '50px',
-    height: '50px',
-    border: `4px solid ${colors.gray200}`,
-    borderTop: `4px solid ${colors.primary}`,
+    width: '60px',
+    height: '60px',
+    border: `3px solid ${colors.primaryLight}`,
+    borderTop: `3px solid ${colors.primary}`,
+    borderRight: `3px solid ${colors.secondary}`,
+    borderBottom: `3px solid ${colors.secondary}`,
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: spacing.md
+    animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
   },
   modalLoadingText: {
+    marginTop: spacing.md,
     fontSize: typography.sizes.lg,
     color: colors.gray600,
     fontWeight: typography.weights.medium,
@@ -440,10 +509,17 @@ const styles = {
     alignItems: 'center',
     gap: spacing.xs
   },
+  miniLoader: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
+    marginLeft: spacing.md,
+    animation: 'pulse 1.5s infinite'
+  },
   filters: {
     display: 'flex',
     gap: spacing.md,
-    alignItems: 'flex-end', // Alinear al fondo para que coincida con los labels
+    alignItems: 'flex-end',
     flexWrap: 'wrap'
   },
   filterGroup: {
@@ -458,7 +534,6 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.05em'
   },
-  // SELECTS MÁS PEQUEÑOS
   select: {
     ...baseComponents.select,
     padding: `0 ${spacing.sm}`,
@@ -475,7 +550,6 @@ const styles = {
     backgroundSize: '14px 14px',
     paddingRight: '32px'
   },
-  // INPUT MÁS PEQUEÑO
   input: {
     ...baseComponents.input,
     padding: `0 ${spacing.sm}`,
@@ -660,7 +734,7 @@ const styles = {
     opacity: 0.7,
     marginBottom: spacing.lg
   },
-   modalOverlay: {
+  modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
@@ -685,7 +759,7 @@ const styles = {
     border: `1px solid ${colors.gray200}`,
     display: 'flex',
     flexDirection: 'column',
-    position: 'relative' // ✅ IMPORTANTE: Para posicionar el loading absoluto
+    position: 'relative'
   },
   modalHeader: {
     padding: spacing.lg,
@@ -715,7 +789,7 @@ const styles = {
     flex: 1,
     overflow: 'auto',
     padding: 0,
-    position: 'relative' // ✅ IMPORTANTE: Para posicionar el loading absoluto
+    position: 'relative'
   },
   closeBtn: {
     background: 'none',
@@ -735,26 +809,29 @@ const styles = {
       backgroundColor: colors.gray200,
       color: colors.gray700
     }
-  },
-  primaryButton: {
-    ...baseComponents.buttonPrimary,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacing.xs,
-    padding: `${spacing.sm} ${spacing.lg}`,
-    height: '42px'
   }
 };
 
 // Agregar la animación del spinner
 const styleSheet = document.styleSheets[0];
 if (styleSheet) {
-  styleSheet.insertRule(`
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  `, styleSheet.cssRules.length);
+  try {
+    styleSheet.insertRule(`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `, styleSheet.cssRules.length);
+    styleSheet.insertRule(`
+      @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+      }
+    `, styleSheet.cssRules.length);
+  } catch (e) {
+    // Regla ya existe o error de seguridad en CORS, ignorar
+  }
 }
 
 export default OperadorDashboard;

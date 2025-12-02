@@ -1,103 +1,216 @@
-/* src/components/RegistroScrapCompleto.js - VERSIÓN SIN PREGUARDADO */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+/* src/components/RegistroScrapCompleto.js - VERSIÓN FINAL ULTRA-RÁPIDA (Memoizada) */
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
 import { useToast } from '../context/ToastContext';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 
+// Componente de Fila Memoizado
+const ScrapRow = React.memo(({ 
+  fila, 
+  realIndex, 
+  tiposScrap, 
+  campoBasculaActivo, 
+  celdaActiva, 
+  pesoBloqueado, 
+  onFocus, 
+  onChange 
+}) => {
+  const estaActiva = celdaActiva?.areaIndex === realIndex;
+  const tieneDatos = fila.peso_total > 0;
+
+  return (
+    <tr
+      style={{
+        ...styles.tableRow,
+        ...(estaActiva ? styles.activeRow : {}),
+        ...(tieneDatos ? styles.dataRow : {})
+      }}
+    >
+      <td style={styles.areaCell}>
+        <div style={styles.areaContent}>
+          <span style={styles.areaText}>{fila.area_real}</span>
+          {estaActiva && <div style={styles.activePulse}></div>}
+        </div>
+      </td>
+      <td style={styles.machineCell}>
+        <strong style={styles.machineText}>{fila.maquina_real}</strong>
+      </td>
+
+      {tiposScrap.map(tipo => {
+        const valor = fila[tipo.columna_db];
+        const celdaEstaActiva = estaActiva && campoBasculaActivo === tipo.columna_db;
+        const tieneValor = valor > 0;
+
+        return (
+          <td key={tipo.columna_db} style={{
+            ...styles.dataCell,
+            ...(celdaEstaActiva ? styles.activeColumn : {})
+          }}>
+            <div style={styles.inputWrapper}>
+              <input
+                type="number"
+                step="0.001"
+                value={valor || ''}
+                onChange={(e) => onChange(realIndex, tipo.columna_db, e.target.value)}
+                onFocus={() => onFocus(realIndex, tipo.columna_db, fila.area_real, fila.maquina_real)}
+                style={{
+                  ...styles.inputCell,
+                  ...(tieneValor ? styles.hasData : {}),
+                  ...(celdaEstaActiva ? styles.activeInput : {}),
+                  ...(pesoBloqueado && celdaEstaActiva ? styles.frozenInput : {}), 
+                  ...(pesoBloqueado && !celdaEstaActiva ? styles.disabledInput : {})
+                }}
+                placeholder="-"
+                disabled={pesoBloqueado} 
+              />
+            </div>
+          </td>
+        );
+      })}
+
+      <td style={styles.totalCell}>
+        <strong style={styles.totalValue}>{fila.peso_total.toFixed(2)}</strong>
+      </td>
+    </tr>
+  );
+}, (prevProps, nextProps) => {
+  if (prevProps.fila === nextProps.fila && 
+      prevProps.campoBasculaActivo === nextProps.campoBasculaActivo &&
+      prevProps.pesoBloqueado === nextProps.pesoBloqueado) {
+      
+      const prevActive = prevProps.celdaActiva?.areaIndex === prevProps.realIndex;
+      const nextActive = nextProps.celdaActiva?.areaIndex === nextProps.realIndex;
+      
+      if (prevActive === nextActive) {
+          return true;
+      }
+  }
+  return false;
+});
+
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete }) => {
   const { addToast } = useToast();
+  
+  // Estados de datos
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tablaData, setTablaData] = useState([]);
+  
+  // Estados de interfaz / filtros
+  const [filtroArea, setFiltroArea] = useState('');
+  const [filtroMaquina, setFiltroMaquina] = useState('');
   const [campoBasculaActivo, setCampoBasculaActivo] = useState('peso_cobre');
-  const [enviando, setEnviando] = useState(false);
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
-  // Estado para el formulario principal
+  // Estados derivados
+  const [areasDisponibles, setAreasDisponibles] = useState([]);
+  const [maquinasDisponibles, setMaquinasDisponibles] = useState([]);
+
+  // Estado de selección
+  const [maquinaSeleccionada, setMaquinaSeleccionada] = useState({
+    area: '',
+    maquina: '',
+    index: null
+  });
+  const [celdaActiva, setCeldaActiva] = useState(null);
+
+  // Formulario global
   const [formData, setFormData] = useState({
     turno: '',
     fecha: new Date().toISOString().split('T')[0]
   });
 
-  // Estado para los datos de la tabla
-  const [tablaData, setTablaData] = useState([]);
-  const [celdaActiva, setCeldaActiva] = useState(null);
+  // REFS
+  const maquinaSeleccionadaRef = useRef(maquinaSeleccionada);
+  const celdaActivaRef = useRef(celdaActiva);
+  const pesoBloqueadoRef = useRef(pesoBloqueado);
+  const campoBasculaActivoRef = useRef(campoBasculaActivo);
+  
+  // Ref para el peso congelado
+  const pesoCongeladoRef = useRef(0);
+  
+  // Sincronizar refs
+  useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
+  useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
+  useEffect(() => { pesoBloqueadoRef.current = pesoBloqueado; }, [pesoBloqueado]);
+  useEffect(() => { campoBasculaActivoRef.current = campoBasculaActivo; }, [campoBasculaActivo]);
 
-  // Estado para filtros
-  const [filtroArea, setFiltroArea] = useState('');
-  const [filtroMaquina, setFiltroMaquina] = useState('');
-  const [areasDisponibles, setAreasDisponibles] = useState([]);
-  const [maquinasDisponibles, setMaquinasDisponibles] = useState([]);
+  // Memoizar tiposScrap
+  const tiposScrap = useMemo(() => {
+    return config?.tipos_scrap ? Object.values(config.tipos_scrap).flat() : [];
+  }, [config]);
 
-  const ultimoPesoRef = useRef(null);
+  // 1. CARGA INICIAL
+  useEffect(() => {
+    let mounted = true;
 
-  // Cargar configuración
-  const loadConfig = useCallback(async () => {
-    try {
-      console.log('🔧 Cargando configuración...');
-      const configData = await apiClient.getRegistrosConfig();
-      console.log('📋 Configuración recibida:', configData);
-      setConfig(configData);
+    const initData = async () => {
+      try {
+        console.log('🔧 Cargando configuración...');
+        const configData = await apiClient.getRegistrosConfig();
+        
+        if (!mounted) return;
+        
+        setConfig(configData);
 
-      if (configData?.areas_maquinas) {
-        const data = [];
-        const areas = [];
+        if (configData?.areas_maquinas) {
+          const data = [];
+          const areas = [];
 
-        Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
-          areas.push(areaNombre);
-          maquinas.forEach(maquina => {
-            data.push({
-              area_real: areaNombre,
-              maquina_real: maquina.maquina_nombre,
-              peso_cobre: 0,
-              peso_cobre_estanado: 0,
-              peso_purga_pvc: 0,
-              peso_purga_pe: 0,
-              peso_purga_pur: 0,
-              peso_purga_pp: 0,
-              peso_cable_pvc: 0,
-              peso_cable_pe: 0,
-              peso_cable_pur: 0,
-              peso_cable_pp: 0,
-              peso_cable_aluminio: 0,
-              peso_cable_estanado_pvc: 0,
-              peso_cable_estanado_pe: 0,
-              peso_total: 0,
-              conexion_bascula: false
+          Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
+            areas.push(areaNombre);
+            maquinas.forEach(maquina => {
+              data.push({
+                area_real: areaNombre,
+                maquina_real: maquina.maquina_nombre,
+                peso_cobre: 0,
+                peso_cobre_estanado: 0,
+                peso_purga_pvc: 0,
+                peso_purga_pe: 0,
+                peso_purga_pur: 0,
+                peso_purga_pp: 0,
+                peso_cable_pvc: 0,
+                peso_cable_pe: 0,
+                peso_cable_pur: 0,
+                peso_cable_pp: 0,
+                peso_cable_aluminio: 0,
+                peso_cable_estanado_pvc: 0,
+                peso_cable_estanado_pe: 0,
+                peso_total: 0,
+                conexion_bascula: false
+              });
             });
           });
-        });
 
-        setTablaData(data);
-        setAreasDisponibles(areas);
-        console.log('📊 Tabla inicializada con', data.length, 'filas');
+          setTablaData(data);
+          setAreasDisponibles(areas);
+        }
+      } catch (error) {
+        if (mounted) {
+          addToast('Error cargando configuración: ' + error.message, 'error');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+          if (onLoadComplete) onLoadComplete();
+        }
       }
-    } catch (error) {
-      console.error('❌ Error cargando configuración:', error);
-      addToast('Error cargando configuración: ' + error.message, 'error');
-    } finally {
-      setLoading(false);
-      // ✅ NOTIFICAR QUE LA CARGA HA TERMINADO
-      if (onLoadComplete) {
-        onLoadComplete();
-      }
-    }
-  }, [addToast, onLoadComplete]); // ✅ AGREGAR onLoadComplete A LAS DEPENDENCIAS
+    };
 
-  useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
+    initData();
+    return () => { mounted = false; };
+  }, []); 
 
-  // Filtrar maquinas cuando cambia el área
+  // 2. LÓGICA DE FILTROS Y SELECCIÓN AUTOMÁTICA MEJORADA
   useEffect(() => {
     if (!config?.areas_maquinas || !filtroArea) {
       setMaquinasDisponibles([]);
       return;
     }
-
     const maquinas = config.areas_maquinas[filtroArea]?.map(m => m.maquina_nombre) || [];
     setMaquinasDisponibles(maquinas);
-
     if (maquinas.length === 1) {
       setFiltroMaquina(maquinas[0]);
     } else {
@@ -105,75 +218,32 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, [filtroArea, config]);
 
-  // Manejar peso desde báscula
-  const handlePesoFromBascula = useCallback((peso, campo = campoBasculaActivo) => {
-    if (pesoBloqueado) {
-      console.log('⏸️ Peso bloqueado, no se actualiza');
-      return;
-    }
-
-    if (!campo || peso === undefined || peso === null) {
-      console.warn('❌ No hay campo activo o peso inválido:', { campo, peso });
-      return;
-    }
-
-    console.log('🎯 Asignando peso:', { peso, campo, celdaActiva });
-
-    // Si tenemos una celda activa específica, actualizar esa
-    if (celdaActiva && celdaActiva.areaIndex !== undefined) {
-      const { areaIndex } = celdaActiva;
-
-      setTablaData(prev => {
-        const newData = [...prev];
-        if (newData[areaIndex]) {
-          const nuevoValor = parseFloat(peso) || 0;
-          newData[areaIndex] = {
-            ...newData[areaIndex],
-            [campo]: nuevoValor,
-            conexion_bascula: nuevoValor > 0,
-            peso_total: calcularTotalFila({ ...newData[areaIndex], [campo]: nuevoValor })
-          };
-        }
-        return newData;
-      });
-
-      if (peso > 0) {
-        addToast(`✅ Peso ${peso}kg asignado a ${campo}`, 'success');
-      }
-    }
-    // Si no hay celda activa pero tenemos filtros de área/máquina, actualizar esa fila
-    else if (filtroArea && filtroMaquina) {
-      const index = tablaData.findIndex(fila =>
-        fila.area_real === filtroArea && fila.maquina_real === filtroMaquina
-      );
-
+  // EFECTO DE SINCRONIZACIÓN TOTAL: FILTROS -> TABLA
+  useEffect(() => {
+    const filtrosCompletos = filtroArea && filtroMaquina && campoBasculaActivo;
+    
+    if (filtrosCompletos && tablaData.length > 0) {
+      // 1. Buscar la fila correspondiente
+      const index = tablaData.findIndex(r => r.area_real === filtroArea && r.maquina_real === filtroMaquina);
+      
       if (index !== -1) {
-        setTablaData(prev => {
-          const newData = [...prev];
-          const nuevoValor = parseFloat(peso) || 0;
-          newData[index] = {
-            ...newData[index],
-            [campo]: nuevoValor,
-            conexion_bascula: nuevoValor > 0,
-            peso_total: calcularTotalFila({ ...newData[index], [campo]: nuevoValor })
-          };
-          return newData;
-        });
+        const filaDiferente = maquinaSeleccionada.index !== index;
+        const columnaDiferente = celdaActiva?.campo !== campoBasculaActivo;
 
-        setCeldaActiva({ areaIndex: index, campo });
-        if (peso > 0) {
-          addToast(`✅ Peso ${peso}kg asignado a ${campo} en ${filtroMaquina}`, 'success');
+        if (filaDiferente || columnaDiferente) {
+          console.log('🔄 Auto-seleccionando celda por filtros:', { index, campo: campoBasculaActivo });
+          
+          setMaquinaSeleccionada({ area: filtroArea, maquina: filtroMaquina, index });
+          setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
+          
+          // ✅ SIEMPRE desbloquear al cambiar cualquiera de los 3 filtros
+          setPesoBloqueado(false);
         }
       }
     }
-    else {
-      addToast('⚠️ Selecciona un área y máquina primero', 'warning');
-    }
+  }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
-    ultimoPesoRef.current = peso;
-  }, [pesoBloqueado, celdaActiva, campoBasculaActivo, addToast, tablaData, filtroArea, filtroMaquina]);
-
-  // Calcular total por fila
+  // 3. CALCULAR TOTALES FILA (Helper puro)
   const calcularTotalFila = (fila) => {
     const camposPeso = [
       'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
@@ -184,26 +254,99 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     return camposPeso.reduce((total, campo) => total + (parseFloat(fila[campo]) || 0), 0);
   };
 
-  // Manejar cambio manual de input en tabla
-  const handleInputChangeTabla = (areaIndex, campo, valor) => {
+  // 4. MANEJO DE BÁSCULA INTELIGENTE
+  const handlePesoFromBascula = useCallback((pesoInput) => {
+    const currentBloqueado = pesoBloqueadoRef.current;
+    const currentMaquinaSel = maquinaSeleccionadaRef.current;
+    const currentCelda = celdaActivaRef.current;
+    const campoDestino = campoBasculaActivoRef.current;
+
+    if (!campoDestino) return;
+
+    let nuevoValor = 0;
+
+    if (currentBloqueado) {
+        // MODO CONGELADO
+        nuevoValor = pesoCongeladoRef.current || 0;
+    } else {
+        // MODO VIVO
+        if (pesoInput === undefined || pesoInput === null) return;
+        nuevoValor = parseFloat(pesoInput) || 0;
+        pesoCongeladoRef.current = nuevoValor;
+    }
+    
+    // Determinar destino
+    let targetIndex = -1;
+    if (currentMaquinaSel.index !== null) {
+      targetIndex = currentMaquinaSel.index;
+    } else if (currentCelda && currentCelda.areaIndex !== undefined) {
+      targetIndex = currentCelda.areaIndex;
+    }
+
+    if (targetIndex !== -1) {
+      setTablaData(prevData => {
+        // Optimización: si el valor es igual, no actualizar
+        const valorActual = prevData[targetIndex][campoDestino];
+        if (Math.abs(valorActual - nuevoValor) < 0.001) {
+            return prevData; 
+        }
+
+        const newData = [...prevData];
+        const filaActualizada = {
+          ...newData[targetIndex],
+          [campoDestino]: nuevoValor,
+          conexion_bascula: nuevoValor > 0
+        };
+        filaActualizada.peso_total = calcularTotalFila(filaActualizada);
+        newData[targetIndex] = filaActualizada;
+        
+        return newData;
+      });
+    }
+  }, []);
+
+  // ✅ FUNCIONES DE INTERACCIÓN
+  
+  const handleMaterialChange = (newMaterial) => {
+    setCampoBasculaActivo(newMaterial);
+  };
+
+  const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
+    if (celdaActivaRef.current?.areaIndex === areaIndex && campoBasculaActivoRef.current === campo) {
+        return;
+    }
+
+    setCeldaActiva({ areaIndex, campo });
+    setCampoBasculaActivo(campo);
+    setMaquinaSeleccionada({
+      area: area,
+      maquina: maquina,
+      index: areaIndex
+    });
+    
+    setFiltroArea(area);
+    setFiltroMaquina(maquina);
+
+    // Desbloquear al tocar manualmente
+    setPesoBloqueado(false);
+  }, []);
+
+  const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
     setTablaData(prev => {
+      const val = parseFloat(valor) || 0;
+      if (prev[areaIndex][campo] === val) return prev;
+
       const newData = [...prev];
       newData[areaIndex] = {
         ...newData[areaIndex],
-        [campo]: parseFloat(valor) || 0,
-        peso_total: calcularTotalFila({ ...newData[areaIndex], [campo]: parseFloat(valor) || 0 })
+        [campo]: val,
+        peso_total: calcularTotalFila({ ...newData[areaIndex], [campo]: val })
       };
       return newData;
     });
-  };
+  }, []);
 
-  // Activar celda para báscula
-  const activarCeldaParaBascula = (areaIndex, campo) => {
-    setCeldaActiva({ areaIndex, campo });
-    setCampoBasculaActivo(campo);
-  };
-
-  // Enviar todos los registros
+  // Enviar formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -212,9 +355,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       return;
     }
 
-    const filasConPeso = tablaData.filter(fila =>
-      Object.keys(fila).some(k => k.startsWith('peso_') && parseFloat(fila[k]) > 0)
-    );
+    const filasConPeso = tablaData.filter(fila => fila.peso_total > 0);
 
     if (filasConPeso.length === 0) {
       addToast('Ingrese al menos un peso en alguna fila', 'warning');
@@ -225,37 +366,35 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     try {
       const promises = filasConPeso.map(fila => {
         const datosEnvio = {
-          turno: formData.turno,
-          area_real: fila.area_real,
-          maquina_real: fila.maquina_real,
-          conexion_bascula: fila.conexion_bascula || false,
-          numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          observaciones: 'Registro múltiple desde tabla',
-          material_seleccionado: campoBasculaActivo,
-          peso_actual: fila[campoBasculaActivo] || 0,
-          ...fila
+            turno: formData.turno,
+            fecha_registro: formData.fecha,
+            area_real: fila.area_real,
+            maquina_real: fila.maquina_real,
+            conexion_bascula: fila.conexion_bascula || false,
+            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+            observaciones: 'Registro masivo',
+            material_seleccionado: campoBasculaActivo, 
+            peso_actual: fila[campoBasculaActivo] || 0,
+            ...fila
         };
         return apiClient.createRegistroScrap(datosEnvio);
       });
 
-      const resultados = await Promise.all(promises);
-      addToast(`${resultados.length} registros guardados exitosamente`, 'success');
-
-      if (onRegistroCreado) {
-        onRegistroCreado();
-      }
+      await Promise.all(promises);
+      if (onRegistroCreado) onRegistroCreado();
 
     } catch (error) {
-      console.error('❌ Error guardando registros:', error);
-      addToast('Error al guardar registros: ' + error.message, 'error');
+      console.error('❌ Error:', error);
+      addToast('Error al guardar: ' + error.message, 'error');
     } finally {
       setEnviando(false);
     }
   };
 
-  // Calcular totales por columna
-  const calcularTotalesColumnas = () => {
-    const totales = {};
+  // ✅ OPTIMIZACIÓN: CÁLCULOS MEMOIZADOS
+  // Esto evita que se recalcule TODA la suma en cada "tick" de la báscula, reduciendo el lag
+  const totales = useMemo(() => {
+    const acc = {};
     const camposPeso = [
       'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
       'peso_purga_pur', 'peso_purga_pp', 'peso_cable_pvc', 'peso_cable_pe',
@@ -263,38 +402,41 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       'peso_cable_estanado_pvc', 'peso_cable_estanado_pe'
     ];
 
-    camposPeso.forEach(campo => {
-      totales[campo] = tablaData.reduce((sum, fila) => sum + (parseFloat(fila[campo]) || 0), 0);
+    // Inicializar
+    camposPeso.forEach(c => acc[c] = 0);
+    acc.general = 0;
+
+    // Sumar
+    tablaData.forEach(fila => {
+        camposPeso.forEach(c => {
+            acc[c] += (parseFloat(fila[c]) || 0);
+        });
+        acc.general += (parseFloat(fila.peso_total) || 0);
     });
 
-    totales.general = tablaData.reduce((sum, fila) => sum + (parseFloat(fila.peso_total) || 0), 0);
-    return totales;
-  };
+    return acc;
+  }, [tablaData]); // Solo se recalcula si tablaData cambia, pero es mucho más rápido
 
-  // Filtrar datos para mostrar
-  const datosFiltrados = tablaData.filter(fila => {
-    if (filtroArea && fila.area_real !== filtroArea) return false;
-    if (filtroMaquina && fila.maquina_real !== filtroMaquina) return false;
-    return true;
-  });
+  // ✅ OPTIMIZACIÓN: FILTRO MEMOIZADO
+  const datosFiltrados = useMemo(() => {
+    return tablaData.filter(fila => {
+        if (filtroArea && fila.area_real !== filtroArea) return false;
+        if (filtroMaquina && fila.maquina_real !== filtroMaquina) return false;
+        return true;
+    });
+  }, [tablaData, filtroArea, filtroMaquina]);
 
   if (loading) {
-    return (
-      <div style={styles.loading}>
-        <div style={styles.spinner}></div>
-        <p style={styles.loadingText}>Cargando configuración de máquinas...</p>
-      </div>
-    );
+    // ✅ FIX: Usar estilo correcto para que tenga altura
+    return <div style={styles.loading}><p>Cargando datos...</p></div>;
   }
 
-  const totales = calcularTotalesColumnas();
-  const tiposScrap = config?.tipos_scrap ? Object.values(config.tipos_scrap).flat() : [];
   const filasConPeso = tablaData.filter(fila => fila.peso_total > 0).length;
 
   return (
     <div style={styles.container}>
       <form onSubmit={handleSubmit} style={styles.form}>
-        {/* CONTROLES PRINCIPALES - CORREGIDOS */}
+        {/* CONTROLES PRINCIPALES */}
         <div style={styles.controls}>
           {/* Báscula */}
           <div style={styles.section}>
@@ -304,7 +446,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
             />
           </div>
 
-          {/* Configuración - BOTONES E INPUTS ALINEADOS */}
+          {/* Configuración */}
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>📋 Configuración de Registro</h3>
             <div style={styles.configGrid}>
@@ -337,7 +479,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 <label style={styles.label}>Material Activo</label>
                 <select
                   value={campoBasculaActivo}
-                  onChange={(e) => setCampoBasculaActivo(e.target.value)}
+                  onChange={(e) => handleMaterialChange(e.target.value)}
                   style={styles.selectPrimary}
                 >
                   {tiposScrap.map(t => (
@@ -384,45 +526,51 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                   onClick={() => setPesoBloqueado(!pesoBloqueado)}
                   style={pesoBloqueado ? styles.btnLocked : styles.btnUnlocked}
                 >
-                  {pesoBloqueado ? '🔒 Bloqueada' : '🔓 Activa'}
+                  {pesoBloqueado ? '🔒 CONGELADO' : '🔓 LEYENDO...'}
                 </button>
               </div>
             </div>
 
-            {/* Indicador de Selección */}
-            {celdaActiva && (
-              <div style={styles.activeMachine}>
-                <div style={styles.activeMachineHeader}>
-                  <span style={styles.activeMachineIcon}>🎯</span>
-                  <strong style={styles.activeMachineTitle}>Máquina Activa para Báscula</strong>
-                </div>
-                <div style={styles.activeMachineDetails}>
-                  <span style={styles.activeMachineText}>
-                    {tablaData[celdaActiva.areaIndex]?.maquina_real} - {tablaData[celdaActiva.areaIndex]?.area_real}
-                  </span>
-                  <span style={styles.activeMachineSubtext}>
-                    Material: {tiposScrap.find(t => t.columna_db === campoBasculaActivo)?.tipo_nombre}
-                  </span>
-                </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Máquina Fijada</label>
+              <div style={styles.fixedMachineDisplay}>
+                {maquinaSeleccionada.maquina ? (
+                  <>
+                    <strong style={styles.fixedMachineName}>{maquinaSeleccionada.maquina}</strong>
+                    <span style={styles.fixedMachineArea}>{maquinaSeleccionada.area}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMaquinaSeleccionada({ area: '', maquina: '', index: null });
+                        setCeldaActiva(null);
+                      }}
+                      style={styles.unfixButton}
+                      title="Liberar máquina"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <span style={styles.noFixedMachine}>Ninguna (Click en tabla)</span>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* TABLA ANTERIOR MEJORADA - CON MEJOR DISTRIBUCIÓN */}
+        {/* TABLA DE DATOS */}
         <div style={styles.dataSection}>
           <div style={styles.tableHeader}>
             <div style={styles.tableTitleSection}>
-              <h3 style={styles.sectionTitle}>📊 Datos de Producción - Todos los Materiales</h3>
+              <h3 style={styles.sectionTitle}>📊 Datos de Producción</h3>
               <p style={styles.tableSubtitle}>
                 {filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}
                 {filtroMaquina ? ` | Máquina: ${filtroMaquina}` : ''}
-                {celdaActiva ? ` | Activa: ${tablaData[celdaActiva.areaIndex]?.maquina_real}` : ''}
               </p>
             </div>
             <div style={styles.stats}>
               <div style={styles.statItem}>
-                <span style={styles.statLabel}>Máquinas</span>
+                <span style={styles.statLabel}>Máquinas Visibles</span>
                 <strong style={styles.statValue}>{datosFiltrados.length}</strong>
               </div>
               <div style={styles.statItem}>
@@ -449,194 +597,61 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                     }}>
                       <div style={styles.columnHeader}>
                         <span style={styles.columnName}>{tipo.tipo_nombre}</span>
-                        <span style={styles.columnUnit}>(kg)</span>
                         {campoBasculaActivo === tipo.columna_db && (
                           <div style={styles.activeColumnIndicator}></div>
                         )}
                       </div>
                     </th>
                   ))}
-                  <th style={styles.tableHeaderCell} className="fixed-column">
-                    <div style={styles.columnHeader}>
-                      <span>TOTAL</span>
-                      <span style={styles.columnUnit}>(kg)</span>
-                    </div>
-                  </th>
+                  <th style={styles.tableHeaderCell}>TOTAL</th>
                 </tr>
               </thead>
               <tbody>
-                {datosFiltrados.map((fila, index) => {
-                  const realIndex = tablaData.findIndex(item =>
+                {datosFiltrados.map((fila) => {
+                  const realIndex = tablaData.findIndex(item => 
                     item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
                   );
-                  const estaActiva = celdaActiva?.areaIndex === realIndex;
-                  const tieneDatos = fila.peso_total > 0;
-
+                  
                   return (
-                    <tr
+                    <ScrapRow
                       key={`${fila.area_real}-${fila.maquina_real}`}
-                      style={{
-                        ...styles.tableRow,
-                        ...(estaActiva ? styles.activeRow : {}),
-                        ...(tieneDatos ? styles.dataRow : {})
-                      }}
-                    >
-                      <td style={styles.areaCell}>
-                        <div style={styles.areaContent}>
-                          <span style={styles.areaText}>{fila.area_real}</span>
-                          {estaActiva && <div style={styles.activePulse}></div>}
-                        </div>
-                      </td>
-                      <td style={styles.machineCell}>
-                        <div style={styles.machineContent}>
-                          <strong style={styles.machineText}>{fila.maquina_real}</strong>
-                          {estaActiva && (
-                            <div style={styles.activeIndicator}>
-                              <span style={styles.activeDot}></span>
-                              Activa
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {tiposScrap.map(tipo => {
-                        const valor = fila[tipo.columna_db];
-                        const celdaEstaActiva = estaActiva && campoBasculaActivo === tipo.columna_db;
-                        const tieneValor = valor > 0;
-
-                        return (
-                          <td key={tipo.columna_db} style={{
-                            ...styles.dataCell,
-                            ...(campoBasculaActivo === tipo.columna_db ? styles.activeColumn : {})
-                          }}>
-                            <div style={styles.inputWrapper}>
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={valor || ''}
-                                onChange={(e) => handleInputChangeTabla(realIndex, tipo.columna_db, e.target.value)}
-                                onFocus={() => activarCeldaParaBascula(realIndex, tipo.columna_db)}
-                                style={{
-                                  ...styles.inputCell,
-                                  ...(tieneValor ? styles.hasData : {}),
-                                  ...(celdaEstaActiva ? styles.activeInput : {}),
-                                  ...(pesoBloqueado ? styles.disabledInput : {})
-                                }}
-                                placeholder="0.000"
-                                disabled={pesoBloqueado}
-                              />
-                              {tieneValor && (
-                                <div style={styles.valueIndicator}></div>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-
-                      <td style={styles.totalCell}>
-                        <div style={styles.totalContent}>
-                          <strong style={styles.totalValue}>{fila.peso_total.toFixed(3)}</strong>
-                          {tieneDatos && (
-                            <div style={styles.dataBadge}>
-                              ✓
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                      fila={fila}
+                      realIndex={realIndex}
+                      tiposScrap={tiposScrap}
+                      campoBasculaActivo={campoBasculaActivo}
+                      celdaActiva={celdaActiva}
+                      pesoBloqueado={pesoBloqueado}
+                      onFocus={handleCellFocus}
+                      onChange={handleInputChangeTabla}
+                    />
                   );
                 })}
 
-                {/* FILA DE TOTALES MEJORADA */}
+                {/* FILA DE TOTALES */}
                 <tr style={styles.totalsRow}>
-                  <td style={styles.totalsLabelCell} colSpan="2">
-                    <div style={styles.totalsLabelContent}>
-                      <span style={styles.totalsIcon}>📈</span>
-                      TOTALES
-                    </div>
-                  </td>
+                  <td style={styles.totalsLabelCell} colSpan="2">TOTALES</td>
                   {tiposScrap.map(tipo => (
                     <td key={tipo.columna_db} style={styles.columnTotalCell}>
-                      <div style={styles.columnTotalContent}>
-                        <strong style={styles.columnTotalValue}>
-                          {totales[tipo.columna_db].toFixed(1)}
-                        </strong>
-                        <div style={styles.totalBarContainer}>
-                          <div
-                            style={{
-                              ...styles.totalBar,
-                              width: `${Math.min((totales[tipo.columna_db] / (totales.general || 1)) * 100, 100)}%`
-                            }}
-                          ></div>
-                        </div>
-                      </div>
+                      <strong style={styles.columnTotalValue}>
+                        {totales[tipo.columna_db].toFixed(1)}
+                      </strong>
                     </td>
                   ))}
                   <td style={styles.grandTotalCell}>
-                    <div style={styles.grandTotalContent}>
-                      <strong style={styles.grandTotalValue}>{totales.general.toFixed(1)}</strong>
-                    </div>
+                    <strong style={styles.grandTotalValue}>{totales.general.toFixed(1)}</strong>
                   </td>
                 </tr>
               </tbody>
             </table>
-          </div>
-
-          {/* LEYENDA MEJORADA */}
-          <div style={styles.tableFooter}>
-            <div style={styles.legend}>
-              <div style={styles.legendItem}>
-                <div style={{ ...styles.legendColor, backgroundColor: colors.primaryLight }}></div>
-                <span>Material activo</span>
-              </div>
-              <div style={styles.legendItem}>
-                <div style={{ ...styles.legendColor, backgroundColor: colors.secondaryLight }}></div>
-                <span>Con datos</span>
-              </div>
-              <div style={styles.legendItem}>
-                <div style={styles.legendColor}></div>
-                <span>Fila activa</span>
-              </div>
-            </div>
-            <div style={styles.statusInfo}>
-              <span style={styles.statusText}>
-                {pesoBloqueado ? '🔒 Báscula Bloqueada' : '🔓 Báscula Activa'}
-              </span>
-            </div>
           </div>
         </div>
 
         {/* ACCIONES */}
         <div style={styles.actions}>
           <div style={styles.summary}>
-            <div style={styles.summaryContent}>
-              <div style={styles.summaryIconContainer}>
-                <span style={styles.summaryIcon}>📋</span>
-              </div>
-              <div style={styles.summaryText}>
-                <div style={styles.summaryMain}>
-                  <strong style={styles.summaryCount}>
-                    {filasConPeso} registro{filasConPeso !== 1 ? 's' : ''} listo{filasConPeso !== 1 ? 's' : ''}
-                  </strong>
-                  <div style={styles.summaryTotal}>
-                    Total general: <strong style={styles.totalWeight}>{totales.general.toFixed(3)} kg</strong>
-                  </div>
-                </div>
-                {/* ELIMINAMOS LA ALERTA DESALINEADA */}
-                {filasConPeso > 0 && !formData.turno && (
-                  <div style={styles.infoMessage}>
-                    <span style={styles.infoIcon}>ℹ️</span>
-                    <span style={styles.infoText}>Selecciona un turno para guardar</span>
-                  </div>
-                )}
-                {filasConPeso > 0 && formData.turno && (
-                  <div style={styles.readyIndicator}>
-                    <span style={styles.readyIcon}>✅</span>
-                    <span style={styles.readyText}>Listo para guardar</span>
-                  </div>
-                )}
-              </div>
-            </div>
+             <span style={styles.summaryCount}>
+                {filasConPeso} registros listos | Total: {totales.general.toFixed(2)} kg
+             </span>
           </div>
           <div style={styles.actionButtons}>
             <button
@@ -644,7 +659,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               onClick={onCancelar}
               style={styles.btnCancel}
             >
-              <span style={styles.btnIcon}>↩️</span>
               Cancelar
             </button>
             <button
@@ -652,19 +666,13 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               disabled={enviando || !formData.turno || filasConPeso === 0}
               style={{
                 ...styles.btnSave,
-                ...(enviando || !formData.turno || filasConPeso === 0 ? styles.btnDisabled : {}),
-                ...(enviando ? styles.btnLoading : {})
+                ...(enviando || !formData.turno || filasConPeso === 0 ? styles.btnDisabled : {})
               }}
             >
-              <span style={styles.btnIcon}>
-                {enviando ? '⏳' : '💾'}
-              </span>
-              {enviando ? 'Guardando...' : `Guardar ${filasConPeso} Registro${filasConPeso !== 1 ? 's' : ''}`}
-              {enviando && <div style={styles.loadingSpinner}></div>}
+              {enviando ? 'Guardando...' : 'Guardar Todo'}
             </button>
           </div>
         </div>
-
       </form>
     </div>
   );
@@ -682,8 +690,6 @@ const styles = {
     flexDirection: 'column',
     gap: spacing.xl
   },
-
-  // CONTROLES PRINCIPALES
   controls: {
     display: 'grid',
     gridTemplateColumns: '1fr 1.2fr',
@@ -700,8 +706,6 @@ const styles = {
     color: colors.gray700,
     margin: `0 0 ${spacing.md} 0`
   },
-
-  // CONFIGURACIÓN - ESTILOS CORREGIDOS Y ALINEADOS
   configGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -712,23 +716,23 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: spacing.xs,
-    minHeight: '80px' // Altura mínima consistente
+    minHeight: '80px'
   },
   label: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
     color: colors.gray700,
     marginBottom: spacing.xs,
-    height: '20px' // Altura fija para labels
+    height: '20px'
   },
-
-  // INPUTS Y SELECTS CONSISTENTES
   input: {
     width: '100%',
     padding: `0 ${spacing.md}`,
     height: '42px',
     borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray300,
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily,
     backgroundColor: colors.surface,
@@ -746,7 +750,9 @@ const styles = {
     padding: `0 ${spacing.md}`,
     height: '42px',
     borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray300,
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily,
     backgroundColor: colors.surface,
@@ -771,7 +777,9 @@ const styles = {
     padding: `0 ${spacing.md}`,
     height: '42px',
     borderRadius: radius.md,
-    border: `2px solid ${colors.primary}`,
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: colors.primary,
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily,
     backgroundColor: colors.primaryLight,
@@ -791,8 +799,6 @@ const styles = {
       boxShadow: `0 0 0 3px ${colors.primaryLight}`
     }
   },
-
-  // BOTONES CONSISTENTES
   btnLocked: {
     width: '100%',
     padding: `0 ${spacing.md}`,
@@ -839,13 +845,13 @@ const styles = {
       boxShadow: shadows.md
     }
   },
-
-  // MÁQUINA ACTIVA
   activeMachine: {
     marginTop: spacing.md,
     padding: spacing.md,
     backgroundColor: colors.primaryLight,
-    border: `2px solid ${colors.primary}`,
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: colors.primary,
     borderRadius: radius.md
   },
   activeMachineHeader: {
@@ -875,7 +881,6 @@ const styles = {
     color: colors.gray600,
     fontSize: typography.sizes.sm
   },
-  // TABLA MEJORADA
   dataSection: {
     ...baseComponents.card,
     padding: spacing.lg
@@ -884,7 +889,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.md, // Reducido de lg a md
+    marginBottom: spacing.md,
     flexWrap: 'wrap',
     gap: spacing.md
   },
@@ -898,16 +903,16 @@ const styles = {
   },
   stats: {
     display: 'flex',
-    gap: spacing.md // Reducido de lg a md
+    gap: spacing.md
   },
   statItem: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: spacing.sm, // Reducido de md a sm
+    padding: spacing.sm,
     backgroundColor: colors.gray50,
     borderRadius: radius.md,
-    minWidth: '70px' // Reducido de 80px
+    minWidth: '70px'
   },
   statLabel: {
     fontSize: typography.sizes.xs,
@@ -916,15 +921,15 @@ const styles = {
     textTransform: 'uppercase'
   },
   statValue: {
-    fontSize: typography.sizes.base, // Reducido de lg a base
+    fontSize: typography.sizes.base,
     fontWeight: typography.weights.bold
   },
-
-  // CONTENEDOR DE TABLA CON SCROLL
   tableContainer: {
     overflow: 'auto',
     maxHeight: '600px',
-    border: `1px solid ${colors.gray200}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
     borderRadius: radius.md,
     boxShadow: shadows.sm
   },
@@ -937,17 +942,19 @@ const styles = {
   tableHeaderCell: {
     backgroundColor: colors.gray800,
     color: colors.surface,
-    padding: `${spacing.sm} ${spacing.md}`, // Reducido padding vertical
-    fontSize: typography.sizes.xs, // Mantenemos xs
+    padding: `${spacing.sm} ${spacing.md}`,
+    fontSize: typography.sizes.xs,
     fontWeight: typography.weights.bold,
     textAlign: 'center',
-    border: `1px solid ${colors.gray700}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray700,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     position: 'sticky',
     top: 0,
     zIndex: 10,
-    height: '40px' // Altura fija compacta
+    height: '40px'
   },
   activeColumnHeader: {
     backgroundColor: colors.primary,
@@ -956,7 +963,7 @@ const styles = {
   columnHeader: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px', // Reducido el gap
+    gap: '2px',
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%'
@@ -972,14 +979,12 @@ const styles = {
     lineHeight: 1
   },
   activeColumnIndicator: {
-    width: '3px', // Reducido
-    height: '3px', // Reducido
+    width: '3px',
+    height: '3px',
     backgroundColor: colors.surface,
     borderRadius: '50%',
-    marginTop: '1px' // Reducido
+    marginTop: '1px'
   },
-
-  // FILAS Y CELDAS
   tableRow: {
     borderBottom: `1px solid ${colors.gray200}`,
     transition: 'all 0.2s ease',
@@ -989,20 +994,22 @@ const styles = {
   },
   activeRow: {
     backgroundColor: colors.primaryLight,
-    borderLeft: `3px solid ${colors.primary}` // Reducido de 4px
+    borderLeft: `3px solid ${colors.primary}`
   },
   dataRow: {
     backgroundColor: colors.secondaryLight + '15'
   },
   areaCell: {
-    padding: spacing.sm, // Reducido de md a sm
-    border: `1px solid ${colors.gray200}`,
+    padding: spacing.sm,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
     textAlign: 'center',
     backgroundColor: colors.gray50,
     position: 'sticky',
     left: 0,
     zIndex: 5,
-    height: '48px' // Altura fija para celdas
+    height: '48px'
   },
   areaContent: {
     display: 'flex',
@@ -1017,21 +1024,23 @@ const styles = {
     textTransform: 'uppercase'
   },
   activePulse: {
-    width: '5px', // Reducido
-    height: '5px', // Reducido
+    width: '5px',
+    height: '5px',
     backgroundColor: colors.primary,
     borderRadius: '50%',
     animation: 'pulse 1.5s infinite'
   },
   machineCell: {
-    padding: spacing.sm, // Reducido de md a sm
-    border: `1px solid ${colors.gray200}`,
+    padding: spacing.sm,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
     textAlign: 'center',
     backgroundColor: colors.gray50,
     position: 'sticky',
-    left: '100px', // Ajustado por padding reducido
+    left: '100px',
     zIndex: 5,
-    height: '48px' // Altura fija
+    height: '48px'
   },
   machineContent: {
     display: 'flex',
@@ -1053,17 +1062,19 @@ const styles = {
     fontWeight: typography.weights.semibold
   },
   activeDot: {
-    width: '5px', // Reducido
-    height: '5px', // Reducido
+    width: '5px',
+    height: '5px',
     backgroundColor: colors.primary,
     borderRadius: '50%'
   },
   dataCell: {
-    padding: spacing.xs, // Reducido de sm a xs
-    border: `1px solid ${colors.gray200}`,
+    padding: spacing.xs,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
     textAlign: 'center',
     minWidth: '100px',
-    height: '48px' // Altura fija
+    height: '48px'
   },
   activeColumn: {
     backgroundColor: colors.primaryLight + '20'
@@ -1075,11 +1086,13 @@ const styles = {
     justifyContent: 'center'
   },
   inputCell: {
-    width: '85px', // Ligeramente reducido
+    width: '85px',
     padding: `0 ${spacing.sm}`,
-    height: '30px', // Reducido de 32px
+    height: '30px',
     borderRadius: radius.sm,
-    border: `1px solid ${colors.gray300}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray300,
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontMono,
     backgroundColor: colors.surface,
@@ -1087,14 +1100,22 @@ const styles = {
     outline: 'none',
     boxSizing: 'border-box',
     textAlign: 'right',
-    lineHeight: '30px', // Ajustado
+    lineHeight: '30px',
     ':focus': {
       borderColor: colors.primary,
       boxShadow: `0 0 0 2px ${colors.primaryLight}`
     }
   },
+  frozenInput: {
+    backgroundColor: colors.info + '20', // Azul claro para indicar congelado
+    borderColor: colors.info,
+    color: colors.gray800,
+    fontWeight: 'bold'
+  },
   hasData: {
     backgroundColor: colors.secondaryLight,
+    borderWidth: '1px',
+    borderStyle: 'solid',
     borderColor: colors.secondary,
     color: colors.gray800,
     fontWeight: typography.weights.bold
@@ -1111,24 +1132,26 @@ const styles = {
   },
   valueIndicator: {
     position: 'absolute',
-    bottom: '1px', // Reducido
+    bottom: '1px',
     left: '50%',
     transform: 'translateX(-50%)',
-    width: '14px', // Reducido
+    width: '14px',
     height: '2px',
     backgroundColor: colors.success,
     borderRadius: radius.sm
   },
   totalCell: {
-    padding: spacing.sm, // Reducido de md a sm
-    border: `1px solid ${colors.gray200}`,
+    padding: spacing.sm,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
     textAlign: 'center',
     backgroundColor: colors.gray50,
     fontWeight: typography.weights.semibold,
     position: 'sticky',
     right: 0,
     zIndex: 5,
-    height: '48px' // Altura fija
+    height: '48px'
   },
   totalContent: {
     display: 'flex',
@@ -1143,27 +1166,27 @@ const styles = {
   dataBadge: {
     backgroundColor: colors.success,
     color: colors.surface,
-    width: '14px', // Reducido
-    height: '14px', // Reducido
+    width: '14px',
+    height: '14px',
     borderRadius: '50%',
     fontSize: typography.sizes.xs,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
   },
-
-  // PIE DE TABLA MÁS COMPACTO
   totalsRow: {
     backgroundColor: colors.gray800,
     color: colors.surface,
     position: 'sticky',
     bottom: 0,
     zIndex: 5,
-    height: '40px' // Altura fija compacta
+    height: '40px'
   },
   totalsLabelCell: {
-    padding: `${spacing.xs} ${spacing.md}`, // Reducido padding vertical
-    border: `1px solid ${colors.gray700}`,
+    padding: `${spacing.xs} ${spacing.md}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray700,
     textAlign: 'center'
   },
   totalsLabelContent: {
@@ -1172,29 +1195,31 @@ const styles = {
     justifyContent: 'center',
     gap: spacing.xs,
     fontWeight: typography.weights.bold,
-    fontSize: typography.sizes.sm // Reducido de sm (ya era sm)
+    fontSize: typography.sizes.sm
   },
   totalsIcon: {
-    fontSize: '0.9rem' // Reducido
+    fontSize: '0.9rem'
   },
   columnTotalCell: {
-    padding: spacing.xs, // Reducido de sm a xs
-    border: `1px solid ${colors.gray700}`,
+    padding: spacing.xs,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray700,
     textAlign: 'center'
   },
   columnTotalContent: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '2px' // Reducido
+    gap: '2px'
   },
   columnTotalValue: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold
   },
   totalBarContainer: {
-    width: '50px', // Reducido de 60px
-    height: '3px', // Reducido de 4px
+    width: '50px',
+    height: '3px',
     backgroundColor: colors.gray600,
     borderRadius: radius.sm,
     overflow: 'hidden'
@@ -1205,8 +1230,10 @@ const styles = {
     transition: 'width 0.3s ease'
   },
   grandTotalCell: {
-    padding: `${spacing.xs} ${spacing.md}`, // Reducido padding vertical
-    border: `1px solid ${colors.gray700}`,
+    padding: `${spacing.xs} ${spacing.md}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray700,
     textAlign: 'center',
     backgroundColor: colors.primary,
     position: 'sticky',
@@ -1220,24 +1247,22 @@ const styles = {
     gap: spacing.xs
   },
   grandTotalValue: {
-    fontSize: typography.sizes.sm, // Reducido de base a sm
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold
   },
-
-  // FOOTER DE TABLA MÁS COMPACTO
   tableFooter: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.sm, // Reducido de md a sm
+    padding: spacing.sm,
     backgroundColor: colors.gray50,
     borderTop: `1px solid ${colors.gray200}`,
     marginTop: spacing.md,
-    minHeight: '40px' // Altura mínima reducida
+    minHeight: '40px'
   },
   legend: {
     display: 'flex',
-    gap: spacing.md, // Reducido de lg a md
+    gap: spacing.md,
     alignItems: 'center',
     flexWrap: 'wrap'
   },
@@ -1249,8 +1274,8 @@ const styles = {
     color: colors.gray600
   },
   legendColor: {
-    width: '10px', // Reducido de 12px
-    height: '10px', // Reducido de 12px
+    width: '10px',
+    height: '10px',
     borderRadius: radius.sm,
     backgroundColor: colors.gray300
   },
@@ -1258,7 +1283,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-end',
-    gap: '2px' // Reducido
+    gap: '2px'
   },
   statusText: {
     fontSize: typography.sizes.sm,
@@ -1269,8 +1294,6 @@ const styles = {
     color: colors.gray500,
     fontStyle: 'italic'
   },
-
-  // ACCIONES
   actions: {
     ...baseComponents.card,
     padding: spacing.lg,
@@ -1279,7 +1302,9 @@ const styles = {
     alignItems: 'center',
     gap: spacing.lg,
     backgroundColor: colors.gray50,
-    border: `2px solid ${colors.gray200}`
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200
   },
   summary: {
     flex: 1
@@ -1336,15 +1361,15 @@ const styles = {
     fontWeight: typography.weights.bold,
     fontFamily: typography.fontMono
   },
-
-  // INDICADORES SUTILES EN LUGAR DE ALERTAS
   infoMessage: {
     display: 'flex',
     alignItems: 'center',
     gap: spacing.sm,
     padding: `${spacing.xs} ${spacing.sm}`,
     backgroundColor: colors.primary + '10',
-    border: `1px solid ${colors.primary}20`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.primary + '20',
     borderRadius: radius.sm,
     maxWidth: 'fit-content'
   },
@@ -1354,7 +1379,9 @@ const styles = {
     gap: spacing.sm,
     padding: `${spacing.xs} ${spacing.sm}`,
     backgroundColor: colors.success + '10',
-    border: `1px solid ${colors.success}20`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.success + '20',
     borderRadius: radius.sm,
     maxWidth: 'fit-content'
   },
@@ -1374,8 +1401,6 @@ const styles = {
     color: colors.success,
     fontWeight: typography.weights.medium
   },
-
-  // BOTONES DE ACCIÓN (MANTENEMOS LOS MEJORADOS)
   actionButtons: {
     display: 'flex',
     gap: spacing.md,
@@ -1388,7 +1413,9 @@ const styles = {
     padding: `0 ${spacing.lg}`,
     height: '52px',
     borderRadius: radius.lg,
-    border: `2px solid ${colors.gray300}`,
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: colors.gray300,
     fontWeight: typography.weights.semibold,
     fontSize: typography.sizes.base,
     cursor: 'pointer',
@@ -1465,6 +1492,60 @@ const styles = {
     animation: 'spin 1s linear infinite',
     marginLeft: spacing.sm
   },
+  fixedMachineDisplay: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: spacing.sm,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: colors.primary,
+    minHeight: '42px'
+  },
+  fixedMachineName: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.bold,
+    flex: 1
+  },
+  fixedMachineArea: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray600,
+    backgroundColor: colors.gray100,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: radius.sm
+  },
+  unfixButton: {
+    background: 'none',
+    border: 'none',
+    color: colors.error,
+    cursor: 'pointer',
+    fontSize: '1rem',
+    padding: spacing.xs,
+    borderRadius: '50%',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ':hover': {
+      backgroundColor: colors.error + '20'
+    }
+  },
+  noFixedMachine: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray500,
+    fontStyle: 'italic',
+    width: '100%',
+    textAlign: 'center'
+  },
+  fixedBadge: {
+    marginLeft: spacing.xs,
+    color: colors.primary,
+    fontSize: '0.9rem'
+  },
   loading: {
     display: 'flex',
     flexDirection: 'column',
@@ -1474,32 +1555,7 @@ const styles = {
     textAlign: 'center',
     color: colors.gray500,
     minHeight: '400px'
-  },
-  spinner: {
-    width: '50px',
-    height: '50px',
-    border: `4px solid ${colors.gray200}`,
-    borderTop: `4px solid ${colors.primary}`,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: spacing.md
-  },
-  loadingText: {
-    fontSize: typography.sizes.lg,
-    color: colors.gray600,
-    fontWeight: typography.weights.medium
-  },
+  }
 };
-
-// Agregar animaciones CSS
-const styleSheet = document.styleSheets[0];
-if (styleSheet) {
-  styleSheet.insertRule(`
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  `, styleSheet.cssRules.length);
-}
 
 export default RegistroScrapCompleto;

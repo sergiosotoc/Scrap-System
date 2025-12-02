@@ -40,16 +40,33 @@ class ExcelReportController extends Controller
 
             $registros = $query->orderBy('area_real')->orderBy('maquina_real')->get();
 
-            \Log::info("📈 Encontrados {$registros->count()} registros para formato empresa");
-
             if ($registros->count() === 0) {
                 abort(404, 'No hay registros para la fecha seleccionada');
             }
 
-            // FORZAR nombre con fecha actual
-            $fechaActual = Carbon::now()->format('Y-m-d');
-            $turnoTexto = $turno ? "_TURNO_{$turno}" : '';
-            $fileName = "CONTROL_SCRAP_{$fechaActual}{$turnoTexto}.xlsx";
+            // --- GENERAR NOMBRE DE ARCHIVO ---
+            // Formato esperado: FORMATO SCRAP 27 DE OCT 2025 TERCER TURNO
+            
+            $fechaObj = Carbon::parse($fecha);
+            $dia = $fechaObj->format('d');
+            $anio = $fechaObj->format('Y');
+            
+            // Mapeo manual de meses (Mayúsculas)
+            $meses = [
+                1 => 'ENE', 2 => 'FEB', 3 => 'MAR', 4 => 'ABR', 5 => 'MAY', 6 => 'JUN',
+                7 => 'JUL', 8 => 'AGO', 9 => 'SEP', 10 => 'OCT', 11 => 'NOV', 12 => 'DIC'
+            ];
+            $mes = $meses[$fechaObj->month];
+            
+            $fechaTexto = "{$dia} DE {$mes} {$anio}";
+
+            // Turno
+            $turnoTexto = "TODOS LOS TURNOS";
+            if ($turno == 1) $turnoTexto = "PRIMER TURNO";
+            if ($turno == 2) $turnoTexto = "SEGUNDO TURNO";
+            if ($turno == 3) $turnoTexto = "TERCER TURNO";
+
+            $fileName = "FORMATO SCRAP {$fechaTexto} {$turnoTexto}.xlsx";
 
             \Log::info("📁 Generando archivo: {$fileName}");
 

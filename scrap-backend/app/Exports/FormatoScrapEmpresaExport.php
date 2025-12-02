@@ -7,17 +7,17 @@ use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use Carbon\Carbon;
 
-class FormatoScrapEmpresaExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle, WithEvents
+class FormatoScrapEmpresaExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithEvents, WithCustomStartCell
 {
     protected $registros;
     protected $fecha;
@@ -37,42 +37,32 @@ class FormatoScrapEmpresaExport implements FromCollection, WithHeadings, WithMap
         return $this->registros;
     }
 
-    public function title(): string
+    // ✅ Empezar en A7. Las filas 1-6 quedan libres para el encabezado manual.
+    // No usamos insertNewRowBefore para evitar que se mueva todo.
+    public function startCell(): string
     {
-        return 'CONTROL_SCRAP';
+        return 'A7';
     }
 
     public function headings(): array
     {
         return [
-            // Fila 1: Encabezado principal (se mantiene igual)
-            ['COF MEXICO S.A. DE C.V.'],
-            // Fila 2: Información de la empresa
-            ['REPORTE DE CONTROL DE SCRAP - PRODUCCIÓN'],
-            // Fila 3: Datos del reporte
-            ['FECHA DEL REPORTE:', $this->fecha, '', 'TURNO:', $this->turno ?: 'TODOS'],
-            // Fila 4: Información del operador
-            ['OPERADOR:', $this->user->name, '', 'FECHA DE GENERACIÓN:', now()->format('Y-m-d H:i:s')],
-            // Fila 5: Espacio en blanco
-            [],
-            [
-                'ÁREA',
-                'MÁQUINA',
-                'COBRE (KG)',
-                'COBRE ESTAÑADO (KG)',
-                'PURGA PVC (KG)',
-                'PURGA PE (KG)', 
-                'PURGA PUR (KG)',
-                'PURGA PP (KG)',
-                'CABLE PVC (KG)',
-                'CABLE PE (KG)',
-                'CABLE PUR (KG)',
-                'CABLE PP (KG)',
-                'CABLE ALUMINIO (KG)',
-                'CABLE ESTAÑADO PVC (KG)',
-                'CABLE ESTAÑADO PE (KG)',
-                'TOTAL (KG)',
-            ]
+            'ÁREA',
+            'MÁQUINA',
+            'COBRE',
+            'COBRE EST.',
+            'PURGA PVC',
+            'PURGA PE', 
+            'PURGA PUR',
+            'PURGA PP',
+            'CABLE PVC',
+            'CABLE PE',
+            'CABLE PUR',
+            'CABLE PP',
+            'CABLE ALU',
+            'CABLE EST. PVC',
+            'CABLE EST. PE',
+            'TOTAL GENERAL',
         ];
     }
 
@@ -81,164 +71,38 @@ class FormatoScrapEmpresaExport implements FromCollection, WithHeadings, WithMap
         return [
             $registro->area_real,
             $registro->maquina_real,
-            $registro->peso_cobre ?? 0,
-            $registro->peso_cobre_estanado ?? 0,
-            $registro->peso_purga_pvc ?? 0,
-            $registro->peso_purga_pe ?? 0,
-            $registro->peso_purga_pur ?? 0,
-            $registro->peso_purga_pp ?? 0,
-            $registro->peso_cable_pvc ?? 0,
-            $registro->peso_cable_pe ?? 0,
-            $registro->peso_cable_pur ?? 0,
-            $registro->peso_cable_pp ?? 0,
-            $registro->peso_cable_aluminio ?? 0,
-            $registro->peso_cable_estanado_pvc ?? 0,
-            $registro->peso_cable_estanado_pe ?? 0,
-            $registro->peso_total ?? 0,
+            (float) ($registro->peso_cobre ?? 0),
+            (float) ($registro->peso_cobre_estanado ?? 0),
+            (float) ($registro->peso_purga_pvc ?? 0),
+            (float) ($registro->peso_purga_pe ?? 0),
+            (float) ($registro->peso_purga_pur ?? 0),
+            (float) ($registro->peso_purga_pp ?? 0),
+            (float) ($registro->peso_cable_pvc ?? 0),
+            (float) ($registro->peso_cable_pe ?? 0),
+            (float) ($registro->peso_cable_pur ?? 0),
+            (float) ($registro->peso_cable_pp ?? 0),
+            (float) ($registro->peso_cable_aluminio ?? 0),
+            (float) ($registro->peso_cable_estanado_pvc ?? 0),
+            (float) ($registro->peso_cable_estanado_pe ?? 0),
+            0, 
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        // Configurar anchos de columnas (MANTENER ORIGINAL)
-        $sheet->getColumnDimension('A')->setWidth(18); // ÁREA
-        $sheet->getColumnDimension('B')->setWidth(20); // MÁQUINA
-        $sheet->getColumnDimension('C')->setWidth(12); // COBRE
-        $sheet->getColumnDimension('D')->setWidth(15); // COBRE ESTAÑADO
-        $sheet->getColumnDimension('E')->setWidth(12); // PURGA PVC
-        $sheet->getColumnDimension('F')->setWidth(12); // PURGA PE
-        $sheet->getColumnDimension('G')->setWidth(12); // PURGA PUR
-        $sheet->getColumnDimension('H')->setWidth(12); // PURGA PP
-        $sheet->getColumnDimension('I')->setWidth(12); // CABLE PVC
-        $sheet->getColumnDimension('J')->setWidth(12); // CABLE PE
-        $sheet->getColumnDimension('K')->setWidth(12); // CABLE PUR
-        $sheet->getColumnDimension('L')->setWidth(12); // CABLE PP
-        $sheet->getColumnDimension('M')->setWidth(15); // CABLE ALUMINIO
-        $sheet->getColumnDimension('N')->setWidth(18); // CABLE ESTAÑADO PVC
-        $sheet->getColumnDimension('O')->setWidth(18); // CABLE ESTAÑADO PE
-        $sheet->getColumnDimension('P')->setWidth(12); // TOTAL
-
-        // Combinar celdas para encabezados: logo en A1:B1 y A2:B2, textos en C1:P1 y C2:P2
-        $sheet->mergeCells('A1:B1');
-        $sheet->mergeCells('A2:B2');
-        $sheet->mergeCells('C1:P1');
-        $sheet->mergeCells('C2:P2');
-
-        $sheet->mergeCells('B3:D3');
-        $sheet->mergeCells('E3:F3');
-        $sheet->mergeCells('B4:D4');
-        $sheet->mergeCells('E4:F4');
+        $sheet->getColumnDimension('A')->setWidth(18);
+        $sheet->getColumnDimension('B')->setWidth(25);
+        foreach(range('C','P') as $col) {
+            $sheet->getColumnDimension($col)->setWidth(12);
+        }
 
         return [
-            // Fila 1: Nombre de la empresa (MEJORAR CONTRASTE) - mantengo tu estilo pero ahora aplicado a  C1:P1 via AfterSheet
-            1 => [
-                'font' => [
-                    'bold' => true, 
-                    'size' => 16,
-                    'color' => ['rgb' => 'FFFFFF'] // Texto blanco para mejor contraste
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '2F75B5'] // Azul más oscuro
-                ]
-            ],
-            // Fila 2: Título del reporte (MEJORAR CONTRASTE) - se aplicará a C2:P2
-            2 => [
-                'font' => [
-                    'bold' => true, 
-                    'size' => 14,
-                    'color' => ['rgb' => '1F4E79'] // Azul oscuro
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'BDD7EE'] // Azul claro
-                ]
-            ],
-            // Fila 3: Información de fecha y turno (MANTENER ORIGINAL)
-            3 => [
-                'font' => [
-                    'bold' => true,
-                    'size' => 11,
-                    'color' => ['rgb' => '000000'] // Negro para mejor legibilidad
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_LEFT
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'FFE699'] // Amarillo claro
-                ]
-            ],
-            // Fila 4: Información del operador (MANTENER ORIGINAL)
-            4 => [
-                'font' => [
-                    'bold' => true,
-                    'size' => 11,
-                    'color' => ['rgb' => '000000'] // Negro para mejor legibilidad
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_LEFT
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'FFE699'] // Amarillo claro
-                ]
-            ],
-            // Fila 6: Encabezados de la tabla (MANTENER ORIGINAL)
-            6 => [
-                'font' => [
-                    'bold' => true, 
-                    'size' => 10,
-                    'color' => ['rgb' => 'FFFFFF']
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
-                    'wrapText' => true
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '2F75B5']
-                ],
-                'borders' => [
-                    'allBorders' => [
-                        'borderStyle' => Border::BORDER_THIN,
-                        'color' => ['rgb' => '1F4E79']
-                    ]
-                ]
-            ],
-            // Estilos para los datos (MANTENER ORIGINAL)
-            'A7:P1000' => [
-                'borders' => [
-                    'allBorders' => [
-                        'borderStyle' => Border::BORDER_THIN,
-                        'color' => ['rgb' => 'BFBFBF']
-                    ]
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER
-                ]
-            ],
-            // Formato numérico para las columnas de peso (MANTENER ORIGINAL)
-            'C7:P1000' => [
-                'numberFormat' => [
-                    'formatCode' => '0.000'
-                ]
-            ],
-            // Estilo para las columnas de texto (MANTENER ORIGINAL)
-            'A7:B1000' => [
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_LEFT
-                ]
+            // Fila 7: Encabezados de la tabla (Azul Oscuro)
+            7 => [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E79']], 
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
             ],
         ];
     }
@@ -247,122 +111,103 @@ class FormatoScrapEmpresaExport implements FromCollection, WithHeadings, WithMap
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
+                $sheet = $event->sheet;
+                $sheet->setShowGridlines(false); 
+
+                // --- 1. LOGO GRANDE ---
                 try {
-                    // AGREGAR LOGO EN POSICIÓN (A1) Y HACERLO VISUALMENTE OCUPAR A1:B2
-                    $logoPath = storage_path('app/public/Logo-COFICAB.png');
+                    $logoPath = 'C:/xampp/htdocs/Control-Scrap/scrap-backend/public/Logo-COFICAB.png';
+                    if (!file_exists($logoPath)) {
+                        $logoPath = public_path('Logo-COFICAB.png');
+                    }
 
                     if (file_exists($logoPath)) {
                         $drawing = new Drawing();
-                        $drawing->setName('Logo COF');
-                        $drawing->setDescription('Logo COFICAB');
+                        $drawing->setName('Logo');
                         $drawing->setPath($logoPath);
-
-                        $drawing->setHeight(50);    // ✔ más pequeño
-                        $drawing->setCoordinates('A1');
-                        $drawing->setOffsetX(0);
-                        $drawing->setOffsetY(0);
-                        $drawing->setWorksheet($event->sheet->getDelegate());
+                        $drawing->setHeight(80); // ✅ Grande
+                        $drawing->setCoordinates('A1'); // Desde la esquina
+                        $drawing->setOffsetX(10);
+                        $drawing->setOffsetY(5);
+                        $drawing->setWorksheet($sheet->getDelegate());
                     }
+                } catch (\Exception $e) {}
 
-                    // ✔ Evitamos que salga texto detrás del logo
-                    $event->sheet->setCellValue('A1', '');
-                    $event->sheet->setCellValue('A2', '');
+                // --- 2. TÍTULO PRINCIPAL (Fila 2) ---
+                $sheet->setCellValue('D2', 'PESAJE SCRAP COF MX');
+                $sheet->mergeCells('D2:K2');
+                $sheet->getStyle('D2')->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 20, 'color' => ['rgb' => '000000']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
+                ]);
 
-                    // APLICAR FONDO OSCURO EN A1:B2 para que las letras blancas del logo se vean
-                    $event->sheet->getStyle('A1:B2')->applyFromArray([
-                        'fill' => [
-                            'fillType' => Fill::FILL_SOLID,
-                            'startColor' => ['rgb' => '2F75B5'] // mismo azul que usas
-                        ]
-                    ]);
+                // --- 3. INFORMACIÓN DE CABECERA (Fila 4) ---
+                // Fecha
+                $sheet->setCellValue('C4', 'FECHA:');
+                $sheet->setCellValue('D4', Carbon::parse($this->fecha)->format('d-M-Y')); 
+                $sheet->getStyle('C4')->getFont()->setBold(true);
+                $sheet->getStyle('D4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('D4')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
 
-                    // Asegurarnos que las celdas combinadas de C1:P1 y C2:P2 tengan el texto y estilo centrado
-                    $event->sheet->setCellValue('C1', 'COF MEXICO S.A. DE C.V.');
-                    $event->sheet->setCellValue('C2', 'REPORTE DE CONTROL DE SCRAP - PRODUCCIÓN');
+                // Turno
+                $turnoMap = [1 => 'PRIMER TURNO', 2 => 'SEGUNDO TURNO', 3 => 'TERCER TURNO'];
+                $turnoTexto = $this->turno ? ($turnoMap[$this->turno] ?? 'TODOS') : 'TODOS';
+                
+                $sheet->setCellValue('G4', 'TURNO:');
+                $sheet->setCellValue('H4', $turnoTexto);
+                $sheet->mergeCells('H4:I4');
+                $sheet->getStyle('G4')->getFont()->setBold(true);
+                $sheet->getStyle('H4:I4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('H4:I4')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
 
-                    // Aplicar estilo de fondo/centrado a C1:P1 y C2:P2 para que se vean consistentes
-                    $event->sheet->getStyle('C1:P1')->applyFromArray([
-                        'font' => [
-                            'bold' => true,
-                            'size' => 16,
-                            'color' => ['rgb' => 'FFFFFF']
-                        ],
-                        'alignment' => [
-                            'horizontal' => Alignment::HORIZONTAL_CENTER,
-                            'vertical' => Alignment::VERTICAL_CENTER
-                        ],
-                        'fill' => [
-                            'fillType' => Fill::FILL_SOLID,
-                            'startColor' => ['rgb' => '2F75B5']
-                        ]
-                    ]);
+                // Operador
+                $sheet->setCellValue('K4', 'OPERADOR:');
+                $sheet->setCellValue('L4', strtoupper($this->user->name));
+                $sheet->mergeCells('L4:N4');
+                $sheet->getStyle('K4')->getFont()->setBold(true);
+                $sheet->getStyle('L4:N4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                $sheet->getStyle('L4:N4')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
 
-                    $event->sheet->getStyle('C2:P2')->applyFromArray([
-                        'font' => [
-                            'bold' => true,
-                            'size' => 14,
-                            'color' => ['rgb' => 'FFFFFF']
-                        ],
-                        'alignment' => [
-                            'horizontal' => Alignment::HORIZONTAL_CENTER,
-                            'vertical' => Alignment::VERTICAL_CENTER
-                        ],
-                        'fill' => [
-                            'fillType' => Fill::FILL_SOLID,
-                            'startColor' => ['rgb' => 'BDD7EE']
-                        ]
-                    ]);
+                // --- 4. DATOS Y FÓRMULAS ---
+                $rowCount = $this->registros->count();
+                $firstDataRow = 8; // Datos empiezan en 8 (Encabezados en 7)
+                $lastDataRow = $firstDataRow + $rowCount - 1;
 
-                    // Agregar totales al final (MANTENER ORIGINAL)
-                    $lastRow = $this->registros->count() + 6; // +6 por las filas de encabezado
-
-                    // Fila de totales
-                    $event->sheet->setCellValue("A{$lastRow}", 'TOTALES GENERALES');
-                    $event->sheet->mergeCells("A{$lastRow}:B{$lastRow}");
-
-                    // Calcular totales por columna
-                    $columns = ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
-                    foreach ($columns as $column) {
-                        $event->sheet->setCellValue("{$column}{$lastRow}", "=SUM({$column}7:{$column}" . ($lastRow - 1) . ")");
-                    }
-
-                    // Estilo para la fila de totales
-                    $event->sheet->getStyle("A{$lastRow}:P{$lastRow}")->applyFromArray([
-                        'font' => [
-                            'bold' => true,
-                            'color' => ['rgb' => '1F4E79']
-                        ],
-                        'fill' => [
-                            'fillType' => Fill::FILL_SOLID,
-                            'startColor' => ['rgb' => 'E2EFDA']
-                        ],
+                if ($rowCount > 0) {
+                    $sheet->getStyle("A7:P{$lastDataRow}")->applyFromArray([
                         'borders' => [
-                            'allBorders' => [
-                                'borderStyle' => Border::BORDER_MEDIUM,
-                                'color' => ['rgb' => '2F75B5']
-                            ]
-                        ]
-                    ]);
-
-                    // Agregar nota al pie
-                    $noteRow = $lastRow + 2;
-                    $event->sheet->setCellValue("A{$noteRow}", "NOTA: Este reporte fue generado automáticamente por el Sistema de Control de Scrap COF MX");
-                    $event->sheet->mergeCells("A{$noteRow}:P{$noteRow}");
-                    $event->sheet->getStyle("A{$noteRow}")->applyFromArray([
-                        'font' => [
-                            'italic' => true,
-                            'size' => 9,
-                            'color' => ['rgb' => '7F7F7F']
+                            'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]
                         ],
-                        'alignment' => [
-                            'horizontal' => Alignment::HORIZONTAL_CENTER
-                        ]
+                        'font' => ['size' => 10],
+                        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER]
                     ]);
+                    
+                    // Centrar valores numéricos
+                    $sheet->getStyle("C{$firstDataRow}:P{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-                } catch (\Exception $e) {
-                    // Si hay error con el logo, continuar sin él
-                    \Log::error('Error al agregar logo al Excel: ' . $e->getMessage());
+                    // Fórmulas por fila
+                    for ($row = $firstDataRow; $row <= $lastDataRow; $row++) {
+                        $sheet->setCellValue("P{$row}", "=SUM(C{$row}:O{$row})");
+                    }
                 }
+
+                // --- 5. TOTALES ---
+                $totalRow = $lastDataRow + 1;
+                $sheet->setCellValue("A{$totalRow}", 'TOTAL GENERAL');
+                $sheet->mergeCells("A{$totalRow}:B{$totalRow}");
+
+                foreach (range('C', 'P') as $col) {
+                    $sheet->setCellValue("{$col}{$totalRow}", "=SUM({$col}{$firstDataRow}:{$col}{$lastDataRow})");
+                }
+
+                $sheet->getStyle("A{$totalRow}:P{$totalRow}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E79']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+                ]);
+                
+                $sheet->getStyle("C{$firstDataRow}:P{$totalRow}")->getNumberFormat()->setFormatCode('#,##0.00');
             },
         ];
     }
