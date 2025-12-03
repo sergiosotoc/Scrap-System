@@ -1,3 +1,4 @@
+/* src/pages/ReceptorDashboard.js */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -19,7 +20,6 @@ const ReceptorDashboard = () => {
   const [recepciones, setRecepciones] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado para el buscador y filtros
   const [searchTerm, setSearchTerm] = useState('');
 
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
@@ -52,7 +52,6 @@ const ReceptorDashboard = () => {
     loadReceptorData();
   }, [loadReceptorData]);
 
-  // Filtrado de datos en tiempo real
   const recepcionesFiltradas = recepciones.filter(item => {
     const term = searchTerm.toLowerCase();
     return (
@@ -138,22 +137,27 @@ const ReceptorDashboard = () => {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Dashboard Receptor</h1>
-          <p style={styles.subtitle}>Hola, {user?.name || 'Usuario'}</p>
+          <p style={styles.subtitle}>Bienvenido, {user?.name || 'Usuario'}</p>
         </div>
         <button onClick={() => setShowModal(true)} style={styles.primaryButton}>
-          <span style={{fontSize: '1.2rem'}}>+</span> Nueva Recepción
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Nueva Recepción
         </button>
       </div>
 
-      {/* Tarjeta Principal del Historial */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <h3 style={styles.cardTitle}>📋 Historial de Recepciones</h3>
+            <h3 style={styles.cardTitle}>Historial de Recepciones</h3>
             <p style={styles.cardSubtitle}>Gestiona y consulta las entradas de material</p>
           </div>
           <div style={styles.searchContainer}>
-            <span style={styles.searchIcon}>🔍</span>
+            <span style={styles.searchIcon}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </span>
             <input 
               type="text" 
               placeholder="Buscar por HU, Material o Proveedor..." 
@@ -221,7 +225,7 @@ const ReceptorDashboard = () => {
                       style={styles.actionButton}
                       title="Imprimir Etiqueta HU"
                     >
-                      🖨️
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                     </button>
                   </td>
                 </tr>
@@ -229,7 +233,12 @@ const ReceptorDashboard = () => {
               {recepcionesFiltradas.length === 0 && (
                 <tr>
                   <td colSpan="8" style={styles.emptyState}>
-                    <div style={{fontSize: '2rem', marginBottom: '10px'}}>📭</div>
+                    <div style={{marginBottom: '10px'}}>
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.gray300}}>
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      </svg>
+                    </div>
                     <div>No se encontraron registros</div>
                     {searchTerm && <div style={{fontSize: '0.85rem', marginTop: '5px', color: colors.gray500}}>Intenta con otro término de búsqueda</div>}
                   </td>
@@ -243,7 +252,6 @@ const ReceptorDashboard = () => {
         </div>
       </div>
 
-      {/* Modal - Con Báscula Integrada y Bloqueo */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -252,139 +260,158 @@ const ReceptorDashboard = () => {
                 <h3 style={styles.modalTitle}>Nueva Recepción</h3>
                 <p style={styles.modalSubtitle}>Ingrese los datos para generar la HU</p>
               </div>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>✕</button>
+              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
             </div>
             
             <div style={styles.modalContent}>
-                {/* 1. Módulo de Báscula */}
-                <div style={{ padding: spacing.lg, paddingBottom: 0 }}>
-                    <BasculaConnection 
-                        onPesoObtenido={handlePesoFromBascula}
-                        campoDestino="peso_kg"
-                    />
-                </div>
+              <div style={{ padding: spacing.lg, paddingBottom: 0 }}>
+                  <BasculaConnection 
+                      onPesoObtenido={handlePesoFromBascula}
+                      campoDestino="peso_kg"
+                  />
+              </div>
 
-                {/* 2. Formulario */}
-                <form onSubmit={handleSubmit} style={styles.form}>
-                <div style={styles.formGrid}>
-                    <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Tipo de Origen</label>
-                            <select 
-                            name="origen_tipo" 
-                            value={formData.origen_tipo} 
-                            onChange={handleOrigenTipoChange} 
-                            style={styles.formSelect}
-                            >
-                            <option value="externa">Externa (Proveedor)</option>
-                            <option value="interna">Interna (Planta)</option>
-                            </select>
-                        </div>
+              <form onSubmit={handleSubmit} style={styles.form}>
+              <div style={styles.formGrid}>
+                  <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
+                      <div style={styles.formGroup}>
+                          <label style={styles.label}>Tipo de Origen</label>
+                          <select 
+                          name="origen_tipo" 
+                          value={formData.origen_tipo} 
+                          onChange={handleOrigenTipoChange} 
+                          style={styles.formSelect}
+                          >
+                          <option value="externa">Externa (Proveedor)</option>
+                          <option value="interna">Interna (Planta)</option>
+                          </select>
+                      </div>
 
-                        {formData.origen_tipo === 'externa' && (
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Nombre del Proveedor</label>
-                                <input 
-                                    type="text" 
-                                    name="origen_especifico" 
-                                    value={formData.origen_especifico} 
-                                    onChange={handleInputChange} 
-                                    style={styles.formInput} 
-                                    placeholder="Ej: Reciclados del Norte"
-                                    required 
-                                />
-                            </div>
-                        )}
+                      {formData.origen_tipo === 'externa' && (
+                          <div style={styles.formGroup}>
+                              <label style={styles.label}>Nombre del Proveedor</label>
+                              <input 
+                                  type="text" 
+                                  name="origen_especifico" 
+                                  value={formData.origen_especifico} 
+                                  onChange={handleInputChange} 
+                                  style={styles.formInput} 
+                                  placeholder="Ej: Reciclados del Norte"
+                                  required 
+                              />
+                          </div>
+                      )}
 
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Destino Inicial</label>
-                            <select 
-                            name="destino" 
-                            value={formData.destino} 
-                            onChange={handleInputChange} 
-                            style={styles.formSelect}
-                            >
-                            <option value="almacenamiento">Almacenamiento General</option>
-                            <option value="reciclaje">Directo a Reciclaje</option>
-                            <option value="venta">Venta Directa</option>
-                            </select>
-                        </div>
-                    </div>
+                      <div style={styles.formGroup}>
+                          <label style={styles.label}>Destino Inicial</label>
+                          <select 
+                          name="destino" 
+                          value={formData.destino} 
+                          onChange={handleInputChange} 
+                          style={styles.formSelect}
+                          >
+                          <option value="almacenamiento">Almacenamiento General</option>
+                          <option value="reciclaje">Directo a Reciclaje</option>
+                          <option value="venta">Venta Directa</option>
+                          </select>
+                      </div>
+                  </div>
 
-                    <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Peso Neto (kg)</label>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                <input 
-                                    type="number" 
-                                    step="0.01" 
-                                    name="peso_kg" 
-                                    value={formData.peso_kg} 
-                                    onChange={handleInputChange} 
-                                    style={{
-                                        ...styles.formInput,
-                                        paddingRight: '110px', 
-                                        backgroundColor: pesoBloqueado ? colors.gray100 : (formData.peso_kg > 0 ? '#F0FDF4' : colors.surface),
-                                        borderColor: pesoBloqueado ? colors.error : (formData.peso_kg > 0 ? colors.success : colors.gray300),
-                                        color: pesoBloqueado ? colors.error : colors.gray900,
-                                        fontWeight: pesoBloqueado ? 'bold' : 'normal'
-                                    }} 
-                                    placeholder="0.00"
-                                    required 
-                                    readOnly={pesoBloqueado}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setPesoBloqueado(!pesoBloqueado)}
-                                    style={pesoBloqueado ? styles.btnLockedInside : styles.btnUnlockedInside}
-                                    title={pesoBloqueado ? "Desbloquear" : "Fijar peso"}
-                                >
-                                    {pesoBloqueado ? '🔒 FIJADO' : '🔓 FIJAR'}
-                                </button>
-                            </div>
-                        </div>
+                  <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
+                      <div style={styles.formGroup}>
+                          <label style={styles.label}>Peso Neto (kg)</label>
+                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <input 
+                                  type="number" 
+                                  step="0.01" 
+                                  name="peso_kg" 
+                                  value={formData.peso_kg} 
+                                  onChange={handleInputChange} 
+                                  style={{
+                                      ...styles.formInput,
+                                      paddingRight: '120px', 
+                                      backgroundColor: pesoBloqueado ? colors.gray100 : (formData.peso_kg > 0 ? '#F0FDF4' : colors.surface),
+                                      borderColor: pesoBloqueado ? colors.error : (formData.peso_kg > 0 ? colors.success : colors.gray300),
+                                      color: pesoBloqueado ? colors.error : colors.gray900,
+                                      fontWeight: pesoBloqueado ? 'bold' : 'normal'
+                                  }} 
+                                  placeholder="0.00"
+                                  required 
+                                  readOnly={pesoBloqueado}
+                              />
+                              <button
+                                  type="button"
+                                  onClick={() => setPesoBloqueado(!pesoBloqueado)}
+                                  style={pesoBloqueado ? styles.btnLockedInside : styles.btnUnlockedInside}
+                                  title={pesoBloqueado ? "Desbloquear" : "Fijar peso"}
+                              >
+                                  {pesoBloqueado ? (
+                                    <>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                      </svg>
+                                      FIJADO
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                                      </svg>
+                                      FIJAR
+                                    </>
+                                  )}
+                              </button>
+                          </div>
+                      </div>
 
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Tipo de Material</label>
-                            <select 
-                                name="tipo_material" 
-                                value={formData.tipo_material} 
-                                onChange={handleInputChange} 
-                                style={styles.formSelect}
-                                required 
-                            >
-                                <option value="">Seleccionar material...</option>
-                                {listaMateriales.map((material, index) => (
-                                    <option key={index} value={material}>
-                                        {material}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                </div>
+                      <div style={styles.formGroup}>
+                          <label style={styles.label}>Tipo de Material</label>
+                          <select 
+                              name="tipo_material" 
+                              value={formData.tipo_material} 
+                              onChange={handleInputChange} 
+                              style={styles.formSelect}
+                              required 
+                          >
+                              <option value="">Seleccionar material...</option>
+                              {listaMateriales.map((material, index) => (
+                                  <option key={index} value={material}>
+                                      {material}
+                                  </option>
+                              ))}
+                          </select>
+                      </div>
+                  </div>
+              </div>
 
-                <div style={{marginTop: spacing.md}}>
-                    <label style={styles.label}>Observaciones</label>
-                    <textarea 
-                    name="observaciones" 
-                    value={formData.observaciones} 
-                    onChange={handleInputChange} 
-                    style={styles.formTextarea} 
-                    rows="3"
-                    placeholder="Notas adicionales..."
-                    ></textarea>
-                </div>
+              <div style={{marginTop: spacing.md}}>
+                  <label style={styles.label}>Observaciones</label>
+                  <textarea 
+                  name="observaciones" 
+                  value={formData.observaciones} 
+                  onChange={handleInputChange} 
+                  style={styles.formTextarea} 
+                  rows="3"
+                  placeholder="Notas adicionales..."
+                  ></textarea>
+              </div>
 
-                <div style={styles.modalFooter}>
-                    <button type="button" onClick={() => setShowModal(false)} style={styles.modalSecondaryButton}>
-                    Cancelar
-                    </button>
-                    <button type="submit" style={styles.modalPrimaryButton}>
-                    Confirmar Recepción
-                    </button>
-                </div>
-                </form>
+              <div style={styles.modalFooter}>
+                  <button type="button" onClick={() => setShowModal(false)} style={styles.modalSecondaryButton}>
+                  Cancelar
+                  </button>
+                  <button type="submit" style={styles.modalPrimaryButton}>
+                  Confirmar Recepción
+                  </button>
+              </div>
+              </form>
             </div>
           </div>
         </div>
@@ -393,9 +420,6 @@ const ReceptorDashboard = () => {
   );
 };
 
-// ==========================================
-// ESTILOS MEJORADOS
-// ==========================================
 const styles = {
   container: {
     padding: spacing.lg,
@@ -438,24 +462,22 @@ const styles = {
   },
   loadingText: {
     fontSize: typography.sizes.lg,
-    color: colors.gray600
+    color: colors.gray600,
+    marginTop: spacing.sm
   },
+  // Spinner actualizado al diseño unificado
   spinner: {
-    width: '50px',
-    height: '50px',
-    border: `4px solid ${colors.primaryLight}`,
-    borderTop: `4px solid ${colors.primary}`,
+    width: '60px',
+    height: '60px',
+    border: `3px solid ${colors.primaryLight}`,
+    borderTop: `3px solid ${colors.primary}`,
+    borderRight: `3px solid ${colors.secondary}`,
+    borderBottom: `3px solid ${colors.secondary}`,
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
+    animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
   },
-  
-  // Card Principal
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    boxShadow: shadows.md,
-    border: `1px solid ${colors.gray200}`,
-    overflow: 'hidden',
+    ...baseComponents.card,
     display: 'flex',
     flexDirection: 'column'
   },
@@ -480,8 +502,6 @@ const styles = {
     color: colors.gray500,
     margin: '4px 0 0 0'
   },
-  
-  // Buscador
   searchContainer: {
     position: 'relative',
     width: '300px',
@@ -493,7 +513,8 @@ const styles = {
     top: '50%',
     transform: 'translateY(-50%)',
     color: colors.gray400,
-    fontSize: '1rem'
+    fontSize: '1rem',
+    display: 'flex'
   },
   searchInput: {
     width: '100%',
@@ -505,8 +526,6 @@ const styles = {
     transition: 'all 0.2s',
     boxSizing: 'border-box'
   },
-
-  // Tabla Mejorada
   tableContainer: {
     overflowX: 'auto',
     width: '100%'
@@ -543,8 +562,6 @@ const styles = {
     borderBottom: `1px solid ${colors.gray100}`,
     verticalAlign: 'middle'
   },
-  
-  // Badges y Elementos UI
   huBadge: {
     fontFamily: 'Consolas, monospace',
     fontSize: '0.8rem',
@@ -570,25 +587,15 @@ const styles = {
     color: colors.primary
   },
   badgeInterna: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 10px',
-    borderRadius: radius.full,
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    backgroundColor: '#DBEAFE', // Azul muy claro
-    color: '#1E40AF', // Azul oscuro
+    ...baseComponents.badge,
+    backgroundColor: '#DBEAFE', 
+    color: '#1E40AF', 
     border: '1px solid #BFDBFE'
   },
   badgeExterna: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 10px',
-    borderRadius: radius.full,
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    backgroundColor: '#D1FAE5', // Verde muy claro
-    color: '#065F46', // Verde oscuro
+    ...baseComponents.badge,
+    backgroundColor: '#D1FAE5', 
+    color: '#065F46', 
     border: '1px solid #A7F3D0'
   },
   destBadge: {
@@ -612,8 +619,13 @@ const styles = {
     padding: '4px',
     borderRadius: '4px',
     transition: 'background 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: colors.gray600,
     ':hover': {
-      backgroundColor: colors.gray100
+      backgroundColor: colors.gray100,
+      color: colors.gray900
     }
   },
   emptyState: {
@@ -630,8 +642,6 @@ const styles = {
     color: colors.gray600,
     textAlign: 'right'
   },
-
-  // Botón Principal
   primaryButton: {
     ...baseComponents.buttonPrimary,
     display: 'inline-flex',
@@ -642,8 +652,6 @@ const styles = {
     gap: '8px',
     boxShadow: shadows.sm
   },
-
-  // Botones de Bloqueo Integrados
   btnLockedInside: {
     position: 'absolute',
     right: '6px',
@@ -660,7 +668,10 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     height: '24px',
-    zIndex: 5
+    zIndex: 5,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px'
   },
   btnUnlockedInside: {
     position: 'absolute',
@@ -679,12 +690,13 @@ const styles = {
     letterSpacing: '0.5px',
     height: '24px',
     zIndex: 5,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
     ':hover': {
         backgroundColor: colors.gray300
     }
   },
-
-  // Modal
   modalOverlay: {
     position: 'fixed',
     top: 0, left: 0, right: 0, bottom: 0,
@@ -738,6 +750,11 @@ const styles = {
     padding: '4px',
     borderRadius: '50%',
     transition: 'all 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
     ':hover': {
       backgroundColor: colors.gray200,
       color: colors.gray700
@@ -816,36 +833,31 @@ const styles = {
     gap: '12px'
   },
   modalPrimaryButton: {
-    backgroundColor: colors.primary,
-    color: 'white',
+    ...baseComponents.buttonPrimary,
     padding: '10px 24px',
     height: '40px',
-    borderRadius: radius.md,
-    border: 'none',
-    fontWeight: '600',
     fontSize: '0.9rem',
-    cursor: 'pointer',
-    boxShadow: shadows.md,
-    ':hover': {
-      backgroundColor: colors.primaryHover,
-      transform: 'translateY(-1px)'
-    }
+    boxShadow: shadows.md
   },
   modalSecondaryButton: {
-    backgroundColor: 'white',
-    color: colors.gray700,
+    ...baseComponents.buttonSecondary,
     padding: '10px 24px',
     height: '40px',
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
-    fontWeight: '500',
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    ':hover': {
-      backgroundColor: colors.gray50,
-      borderColor: colors.gray400
-    }
+    fontSize: '0.9rem'
   }
 };
+
+// Inyección de estilos de animación global
+const styleSheet = document.styleSheets[0];
+if (styleSheet) {
+  try {
+    styleSheet.insertRule(`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `, styleSheet.cssRules.length);
+  } catch (e) {}
+}
 
 export default ReceptorDashboard;

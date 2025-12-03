@@ -21,11 +21,9 @@ const UserManagement = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  // Usar useRef para evitar notificaciones duplicadas
   const initialLoadRef = useRef(true);
   const actionInProgressRef = useRef(false);
 
-  // Effect para manejar la tecla ESC
   useEffect(() => {
     const handleEscKey = (event) => {
       if (event.keyCode === 27 && showModal) {
@@ -46,22 +44,17 @@ const UserManagement = () => {
     };
   }, [showModal]);
 
-  // Cargar usuarios SIN notificación inicial
   const loadUsers = async (showNotification = false) => {
     try {
       setLoading(true);
-      console.log('🔄 Cargando Usuarios...');
       const usersData = await apiClient.getUsers();
-      console.log('✅ Usuarios cargados: ', usersData);
       setUsers(usersData);
 
-      // Solo mostrar notificación si se solicita explícitamente (para acciones)
       if (showNotification && !initialLoadRef.current) {
         addToast(`Usuarios actualizados correctamente`, 'success');
       }
     } catch (error) {
-      console.error('❌ Error cargando usuarios:', error);
-      // Solo mostrar error si no es la carga inicial
+      console.error('Error cargando usuarios:', error);
       if (!initialLoadRef.current) {
         addToast('Error al cargar usuarios: ' + error.message, 'error');
       }
@@ -72,10 +65,9 @@ const UserManagement = () => {
   };
 
   useEffect(() => {
-    loadUsers(false); // Carga inicial sin notificación
+    loadUsers(false); 
   }, []);
 
-  // Abrir modal para crear usuario
   const openCreateModal = () => {
     setEditingUser(null);
     setFormData({
@@ -88,12 +80,11 @@ const UserManagement = () => {
     setShowModal(true);
   };
 
-  // Abrir modal para editar usuario
   const openEditModal = (user) => {
     setEditingUser(user);
     setFormData({
       username: user.username,
-      password: '', // No mostrar password actual
+      password: '', 
       name: user.name,
       role: user.role,
       activo: user.activo
@@ -101,7 +92,6 @@ const UserManagement = () => {
     setShowModal(true);
   };
 
-  // Manejar cambios en el formulario
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
@@ -110,7 +100,6 @@ const UserManagement = () => {
     }));
   };
 
-  // Enviar formulario (crear o actualizar) con notificaciones
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -135,7 +124,6 @@ const UserManagement = () => {
       setShowModal(false);
       loadUsers(true);
     } catch (error) {
-      // Manejar errores específicos
       const errorMessage = error.message || '';
 
       if (errorMessage.includes('El nombre de usuario ya está en uso')) {
@@ -156,7 +144,6 @@ const UserManagement = () => {
     }
   };
 
-  // Cambiar estado activo/inactivo con notificaciones
   const handleToggleStatus = async (user) => {
     if (actionInProgressRef.current) return;
     actionInProgressRef.current = true;
@@ -175,14 +162,13 @@ const UserManagement = () => {
     try {
       await apiClient.toggleUserStatus(user.id);
       addToast(`Usuario ${user.activo ? 'desactivado' : 'activado'} exitosamente`, 'success');
-      loadUsers(true); // Recargar con notificación
+      loadUsers(true); 
     } catch (error) {
       addToast('Error al cambiar estado: ' + error.message, 'error');
       actionInProgressRef.current = false;
     }
   };
 
-  // Eliminar usuario con notificaciones
   const handleDelete = async (user) => {
     if (actionInProgressRef.current) return;
     actionInProgressRef.current = true;
@@ -195,14 +181,13 @@ const UserManagement = () => {
     try {
       await apiClient.deleteUser(user.id);
       addToast(`Usuario "${user.name}" eliminado exitosamente`, 'success');
-      loadUsers(true); // Recargar con notificación
+      loadUsers(true); 
     } catch (error) {
       addToast('Error al eliminar usuario: ' + error.message, 'error');
       actionInProgressRef.current = false;
     }
   };
 
-  // Traducir roles a español
   const getRoleLabel = (role) => {
     const roles = {
       admin: 'Administrador',
@@ -212,10 +197,6 @@ const UserManagement = () => {
     return roles[role] || role;
   };
 
-
-  // ==========================================
-  // ESTILOS ACTUALIZADOS CON ANIMACIÓN DE CARGA
-  // ==========================================
   const styles = {
     container: {
       ...baseComponents.card,
@@ -236,7 +217,6 @@ const UserManagement = () => {
       color: colors.gray900,
       margin: 0
     },
-    // BOTÓN CREAR USUARIO CON TEXTO CENTRADO
     createButton: {
       ...baseComponents.buttonPrimary,
       display: 'flex',
@@ -246,7 +226,6 @@ const UserManagement = () => {
       padding: `${spacing.sm} ${spacing.md}`,
       height: '40px'
     },
-    // ANIMACIÓN DE CARGA CIRCULAR
     loadingContainer: {
       display: 'flex',
       justifyContent: 'center',
@@ -303,13 +282,9 @@ const UserManagement = () => {
       color: colors.gray700
     },
     status: {
-      padding: `${spacing.xs} ${spacing.sm}`,
-      borderRadius: radius.full,
-      fontSize: typography.sizes.xs,
-      fontWeight: typography.weights.semibold,
-      display: 'inline-block',
-      textAlign: 'center',
-      minWidth: '70px'
+      ...baseComponents.badge,
+      minWidth: '70px',
+      justifyContent: 'center'
     },
     active: {
       backgroundColor: colors.secondaryLight,
@@ -324,7 +299,6 @@ const UserManagement = () => {
       gap: spacing.xs,
       flexWrap: 'wrap'
     },
-    // BOTONES DE ACCIÓN MÁS COMPACTOS
     editButton: {
       ...baseComponents.buttonSecondary,
       padding: `${spacing.xs} ${spacing.sm}`,
@@ -414,15 +388,10 @@ const UserManagement = () => {
       fontWeight: typography.weights.semibold,
       color: colors.gray700
     },
-    // INPUTS CON TEXTO BIEN ALINEADO
     input: {
       ...baseComponents.input,
-      padding: `${spacing.sm} ${spacing.md}`,
-      height: '42px',
-      boxSizing: 'border-box',
-      lineHeight: '1.5'
+      height: '42px'
     },
-    // CONTENEDOR DE CONTRASEÑA CON BOTÓN TOGGLE
     passwordContainer: {
       position: 'relative',
       display: 'flex',
@@ -430,12 +399,8 @@ const UserManagement = () => {
     },
     passwordInput: {
       ...baseComponents.input,
-      padding: `${spacing.sm} ${spacing.md}`,
       paddingRight: '50px',
-      height: '42px',
-      boxSizing: 'border-box',
-      width: '100%',
-      lineHeight: '1.5'
+      height: '42px'
     },
     toggleButton: {
       position: 'absolute',
@@ -455,36 +420,9 @@ const UserManagement = () => {
         color: colors.gray700
       }
     },
-    // SELECT CORREGIDO - TEXTO BIEN ALINEADO
     select: {
       ...baseComponents.select,
-      width: '100%',
-      padding: `0 ${spacing.md}`,
-      height: '42px',
-      boxSizing: 'border-box',
-      borderRadius: radius.md,
-      border: `1px solid ${colors.gray300}`,
-      fontSize: typography.sizes.base,
-      fontFamily: typography.fontFamily,
-      backgroundColor: colors.surface,
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none',
-      // Estilos específicos para el select
-      appearance: 'none',
-      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-      backgroundPosition: `right ${spacing.sm} center`,
-      backgroundRepeat: 'no-repeat',
-      backgroundSize: '16px 16px',
-      paddingRight: '40px',
-      display: 'flex',
-      alignItems: 'center',
-      // Forzar alineación vertical del texto
-      lineHeight: '42px',
-      ':focus': {
-        borderColor: colors.primary,
-        boxShadow: `0 0 0 3px ${colors.primaryLight}`
-      }
+      height: '42px'
     },
     modalActions: {
       display: 'flex',
@@ -492,7 +430,6 @@ const UserManagement = () => {
       marginTop: spacing.md,
       justifyContent: 'flex-end'
     },
-    // BOTONES DEL MODAL CON TEXTO CENTRADO
     submitButton: {
       ...baseComponents.buttonPrimary,
       flex: 1,
@@ -516,17 +453,13 @@ const UserManagement = () => {
       fontSize: typography.sizes.lg
     },
     roleBadge: {
-      padding: `${spacing.xs} ${spacing.sm}`,
-      borderRadius: radius.sm,
-      fontSize: typography.sizes.xs,
-      fontWeight: typography.weights.semibold,
+      ...baseComponents.badge,
       backgroundColor: colors.primaryLight,
       color: colors.primary,
       textTransform: 'capitalize'
     }
   };
 
-  // Agregar animación de spinner
   React.useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -559,7 +492,11 @@ const UserManagement = () => {
       <div style={styles.header}>
         <h2 style={styles.title}>Gestión de Usuarios</h2>
         <button onClick={openCreateModal} style={styles.createButton}>
-          <span>+</span> Crear Nuevo Usuario
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Crear Nuevo Usuario
         </button>
       </div>
 
@@ -693,8 +630,19 @@ const UserManagement = () => {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     style={styles.toggleButton}
+                    title={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
                   >
-                    {showPassword ? '👁️' : '🔒'}
+                    {showPassword ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>

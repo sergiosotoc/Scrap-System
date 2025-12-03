@@ -1,14 +1,11 @@
 /* src/components/ProtectedRoute.js */
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { colors, spacing, typography, radius } from '../styles/designSystem';
+import { colors, spacing, typography, radius, baseComponents } from '../styles/designSystem';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading } = useAuth();
 
-  // ✅ CORRECCIÓN PRINCIPAL:
-  // Usamos useEffect para vigilar el estado.
-  // Si terminó de cargar y NO hay usuario, nos manda al login automáticamente.
   useEffect(() => {
     if (!loading && !user) {
       window.location.href = '/login';
@@ -29,20 +26,21 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     );
   }
 
-  // ✅ CAMBIO CLAVE:
-  // Si no hay usuario, retornamos null en lugar de la pantalla de error.
-  // Esto evita el "flashazo" de la pantalla de "Acceso no autorizado"
-  // mientras el useEffect de arriba hace la redirección.
   if (!user) {
     return null; 
   }
 
-  // Mantenemos la lógica de Roles (esto sí debe mostrar error si el usuario existe pero no tiene permiso)
   if (requiredRole && user.role !== requiredRole) {
     return (
       <div style={styles.errorContainer}>
         <div style={styles.errorContent}>
-          <div style={styles.errorIcon}>🚫</div>
+          <div style={styles.errorIconCircle}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
           <h2 style={styles.errorTitle}>Permisos insuficientes</h2>
           <p style={styles.errorMessage}>No tiene los permisos necesarios para acceder a esta página</p>
           <div style={styles.buttonGroup}>
@@ -109,7 +107,7 @@ const styles = {
     margin: 0,
     opacity: 0.8
   },
-  // Mantenemos los estilos de error por si se usan en la validación de roles
+  // Estilos de error
   errorContainer: {
     display: 'flex',
     justifyContent: 'center',
@@ -119,21 +117,24 @@ const styles = {
     padding: spacing.xl
   },
   errorContent: {
+    ...baseComponents.card,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: spacing.lg,
     textAlign: 'center',
     padding: spacing.xl,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-    border: `1px solid ${colors.gray200}`,
     maxWidth: '450px',
     width: '100%'
   },
-  errorIcon: {
-    fontSize: '48px',
+  errorIconCircle: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    backgroundColor: colors.error + '15', 
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.xs
   },
   errorTitle: {
@@ -149,46 +150,14 @@ const styles = {
     lineHeight: 1.5
   },
   loginButton: {
-    backgroundColor: colors.primary,
-    color: '#FFFFFF', // Corregido colors.white que podría no existir
-    border: 'none',
-    borderRadius: radius.md,
-    padding: `${spacing.sm} ${spacing.lg}`,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    ...baseComponents.buttonPrimary,
     width: 'auto',
-    minWidth: '140px',
-    ':hover': {
-      backgroundColor: colors.primaryHover || '#1D4ED8', // Fallback seguro
-      transform: 'translateY(-1px)',
-      boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
-    },
-    ':active': {
-      transform: 'translateY(0)'
-    }
+    minWidth: '140px'
   },
   secondaryButton: {
-    backgroundColor: colors.gray200,
-    color: colors.gray700,
-    border: 'none',
-    borderRadius: radius.md,
-    padding: `${spacing.sm} ${spacing.lg}`,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    ...baseComponents.buttonSecondary,
     width: 'auto',
-    minWidth: '140px',
-    ':hover': {
-      backgroundColor: colors.gray300,
-      transform: 'translateY(-1px)',
-      boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
-    },
-    ':active': {
-      transform: 'translateY(0)'
-    }
+    minWidth: '140px'
   },
   buttonGroup: {
     display: 'flex',
@@ -199,13 +168,12 @@ const styles = {
   }
 };
 
-// Agregar la animación del spinner si no existe
 if (typeof document !== 'undefined') {
   const styleSheet = document.styleSheets[0];
   if (styleSheet) {
     try {
-        const existingRules = Array.from(styleSheet.cssRules).map(rule => rule.cssText);
-        if (!existingRules.some(rule => rule.includes('@keyframes spin'))) {
+        const rules = Array.from(styleSheet.cssRules).map(r => r.cssText).join('');
+        if (!rules.includes('@keyframes spin')) {
         styleSheet.insertRule(`
             @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -213,8 +181,7 @@ if (typeof document !== 'undefined') {
             }
         `, styleSheet.cssRules.length);
         }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 }
 

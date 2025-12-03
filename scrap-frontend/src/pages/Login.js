@@ -12,13 +12,9 @@ const Login = () => {
   
   const { login } = useAuth();
 
-  // Función para analizar el error y devolver un mensaje específico
   const getErrorMessage = (error) => {
     const errorMessage = error.message || error.toString();
     
-    console.log('🔍 Analizando error:', errorMessage);
-    
-    // Buscar patrones específicos en el mensaje de error
     if (errorMessage.includes('credenciales') || 
         errorMessage.includes('invalid') || 
         errorMessage.includes('incorrect') ||
@@ -53,7 +49,6 @@ const Login = () => {
       return 'El usuario está desactivado. Contacta al administrador';
     }
     
-    // Si no coincide con ningún patrón conocido, mostrar el mensaje original
     return errorMessage;
   };
 
@@ -62,16 +57,10 @@ const Login = () => {
     setLoading(true);
     setError('');
 
-    console.log('🔐 Intentando login con:', { username });
-    
     try {
       const result = await login(username, password);
       
-      console.log('📋 Resultado del login:', result);
-      
       if (result.success) {
-        console.log('✅ Login exitoso, redirigiendo...');
-        
         if (result.user.role === 'admin') {
           window.location.href = '/admin';
         } else if (result.user.role === 'operador') {
@@ -82,12 +71,10 @@ const Login = () => {
           window.location.href = '/home';
         }
       } else {
-        // Si el login devuelve un error específico
         const specificError = getErrorMessage(result.error || result);
         setError(specificError);
       }
     } catch (error) {
-      console.error('❌ Error en el login:', error);
       const specificError = getErrorMessage(error);
       setError(specificError);
     } finally {
@@ -95,14 +82,10 @@ const Login = () => {
     }
   };
 
-  // Función para alternar visibilidad de contraseña
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
 
-  // ==========================================
-  // ESTILOS MEJORADOS - CON BOTÓN DE VISIBILIDAD
-  // ==========================================
   const styles = {
     container: {
       display: 'flex',
@@ -129,8 +112,8 @@ const Login = () => {
       height: '80px',
       width: 'auto',
       maxWidth: '200px',
-      objectFit: 'contain',
-      filter: 'brightness(0) invert(0)'
+      objectFit: 'contain'
+      // Se eliminó la propiedad filter: 'brightness(0) invert(0)' para mostrar el color original
     },
     title: {
       textAlign: 'center',
@@ -166,15 +149,10 @@ const Login = () => {
       fontWeight: typography.weights.semibold,
       color: colors.gray700
     },
-    // INPUTS MÁS COMPACTOS
     input: {
       ...baseComponents.input,
-      padding: `${spacing.sm} ${spacing.md}`,
-      fontSize: typography.sizes.sm,
-      height: '42px',
-      boxSizing: 'border-box'
+      height: '42px'
     },
-    // CONTENEDOR DE CONTRASEÑA CON BOTÓN
     passwordContainer: {
       position: 'relative',
       display: 'flex',
@@ -182,12 +160,8 @@ const Login = () => {
     },
     passwordInput: {
       ...baseComponents.input,
-      padding: `${spacing.sm} ${spacing.md}`,
-      paddingRight: '50px',
-      fontSize: typography.sizes.sm,
-      height: '42px',
-      boxSizing: 'border-box',
-      width: '100%'
+      paddingRight: '60px',
+      height: '42px'
     },
     toggleButton: {
       position: 'absolute',
@@ -201,24 +175,24 @@ const Login = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      fontSize: '11px',
+      fontWeight: 'bold',
+      textTransform: 'uppercase',
       transition: 'all 0.2s ease',
       ':hover': {
         backgroundColor: colors.gray100,
         color: colors.gray700
       }
     },
-    // BOTÓN MÁS COMPACTO
     button: {
       ...baseComponents.buttonPrimary,
-      padding: `${spacing.sm} ${spacing.lg}`,
-      fontSize: typography.sizes.base,
-      fontWeight: typography.weights.semibold,
       marginTop: spacing.sm,
       height: '46px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      width: '100%'
+      width: '100%',
+      fontSize: typography.sizes.base
     },
     error: {
       backgroundColor: colors.error + '10',
@@ -257,10 +231,7 @@ const Login = () => {
       }
     },
     roleBadge: {
-      padding: `${spacing.xs} ${spacing.sm}`,
-      borderRadius: radius.sm,
-      fontSize: typography.sizes.xs,
-      fontWeight: typography.weights.semibold,
+      ...baseComponents.badge,
       backgroundColor: colors.primaryLight,
       color: colors.primary
     }
@@ -269,7 +240,6 @@ const Login = () => {
   return (
     <div style={styles.container}>
       <div style={styles.loginBox}>
-        {/* Logo agregado */}
         <div style={styles.logoContainer}>
           <img 
             src="/Logo-COFICAB.png" 
@@ -321,11 +291,18 @@ const Login = () => {
                 onClick={togglePasswordVisibility}
                 style={styles.toggleButton}
                 disabled={loading}
+                title={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
               >
                 {showPassword ? (
-                  <span title="Ocultar contraseña">👁️</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
                 ) : (
-                  <span title="Mostrar contraseña">🔒</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
                 )}
               </button>
             </div>
@@ -343,41 +320,9 @@ const Login = () => {
             }}
             disabled={loading}
           >
-            {loading ? (
-              <>
-                <span style={{ marginRight: spacing.xs }}>⏳</span>
-                Iniciando sesión...
-              </>
-            ) : (
-              'Iniciar Sesión'
-            )}
+            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
-        
-        <div style={styles.demo}>
-          <p style={styles.demoTitle}>Usuarios de prueba:</p>
-          <div style={styles.demoItem}>
-            <span>👑 Admin</span>
-            <div>
-              <span style={{ marginRight: spacing.sm, color: colors.gray600 }}>admin / scrap2025</span>
-              <span style={styles.roleBadge}>Administrador</span>
-            </div>
-          </div>
-          <div style={styles.demoItem}>
-            <span>👨‍💼 Operador</span>
-            <div>
-              <span style={{ marginRight: spacing.sm, color: colors.gray600 }}>operador1 / operador123</span>
-              <span style={{...styles.roleBadge, backgroundColor: colors.secondaryLight, color: colors.secondary}}>Operador</span>
-            </div>
-          </div>
-          <div style={styles.demoItem}>
-            <span>🏷️ Receptor</span>
-            <div>
-              <span style={{ marginRight: spacing.sm, color: colors.gray600 }}>receptor1 / receptor123</span>
-              <span style={{...styles.roleBadge, backgroundColor: colors.warning + '20', color: colors.warning}}>Receptor</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

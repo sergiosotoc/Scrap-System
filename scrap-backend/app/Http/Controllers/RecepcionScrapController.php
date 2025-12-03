@@ -48,8 +48,6 @@ class RecepcionScrapController extends Controller
 
     public function store(Request $request)
     {
-        // MODIFICACIÓN: Validación condicional
-        // 'origen_especifico' solo es requerido si 'origen_tipo' es 'externa'
         $validated = $request->validate([
             'peso_kg' => 'required|numeric|min:0.1',
             'tipo_material' => 'required|string|max:50',
@@ -69,8 +67,6 @@ class RecepcionScrapController extends Controller
                 'peso_kg' => $validated['peso_kg'],
                 'tipo_material' => $validated['tipo_material'],
                 'origen_tipo' => $validated['origen_tipo'],
-                // Si es interna, guardamos NULL o "Interna" si la DB no acepta nulos, 
-                // pero asumiremos que acepta nulos o string vacío.
                 'origen_especifico' => $validated['origen_especifico'] ?? null,
                 'receptor_id' => Auth::id(),
                 'destino' => $validated['destino'],
@@ -160,37 +156,6 @@ class RecepcionScrapController extends Controller
             'recepciones' => $recepciones,
             'totales' => $totales,
             'filtros' => $request->all()
-        ]);
-    }
-
-    public function stockDisponible()
-    {
-        return response()->json([]); 
-    }
-
-    public function stats()
-    {
-        $user = Auth::user();
-
-        if ($user->role === 'admin') {
-            $totalRecepciones = RecepcionesScrap::count();
-            $totalPeso = RecepcionesScrap::sum('peso_kg');
-        } else {
-            $totalRecepciones = RecepcionesScrap::where('receptor_id', $user->id)->count();
-            $totalPeso = RecepcionesScrap::where('receptor_id', $user->id)->sum('peso_kg');
-        }
-
-        $destinos = RecepcionesScrap::when($user->role !== 'admin', function ($query) use ($user) {
-            return $query->where('receptor_id', $user->id);
-        })
-            ->selectRaw('destino, COUNT(*) as count, SUM(peso_kg) as peso_total')
-            ->groupBy('destino')
-            ->get();
-
-        return response()->json([
-            'total_recepciones' => $totalRecepciones,
-            'total_peso_kg' => $totalPeso,
-            'destinos' => $destinos,
         ]);
     }
 

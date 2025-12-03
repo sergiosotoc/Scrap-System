@@ -204,10 +204,6 @@ export const apiClient = {
         return this.request('/recepciones-scrap/stats');
     },
 
-    async getStockDisponible() {
-        return this.request('/recepciones-scrap/stock/disponible');
-    },
-
     // Usuarios (solo admin)
     async getUsers() {
         return this.request('/users');

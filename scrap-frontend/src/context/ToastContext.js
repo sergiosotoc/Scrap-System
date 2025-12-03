@@ -27,6 +27,36 @@ export const ToastProvider = ({ children }) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Iconos SVG para los toasts
+  const icons = {
+    success: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    ),
+    error: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+    ),
+    warning: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    ),
+    info: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    )
+  };
+
   // Estilos modernizados para toasts
   const toastStyles = {
     container: {
@@ -47,7 +77,7 @@ export const ToastProvider = ({ children }) => {
       boxShadow: shadows.lg,
       display: 'flex',
       alignItems: 'flex-start',
-      gap: spacing.sm,
+      gap: spacing.md,
       color: colors.surface,
       fontSize: typography.sizes.sm,
       lineHeight: 1.5,
@@ -75,9 +105,11 @@ export const ToastProvider = ({ children }) => {
       borderLeft: `4px solid #2563EB`
     },
     icon: { 
-      fontSize: '1.2rem',
       flexShrink: 0,
-      marginTop: '2px'
+      marginTop: '2px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     message: { 
       margin: 0, 
@@ -88,7 +120,7 @@ export const ToastProvider = ({ children }) => {
       background: 'transparent',
       border: 'none',
       color: 'rgba(255,255,255,0.8)',
-      fontSize: '1.5rem',
+      fontSize: '1.2rem',
       cursor: 'pointer',
       padding: '0',
       lineHeight: '1',
@@ -159,10 +191,7 @@ export const ToastProvider = ({ children }) => {
             }}
           >
             <span style={toastStyles.icon}>
-              {toast.type === 'success' && '✅'}
-              {toast.type === 'error' && '❌'}
-              {toast.type === 'warning' && '⚠️'}
-              {toast.type === 'info' && 'ℹ️'}
+              {icons[toast.type]}
             </span>
             <p style={toastStyles.message}>{toast.message}</p>
             <button 
@@ -170,7 +199,7 @@ export const ToastProvider = ({ children }) => {
               style={toastStyles.closeBtn}
               aria-label="Cerrar notificación"
             >
-              ×
+              ✕
             </button>
           </div>
         ))}

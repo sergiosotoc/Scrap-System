@@ -141,7 +141,7 @@ const Layout = ({ children }) => {
               <polyline points="16 17 21 12 16 7"></polyline>
               <line x1="21" y1="12" x2="9" y2="12"></line>
             </svg>
-            <span>Salir</span>
+            <span>Cerrar sesión</span>
           </button>
         </div>
       </header>

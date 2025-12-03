@@ -14,11 +14,11 @@ return new class extends Migration
             // Identificación única de la etiqueta
             $table->string('numero_hu')->unique();
             
-            // Datos de la recepción (Independiente del operador)
+            // Datos de la recepción
             $table->decimal('peso_kg', 10, 3);
             $table->string('tipo_material');
             
-            // Datos informativos (opcionales si no se requiere trazabilidad estricta)
+            // Datos informativos
             $table->enum('origen_tipo', ['interna', 'externa'])->default('interna');
             $table->string('origen_especifico')->nullable(); // Ej: Planta 2, Proveedor X
             
@@ -29,11 +29,18 @@ return new class extends Migration
             $table->enum('destino', ['reciclaje', 'venta', 'almacenamiento']);
             $table->string('lugar_almacenamiento')->nullable();
             
+            // Información adicional
             $table->text('observaciones')->nullable();
             $table->boolean('impreso')->default(false);
             
+            // Fechas
             $table->timestamp('fecha_entrada')->useCurrent();
-            $table->timestamps(); // created_at, updated_at
+            $table->timestamps();
+            
+            // Índices para búsquedas rápidas
+            $table->index('tipo_material');
+            $table->index('destino');
+            $table->index('fecha_entrada');
         });
     }
 

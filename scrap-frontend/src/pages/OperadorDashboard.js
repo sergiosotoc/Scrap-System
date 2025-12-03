@@ -1,3 +1,4 @@
+/* src/pages/OperadorDashboard */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -12,15 +13,10 @@ const OperadorDashboard = () => {
   const [showModal, setShowModal] = useState(false);
   const [registros, setRegistros] = useState([]);
   const [stats, setStats] = useState(null);
-  
-  // loading: Solo para la primera vez que entras a la página
   const [loading, setLoading] = useState(true);
-  // isFetching: Para cuando cambias filtros (carga de fondo)
   const [isFetching, setIsFetching] = useState(false);
-  
   const [modalLoading, setModalLoading] = useState(false);
 
-  // Obtenemos la fecha actual en formato local YYYY-MM-DD
   const getTodayLocal = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -30,37 +26,25 @@ const OperadorDashboard = () => {
   };
 
   const today = getTodayLocal();
-
-  // Estado independiente para el input de fecha (visual)
   const [fechaInput, setFechaInput] = useState(today);
-
-  // Estado para los filtros reales (lógica)
   const [filtros, setFiltros] = useState({
     area: '',
     turno: '',
     fecha: today
   });
 
-  // Lógica de DEBOUNCE para la fecha:
-  // Espera 600ms después del último cambio en el calendario antes de actualizar los filtros.
-  // Esto evita que se refresque la tabla si solo estás cambiando de mes.
   useEffect(() => {
     const timer = setTimeout(() => {
       setFiltros(prev => {
-        // Si la fecha no ha cambiado realmente, no hacemos nada
         if (prev.fecha === fechaInput) return prev;
         return { ...prev, fecha: fechaInput };
       });
-    }, 600); // 600ms de retraso
-
-    return () => clearTimeout(timer); // Limpia el timer si el usuario sigue interactuando
+    }, 600);
+    return () => clearTimeout(timer);
   }, [fechaInput]);
 
   const loadOperadorData = useCallback(async () => {
-    // Si la fecha está vacía (usuario borrando), evitamos la llamada
     if (!filtros.fecha) return;
-
-    // Activamos el indicador de "actualizando"
     setIsFetching(true);
     
     try {
@@ -71,28 +55,22 @@ const OperadorDashboard = () => {
       setRegistros(Array.isArray(registrosData) ? registrosData : []);
       setStats(statsData);
     } catch (error) {
-      console.error(error);
       addToast('Error cargando datos: ' + (error.message || 'Error desconocido'), 'error');
     } finally {
-      // Apagamos indicadores
       setLoading(false);
       setIsFetching(false);
     }
   }, [filtros, addToast]); 
 
-  // Este useEffect se dispara cuando 'filtros' cambia (ya sea por select o por el debounce de fecha)
   useEffect(() => {
     loadOperadorData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(filtros)]);
 
-  // Manejador para los Selects (Área, Turno) - Actualizan inmediato
   const handleSelectChange = (e) => {
     const { name, value } = e.target;
     setFiltros(prev => ({ ...prev, [name]: value }));
   };
 
-  // Manejador exclusivo para la Fecha - Actualiza solo el input visual
   const handleFechaChange = (e) => {
     setFechaInput(e.target.value);
   };
@@ -114,7 +92,6 @@ const OperadorDashboard = () => {
     }, 100);
   };
 
-  // Solo mostramos pantalla de carga completa si es la PRIMERA carga
   if (loading) {
     return (
       <div style={styles.loading}>
@@ -129,22 +106,31 @@ const OperadorDashboard = () => {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Dashboard Operador</h1>
-          <p style={styles.subtitle}>Hola, {user?.name || 'Operador'} 👋</p>
+          <p style={styles.subtitle}>Bienvenido, {user?.name || 'Operador'}</p>
         </div>
         <div style={styles.headerActions}>
           <button onClick={handleOpenModal} style={styles.primaryButton}>
-            <span>➕</span> Nuevo Registro
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Nuevo Registro
           </button>
         </div>
       </div>
 
-      {/* Filtros & Tabla */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <h3 style={styles.cardTitle}>
-            📋 Registros Recientes
-            {/* Pequeño indicador visual de que se está actualizando */}
-            {isFetching && <span style={styles.miniLoader}>⏳ Actualizando...</span>}
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Registros Recientes
+            {isFetching && <span style={styles.miniLoader}>Actualizando...</span>}
           </h3>
           <div style={styles.filters}>
             <div style={styles.filterGroup}>
@@ -189,8 +175,8 @@ const OperadorDashboard = () => {
               <input
                 type="date"
                 name="fecha"
-                value={fechaInput} // Vinculado al estado local visual
-                onChange={handleFechaChange} // Solo actualiza visualmente al inicio
+                value={fechaInput}
+                onChange={handleFechaChange}
                 max={today}
                 style={styles.input}
               />
@@ -199,13 +185,12 @@ const OperadorDashboard = () => {
             <ExcelExportButtons
               tipo="formato-empresa"
               filters={filtros}
-              buttonText="📊 Generar Reporte"
+              buttonText="Exportar Reporte"
               buttonStyle={styles.reportButton}
             />
           </div>
         </div>
 
-        {/* Agregamos opacidad a la tabla cuando se está filtrando para dar feedback visual */}
         <div style={{...styles.tableContainer, opacity: isFetching ? 0.6 : 1, transition: 'opacity 0.2s'}}>
           {registros.length > 0 ? (
             <table style={styles.table}>
@@ -278,11 +263,11 @@ const OperadorDashboard = () => {
                     <td style={styles.td}>
                       {r.conexion_bascula ? (
                         <span style={styles.badgeSuccess}>
-                          ⚖️ Báscula
+                          BÁSCULA
                         </span>
                       ) : (
                         <span style={styles.badgeWarn}>
-                          ✍️ Manual
+                          MANUAL
                         </span>
                       )}
                     </td>
@@ -297,7 +282,13 @@ const OperadorDashboard = () => {
             </table>
           ) : (
             <div style={styles.emptyState}>
-              <div style={styles.emptyStateIcon}>📭</div>
+              <div style={{marginBottom: '10px'}}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.gray300}}>
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+              </div>
               <h3 style={styles.emptyStateText}>No hay registros</h3>
               <p style={styles.emptyStateSubtext}>
                 No se encontraron registros con los filtros seleccionados
@@ -306,13 +297,16 @@ const OperadorDashboard = () => {
                 onClick={() => setShowModal(true)}
                 style={styles.primaryButton}
               >
-                ➕ Crear Primer Registro
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Crear Primer Registro
               </button>
             </div>
           )}
         </div>
 
-        {/* Información de resumen */}
         {registros.length > 0 && (
           <div style={styles.resumenContainer}>
             <div style={styles.resumenItem}>
@@ -346,7 +340,6 @@ const OperadorDashboard = () => {
         )}
       </div>
 
-      {/* Modal con RegistroScrapCompleto */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -360,11 +353,13 @@ const OperadorDashboard = () => {
                 style={styles.closeBtn}
                 aria-label="Cerrar modal"
               >
-                ×
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
               </button>
             </div>
             <div style={styles.modalContent}>
-              {/* Spinner de carga superpuesto */}
               {modalLoading && (
                 <div style={styles.modalLoading}>
                   <div style={styles.modalSpinner}></div>
@@ -453,7 +448,6 @@ const styles = {
     borderRadius: '50%',
     animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
   },
-  // ESTILOS LOADING MODAL
   modalLoading: {
     position: 'absolute',
     top: 0,
@@ -640,42 +634,26 @@ const styles = {
     color: colors.success
   },
   turnoBadge: {
+    ...baseComponents.badge,
     backgroundColor: colors.gray200,
-    color: colors.gray700,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold
+    color: colors.gray700
   },
   areaTag: {
+    ...baseComponents.badge,
     backgroundColor: colors.primaryLight,
     color: colors.primary,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
     textTransform: 'uppercase'
   },
   badgeSuccess: {
+    ...baseComponents.badge,
     backgroundColor: colors.secondaryLight,
     color: colors.secondary,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
-    display: 'inline-flex',
-    alignItems: 'center',
     gap: spacing.xs
   },
   badgeWarn: {
+    ...baseComponents.badge,
     backgroundColor: colors.warning + '20',
     color: colors.warning,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
-    display: 'inline-flex',
-    alignItems: 'center',
     gap: spacing.xs
   },
   loteCode: {
@@ -717,11 +695,6 @@ const styles = {
     padding: spacing.xl,
     textAlign: 'center',
     color: colors.gray500
-  },
-  emptyStateIcon: {
-    fontSize: '4rem',
-    marginBottom: spacing.md,
-    opacity: 0.5
   },
   emptyStateText: {
     fontSize: typography.sizes.xl,
@@ -794,7 +767,7 @@ const styles = {
   closeBtn: {
     background: 'none',
     border: 'none',
-    fontSize: '1.5rem',
+    fontSize: '1.2rem',
     cursor: 'pointer',
     color: colors.gray500,
     padding: spacing.xs,
@@ -812,7 +785,6 @@ const styles = {
   }
 };
 
-// Agregar la animación del spinner
 const styleSheet = document.styleSheets[0];
 if (styleSheet) {
   try {
@@ -830,7 +802,6 @@ if (styleSheet) {
       }
     `, styleSheet.cssRules.length);
   } catch (e) {
-    // Regla ya existe o error de seguridad en CORS, ignorar
   }
 }
 

@@ -4,7 +4,7 @@ import { excelService } from '../services/excelService';
 import { useToast } from '../context/ToastContext';
 import { baseComponents, colors, spacing, typography, radius } from '../styles/designSystem';
 
-const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "📊 Generar Reporte", buttonStyle = {} }) => {
+const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte", buttonStyle = {} }) => {
     const [exportando, setExportando] = useState(false);
     const { addToast } = useToast();
 
@@ -45,32 +45,44 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "📊 Generar Rep
         }
     };
 
-    const getButtonText = () => {
+    const getButtonContent = () => {
         if (exportando) {
-            return '⏳ Generando...';
+            return (
+                <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation: 'spin 1s linear infinite'}}>
+                        <line x1="12" y1="2" x2="12" y2="6"></line>
+                        <line x1="12" y1="18" x2="12" y2="22"></line>
+                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                        <line x1="2" y1="12" x2="6" y2="12"></line>
+                        <line x1="18" y1="12" x2="22" y2="12"></line>
+                        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                    </svg>
+                    <span>Generando...</span>
+                </>
+            );
         }
-        return buttonText;
+        return (
+            <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                </svg>
+                <span>{buttonText}</span>
+            </>
+        );
     };
 
-    // Estilos mejorados
     const styles = {
         button: {
             ...baseComponents.buttonPrimary,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: spacing.xs,
-            padding: `${spacing.sm} ${spacing.md}`,
             height: '36px',
-            fontSize: typography.sizes.sm,
-            fontWeight: typography.weights.semibold,
             backgroundColor: exportando ? colors.gray400 : colors.success,
-            border: `1px solid ${exportando ? colors.gray400 : colors.success}`,
-            borderRadius: radius.md,
             cursor: exportando ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s ease',
             opacity: exportando ? 0.7 : 1,
-            transform: exportando ? 'none' : 'translateY(0)',
             boxShadow: exportando ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
             ':hover': exportando ? {} : {
                 backgroundColor: colors.secondaryHover,
@@ -81,6 +93,25 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "📊 Generar Rep
         }
     };
 
+    React.useEffect(() => {
+        if (typeof document !== 'undefined') {
+            const styleSheet = document.styleSheets[0];
+            if (styleSheet) {
+                try {
+                    const rules = Array.from(styleSheet.cssRules).map(r => r.cssText).join('');
+                    if (!rules.includes('@keyframes spin')) {
+                        styleSheet.insertRule(`
+                            @keyframes spin {
+                                from { transform: rotate(0deg); }
+                                to { transform: rotate(360deg); }
+                            }
+                        `, styleSheet.cssRules.length);
+                    }
+                } catch(e) {}
+            }
+        }
+    }, []);
+
     return (
         <button 
             onClick={handleExport}
@@ -88,7 +119,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "📊 Generar Rep
             title="Generar Reporte en Excel"
             style={styles.button}
         >
-            {getButtonText()}
+            {getButtonContent()}
         </button>
     );
 };

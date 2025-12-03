@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\RegistrosScrap;
 use App\Models\RecepcionesScrap;
-use App\Models\StockScrap;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -68,7 +67,7 @@ class DashboardController extends Controller
                 'usuarios' => User::count(),
                 'registros' => RegistrosScrap::count(),
                 'recepciones' => RecepcionesScrap::count(),
-                'stock_total' => StockScrap::sum('cantidad_kg'),
+                // ELIMINAR: 'stock_total' => StockScrap::sum('cantidad_kg'), ← Esta línea
             ],
 
             // Distribución por turnos
@@ -88,12 +87,6 @@ class DashboardController extends Controller
                 ->groupBy('tipo_material')
                 ->orderBy('total_kg', 'desc')
                 ->limit(5)
-                ->get(),
-
-            // Stock disponible
-            'stock_disponible' => StockScrap::disponible()
-                ->select('tipo_material', DB::raw('SUM(cantidad_kg) as cantidad_total'))
-                ->groupBy('tipo_material')
                 ->get(),
         ];
 

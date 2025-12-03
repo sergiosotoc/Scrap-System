@@ -1,20 +1,14 @@
 // ============================================
-// SISTEMA DE DISEÑO UNIFICADO
+// SISTEMA DE DISEÑO UNIFICADO (CORREGIDO Y COMPACTO)
 // ============================================
 
-// Sistema de colores consistente
 export const colors = {
-  // Primarios
   primary: '#2563EB',
   primaryHover: '#1D4ED8',
   primaryLight: '#DBEAFE',
-  
-  // Secundarios
   secondary: '#10B981',
   secondaryHover: '#059669',
   secondaryLight: '#D1FAE5',
-  
-  // Grises
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',
   gray200: '#E5E7EB',
@@ -25,24 +19,17 @@ export const colors = {
   gray700: '#374151',
   gray800: '#1F2937',
   gray900: '#111827',
-  
-  // Estados
   success: '#10B981',
   warning: '#F59E0B',
   error: '#EF4444',
   info: '#3B82F6',
-  
-  // Fondos
   background: '#F3F4F6',
   surface: '#FFFFFF',
-  
-  // Báscula LCD
   lcdBase: '#C4D4C4',
   lcdGradient: 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)',
   lcdText: '#1a2e1a'
 };
 
-// Sombras consistentes
 export const shadows = {
   sm: '0 1px 2px rgba(0,0,0,0.05)',
   base: '0 1px 3px rgba(0,0,0,0.1)',
@@ -52,7 +39,6 @@ export const shadows = {
   inner: 'inset 0 2px 4px rgba(0,0,0,0.06)'
 };
 
-// Bordes redondeados
 export const radius = {
   sm: '4px',
   base: '6px',
@@ -62,32 +48,27 @@ export const radius = {
   full: '9999px'
 };
 
-// Espaciados
 export const spacing = {
-  xs: '0.5rem',
-  sm: '0.75rem',
-  base: '1rem',
-  md: '1.5rem',
-  lg: '2rem',
-  xl: '3rem'
+  xs: '0.25rem',  // 4px
+  sm: '0.5rem',   // 8px (Reducido de 12px)
+  base: '1rem',   // 16px
+  md: '1.25rem',  // 20px
+  lg: '1.5rem',   // 24px
+  xl: '2rem'      // 32px
 };
 
-// Tipografía
 export const typography = {
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   fontMono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-  
   sizes: {
-    xs: '0.75rem',
-    sm: '0.875rem',
-    base: '1rem',
-    lg: '1.125rem',
-    xl: '1.25rem',
-    '2xl': '1.5rem',
-    '3xl': '1.875rem',
-    '4xl': '2.25rem'
+    xs: '0.75rem',    // 12px
+    sm: '0.875rem',   // 14px
+    base: '1rem',     // 16px
+    lg: '1.125rem',   // 18px
+    xl: '1.25rem',    // 20px
+    '2xl': '1.5rem',  // 24px
+    '3xl': '1.875rem' // 30px
   },
-  
   weights: {
     normal: '400',
     medium: '500',
@@ -97,27 +78,38 @@ export const typography = {
   }
 };
 
-// Componentes base modernos
+// Estilos base comunes para inputs y botones
+const commonInputStyles = {
+  padding: `${spacing.xs} ${spacing.sm}`, // Más compacto
+  borderRadius: radius.md,
+  border: `1px solid ${colors.gray300}`,
+  fontSize: typography.sizes.sm,
+  fontFamily: typography.fontFamily,
+  backgroundColor: colors.surface,
+  transition: 'all 0.2s ease',
+  outline: 'none',
+  height: '38px', // Altura fija estándar
+  boxSizing: 'border-box',
+  lineHeight: 1.5
+};
+
 export const baseComponents = {
-  // Botón primario
   buttonPrimary: {
+    ...commonInputStyles,
+    border: 'none', // Reset border
     backgroundColor: colors.primary,
     color: '#FFFFFF',
-    padding: `${spacing.sm} ${spacing.md}`,
-    borderRadius: radius.md,
-    border: 'none',
     fontWeight: typography.weights.semibold,
-    fontSize: typography.sizes.sm,
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: shadows.sm,
     display: 'inline-flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
+    width: 'auto', // Auto width por defecto
     ':hover': {
       backgroundColor: colors.primaryHover,
       transform: 'translateY(-1px)',
-      boxShadow: shadows.md
+      boxShadow: shadows.sm
     },
     ':disabled': {
       backgroundColor: colors.gray400,
@@ -126,78 +118,66 @@ export const baseComponents = {
     }
   },
   
-  // Botón secundario
   buttonSecondary: {
+    ...commonInputStyles,
     backgroundColor: colors.surface,
     color: colors.gray700,
-    padding: `${spacing.sm} ${spacing.md}`,
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
     fontWeight: typography.weights.semibold,
-    fontSize: typography.sizes.sm,
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: shadows.sm,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    width: 'auto',
     ':hover': {
       backgroundColor: colors.gray50,
       borderColor: colors.gray400
     }
   },
   
-  // Botón destructivo
   buttonDestructive: {
+    ...commonInputStyles,
+    border: 'none',
     backgroundColor: colors.error,
     color: '#FFFFFF',
-    padding: `${spacing.sm} ${spacing.md}`,
-    borderRadius: radius.md,
-    border: 'none',
     fontWeight: typography.weights.semibold,
-    fontSize: typography.sizes.sm,
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: shadows.sm,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    width: 'auto',
     ':hover': {
       backgroundColor: '#DC2626',
       transform: 'translateY(-1px)'
     }
   },
   
-  // Input moderno
   input: {
-    width: '100%',
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
-    fontSize: typography.sizes.base,
-    fontFamily: typography.fontFamily,
-    backgroundColor: colors.surface,
-    transition: 'all 0.2s ease',
-    outline: 'none',
+    ...commonInputStyles,
+    width: '100%', // Inputs suelen ocupar todo el ancho disponible
     ':focus': {
       borderColor: colors.primary,
       boxShadow: `0 0 0 3px ${colors.primaryLight}`
     }
   },
   
-  // Select moderno
   select: {
+    ...commonInputStyles,
     width: '100%',
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
-    fontSize: typography.sizes.base,
-    fontFamily: typography.fontFamily,
-    backgroundColor: colors.surface,
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    outline: 'none',
+    appearance: 'none', // Necesario para custom arrow
+    paddingRight: spacing.xl,
+    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+    backgroundPosition: `right ${spacing.xs} center`,
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '1.5em 1.5em',
     ':focus': {
       borderColor: colors.primary,
       boxShadow: `0 0 0 3px ${colors.primaryLight}`
     }
   },
   
-  // Card moderna
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -206,41 +186,24 @@ export const baseComponents = {
     overflow: 'hidden'
   },
   
-  // Badge
   badge: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: `${spacing.xs} ${spacing.sm}`,
+    justifyContent: 'center',
+    padding: `2px ${spacing.sm}`,
     borderRadius: radius.full,
-    fontSize: typography.sizes.xs,
+    fontSize: '0.75rem', // xs
     fontWeight: typography.weights.semibold,
-    letterSpacing: '0.025em'
+    letterSpacing: '0.025em',
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap'
   }
 };
 
-// Utilidades para estilos comunes
 export const utils = {
-  // Centrado flex
-  center: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  
-  // Espaciado entre elementos
-  gap: (size) => ({
-    display: 'flex',
-    gap: spacing[size] || size
-  }),
-  
-  // Texto truncado
-  truncate: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  
-  // Grid responsivo
+  center: { display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  gap: (size) => ({ display: 'flex', gap: spacing[size] || size }),
+  truncate: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   grid: (minWidth = '250px') => ({
     display: 'grid',
     gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}, 1fr))`,
@@ -248,15 +211,5 @@ export const utils = {
   })
 };
 
-// Exportar como objeto nombrado para evitar el error
-export const designSystem = {
-  colors,
-  shadows,
-  radius,
-  spacing,
-  typography,
-  baseComponents,
-  utils
-};
-
+export const designSystem = { colors, shadows, radius, spacing, typography, baseComponents, utils };
 export default designSystem;

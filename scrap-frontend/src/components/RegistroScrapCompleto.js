@@ -5,7 +5,6 @@ import BasculaConnection from './BasculaConnection';
 import { useToast } from '../context/ToastContext';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 
-// Componente de Fila Memoizado
 const ScrapRow = React.memo(({ 
   fila, 
   realIndex, 
@@ -92,23 +91,19 @@ const ScrapRow = React.memo(({
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete }) => {
   const { addToast } = useToast();
   
-  // Estados de datos
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tablaData, setTablaData] = useState([]);
   
-  // Estados de interfaz / filtros
   const [filtroArea, setFiltroArea] = useState('');
   const [filtroMaquina, setFiltroMaquina] = useState('');
   const [campoBasculaActivo, setCampoBasculaActivo] = useState('peso_cobre');
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
-  // Estados derivados
   const [areasDisponibles, setAreasDisponibles] = useState([]);
   const [maquinasDisponibles, setMaquinasDisponibles] = useState([]);
 
-  // Estado de selección
   const [maquinaSeleccionada, setMaquinaSeleccionada] = useState({
     area: '',
     maquina: '',
@@ -116,39 +111,31 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   });
   const [celdaActiva, setCeldaActiva] = useState(null);
 
-  // Formulario global
   const [formData, setFormData] = useState({
     turno: '',
     fecha: new Date().toISOString().split('T')[0]
   });
 
-  // REFS
   const maquinaSeleccionadaRef = useRef(maquinaSeleccionada);
   const celdaActivaRef = useRef(celdaActiva);
   const pesoBloqueadoRef = useRef(pesoBloqueado);
   const campoBasculaActivoRef = useRef(campoBasculaActivo);
-  
-  // Ref para el peso congelado
   const pesoCongeladoRef = useRef(0);
   
-  // Sincronizar refs
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
   useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
   useEffect(() => { pesoBloqueadoRef.current = pesoBloqueado; }, [pesoBloqueado]);
   useEffect(() => { campoBasculaActivoRef.current = campoBasculaActivo; }, [campoBasculaActivo]);
 
-  // Memoizar tiposScrap
   const tiposScrap = useMemo(() => {
     return config?.tipos_scrap ? Object.values(config.tipos_scrap).flat() : [];
   }, [config]);
 
-  // 1. CARGA INICIAL
   useEffect(() => {
     let mounted = true;
 
     const initData = async () => {
       try {
-        console.log('🔧 Cargando configuración...');
         const configData = await apiClient.getRegistrosConfig();
         
         if (!mounted) return;
@@ -203,7 +190,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     return () => { mounted = false; };
   }, []); 
 
-  // 2. LÓGICA DE FILTROS Y SELECCIÓN AUTOMÁTICA MEJORADA
   useEffect(() => {
     if (!config?.areas_maquinas || !filtroArea) {
       setMaquinasDisponibles([]);
@@ -218,12 +204,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, [filtroArea, config]);
 
-  // EFECTO DE SINCRONIZACIÓN TOTAL: FILTROS -> TABLA
   useEffect(() => {
     const filtrosCompletos = filtroArea && filtroMaquina && campoBasculaActivo;
     
     if (filtrosCompletos && tablaData.length > 0) {
-      // 1. Buscar la fila correspondiente
       const index = tablaData.findIndex(r => r.area_real === filtroArea && r.maquina_real === filtroMaquina);
       
       if (index !== -1) {
@@ -231,19 +215,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         const columnaDiferente = celdaActiva?.campo !== campoBasculaActivo;
 
         if (filaDiferente || columnaDiferente) {
-          console.log('🔄 Auto-seleccionando celda por filtros:', { index, campo: campoBasculaActivo });
-          
           setMaquinaSeleccionada({ area: filtroArea, maquina: filtroMaquina, index });
           setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
-          
-          // ✅ SIEMPRE desbloquear al cambiar cualquiera de los 3 filtros
           setPesoBloqueado(false);
         }
       }
     }
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
-  // 3. CALCULAR TOTALES FILA (Helper puro)
   const calcularTotalFila = (fila) => {
     const camposPeso = [
       'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
@@ -254,7 +233,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     return camposPeso.reduce((total, campo) => total + (parseFloat(fila[campo]) || 0), 0);
   };
 
-  // 4. MANEJO DE BÁSCULA INTELIGENTE
   const handlePesoFromBascula = useCallback((pesoInput) => {
     const currentBloqueado = pesoBloqueadoRef.current;
     const currentMaquinaSel = maquinaSeleccionadaRef.current;
@@ -266,16 +244,13 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     let nuevoValor = 0;
 
     if (currentBloqueado) {
-        // MODO CONGELADO
         nuevoValor = pesoCongeladoRef.current || 0;
     } else {
-        // MODO VIVO
         if (pesoInput === undefined || pesoInput === null) return;
         nuevoValor = parseFloat(pesoInput) || 0;
         pesoCongeladoRef.current = nuevoValor;
     }
     
-    // Determinar destino
     let targetIndex = -1;
     if (currentMaquinaSel.index !== null) {
       targetIndex = currentMaquinaSel.index;
@@ -285,7 +260,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
     if (targetIndex !== -1) {
       setTablaData(prevData => {
-        // Optimización: si el valor es igual, no actualizar
         const valorActual = prevData[targetIndex][campoDestino];
         if (Math.abs(valorActual - nuevoValor) < 0.001) {
             return prevData; 
@@ -305,8 +279,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, []);
 
-  // ✅ FUNCIONES DE INTERACCIÓN
-  
   const handleMaterialChange = (newMaterial) => {
     setCampoBasculaActivo(newMaterial);
   };
@@ -326,8 +298,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     
     setFiltroArea(area);
     setFiltroMaquina(maquina);
-
-    // Desbloquear al tocar manualmente
     setPesoBloqueado(false);
   }, []);
 
@@ -346,7 +316,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     });
   }, []);
 
-  // Enviar formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -384,15 +353,12 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       if (onRegistroCreado) onRegistroCreado();
 
     } catch (error) {
-      console.error('❌ Error:', error);
       addToast('Error al guardar: ' + error.message, 'error');
     } finally {
       setEnviando(false);
     }
   };
 
-  // ✅ OPTIMIZACIÓN: CÁLCULOS MEMOIZADOS
-  // Esto evita que se recalcule TODA la suma en cada "tick" de la báscula, reduciendo el lag
   const totales = useMemo(() => {
     const acc = {};
     const camposPeso = [
@@ -402,11 +368,9 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       'peso_cable_estanado_pvc', 'peso_cable_estanado_pe'
     ];
 
-    // Inicializar
     camposPeso.forEach(c => acc[c] = 0);
     acc.general = 0;
 
-    // Sumar
     tablaData.forEach(fila => {
         camposPeso.forEach(c => {
             acc[c] += (parseFloat(fila[c]) || 0);
@@ -415,9 +379,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     });
 
     return acc;
-  }, [tablaData]); // Solo se recalcula si tablaData cambia, pero es mucho más rápido
+  }, [tablaData]); 
 
-  // ✅ OPTIMIZACIÓN: FILTRO MEMOIZADO
   const datosFiltrados = useMemo(() => {
     return tablaData.filter(fila => {
         if (filtroArea && fila.area_real !== filtroArea) return false;
@@ -427,7 +390,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   }, [tablaData, filtroArea, filtroMaquina]);
 
   if (loading) {
-    // ✅ FIX: Usar estilo correcto para que tenga altura
     return <div style={styles.loading}><p>Cargando datos...</p></div>;
   }
 
@@ -436,9 +398,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   return (
     <div style={styles.container}>
       <form onSubmit={handleSubmit} style={styles.form}>
-        {/* CONTROLES PRINCIPALES */}
         <div style={styles.controls}>
-          {/* Báscula */}
           <div style={styles.section}>
             <BasculaConnection
               onPesoObtenido={handlePesoFromBascula}
@@ -446,9 +406,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
             />
           </div>
 
-          {/* Configuración */}
           <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>📋 Configuración de Registro</h3>
+            <h3 style={styles.sectionTitle}>Configuración de Registro</h3>
             <div style={styles.configGrid}>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Fecha</label>
@@ -526,7 +485,23 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                   onClick={() => setPesoBloqueado(!pesoBloqueado)}
                   style={pesoBloqueado ? styles.btnLocked : styles.btnUnlocked}
                 >
-                  {pesoBloqueado ? '🔒 CONGELADO' : '🔓 LEYENDO...'}
+                  {pesoBloqueado ? (
+                    <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        PESO CONGELADO
+                    </>
+                  ) : (
+                    <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                        </svg>
+                        LECTURA ACTIVA
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -547,7 +522,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                       style={styles.unfixButton}
                       title="Liberar máquina"
                     >
-                      ✕
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
                     </button>
                   </>
                 ) : (
@@ -558,11 +536,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           </div>
         </div>
 
-        {/* TABLA DE DATOS */}
         <div style={styles.dataSection}>
           <div style={styles.tableHeader}>
             <div style={styles.tableTitleSection}>
-              <h3 style={styles.sectionTitle}>📊 Datos de Producción</h3>
+              <h3 style={styles.sectionTitle}>Datos de Producción</h3>
               <p style={styles.tableSubtitle}>
                 {filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}
                 {filtroMaquina ? ` | Máquina: ${filtroMaquina}` : ''}
@@ -627,7 +604,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                   );
                 })}
 
-                {/* FILA DE TOTALES */}
                 <tr style={styles.totalsRow}>
                   <td style={styles.totalsLabelCell} colSpan="2">TOTALES</td>
                   {tiposScrap.map(tipo => (
@@ -646,7 +622,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           </div>
         </div>
 
-        {/* ACCIONES */}
         <div style={styles.actions}>
           <div style={styles.summary}>
              <span style={styles.summaryCount}>
@@ -726,123 +701,36 @@ const styles = {
     height: '20px'
   },
   input: {
-    width: '100%',
-    padding: `0 ${spacing.md}`,
-    height: '42px',
-    borderRadius: radius.md,
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: colors.gray300,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily,
-    backgroundColor: colors.surface,
-    transition: 'all 0.2s ease',
-    outline: 'none',
-    boxSizing: 'border-box',
-    lineHeight: '42px',
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`
-    }
+    ...baseComponents.input,
+    height: '42px'
   },
   select: {
-    width: '100%',
-    padding: `0 ${spacing.md}`,
+    ...baseComponents.select,
     height: '42px',
-    borderRadius: radius.md,
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: colors.gray300,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily,
-    backgroundColor: colors.surface,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    outline: 'none',
-    boxSizing: 'border-box',
-    lineHeight: '42px',
-    appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-    backgroundPosition: `right ${spacing.sm} center`,
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: '16px 16px',
-    paddingRight: '40px',
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`
-    }
+    paddingRight: '40px'
   },
   selectPrimary: {
-    width: '100%',
-    padding: `0 ${spacing.md}`,
+    ...baseComponents.select,
     height: '42px',
-    borderRadius: radius.md,
     borderWidth: '2px',
-    borderStyle: 'solid',
     borderColor: colors.primary,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily,
     backgroundColor: colors.primaryLight,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    outline: 'none',
-    boxSizing: 'border-box',
-    lineHeight: '42px',
-    appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%232563eb' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-    backgroundPosition: `right ${spacing.sm} center`,
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: '16px 16px',
-    paddingRight: '40px',
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`
-    }
+    paddingRight: '40px'
   },
   btnLocked: {
-    width: '100%',
-    padding: `0 ${spacing.md}`,
+    ...baseComponents.buttonDestructive,
     height: '42px',
-    borderRadius: radius.md,
-    border: 'none',
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.error,
-    color: colors.surface,
-    transition: 'all 0.2s ease',
-    boxShadow: shadows.sm,
-    ':hover': {
-      backgroundColor: '#DC2626',
-      transform: 'translateY(-1px)',
-      boxShadow: shadows.md
-    }
+    width: '100%',
+    justifyContent: 'center'
   },
   btnUnlocked: {
-    width: '100%',
-    padding: `0 ${spacing.md}`,
-    height: '42px',
-    borderRadius: radius.md,
-    border: 'none',
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
+    ...baseComponents.buttonPrimary,
     backgroundColor: colors.success,
-    color: colors.surface,
-    transition: 'all 0.2s ease',
-    boxShadow: shadows.sm,
+    height: '42px',
+    width: '100%',
+    justifyContent: 'center',
     ':hover': {
-      backgroundColor: colors.secondaryHover,
-      transform: 'translateY(-1px)',
-      boxShadow: shadows.md
+        backgroundColor: colors.secondaryHover
     }
   },
   activeMachine: {
@@ -1408,61 +1296,23 @@ const styles = {
     flexShrink: 0
   },
   btnCancel: {
-    backgroundColor: colors.surface,
-    color: colors.gray700,
-    padding: `0 ${spacing.lg}`,
+    ...baseComponents.buttonSecondary,
     height: '52px',
-    borderRadius: radius.lg,
-    borderWidth: '2px',
-    borderStyle: 'solid',
-    borderColor: colors.gray300,
-    fontWeight: typography.weights.semibold,
-    fontSize: typography.sizes.base,
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    boxShadow: shadows.sm,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacing.sm,
+    padding: `0 ${spacing.lg}`,
     minWidth: '140px',
     justifyContent: 'center',
-    ':hover': {
-      backgroundColor: colors.gray50,
-      borderColor: colors.gray400,
-      transform: 'translateY(-2px)',
-      boxShadow: shadows.md
-    },
-    ':active': {
-      transform: 'translateY(0)'
-    }
+    borderWidth: '2px',
+    borderRadius: radius.lg,
+    fontSize: typography.sizes.base
   },
   btnSave: {
-    backgroundColor: colors.primary,
-    color: colors.surface,
-    padding: `0 ${spacing.lg}`,
+    ...baseComponents.buttonPrimary,
     height: '52px',
-    borderRadius: radius.lg,
-    border: 'none',
-    fontWeight: typography.weights.semibold,
-    fontSize: typography.sizes.base,
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    boxShadow: shadows.md,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacing.sm,
+    padding: `0 ${spacing.lg}`,
     minWidth: '200px',
     justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    ':hover': {
-      backgroundColor: colors.primaryHover,
-      transform: 'translateY(-2px)',
-      boxShadow: shadows.lg
-    },
-    ':active': {
-      transform: 'translateY(0)'
-    }
+    borderRadius: radius.lg,
+    fontSize: typography.sizes.base
   },
   btnDisabled: {
     backgroundColor: colors.gray400,
@@ -1522,7 +1372,8 @@ const styles = {
     border: 'none',
     color: colors.error,
     cursor: 'pointer',
-    fontSize: '1rem',
+    fontSize: '0.8rem',
+    fontWeight: 'bold',
     padding: spacing.xs,
     borderRadius: '50%',
     width: '24px',

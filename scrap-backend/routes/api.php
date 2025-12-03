@@ -59,7 +59,6 @@ Route::middleware('api')->group(function () {
         Route::get('/', [RecepcionScrapController::class, 'index']);
         Route::post('/', [RecepcionScrapController::class, 'store']);
         Route::get('/reportes/recepcion', [RecepcionScrapController::class, 'reporteRecepcion']);
-        Route::get('/stock/disponible', [RecepcionScrapController::class, 'stockDisponible']);
         Route::get('/stats', [RecepcionScrapController::class, 'stats']);
         Route::get('/{id}', [RecepcionScrapController::class, 'show']);
     });

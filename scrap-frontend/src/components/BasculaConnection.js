@@ -110,7 +110,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                 if (onPesoObtenido && nuevoPeso > 0) {
                     const diff = Math.abs((ultimoPesoEnviadoRef.current || 0) - nuevoPeso);
                     if (diff > 0.0001) {
-                        console.log('📤 Enviando peso a componente padre:', { peso: nuevoPeso, campo: campoDestino });
                         onPesoObtenido(nuevoPeso, campoDestino);
                         ultimoPesoEnviadoRef.current = nuevoPeso;
                     }
@@ -216,7 +215,13 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             {/* Cabecera del Instrumento */}
             <div style={styles.header}>
                 <div style={styles.headerTitle}>
-                    <span style={styles.icon}>⚖️</span>
+                    <div style={styles.iconContainer}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 3v19"></path>
+                            <path d="M5 10h14"></path>
+                            <path d="M5 15a5 5 0 0 0 5 5h4a5 5 0 0 0 5-5"></path>
+                        </svg>
+                    </div>
                     <div>
                         <h4 style={styles.headerText}>
                             MÓDULO DE PESAJE
@@ -301,13 +306,21 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                                     ...(estado === 'conectando' && styles.disabledButton)
                                 }}
                             >
-                                {estado === 'conectando' ? 'Conectando...' : '🔌 Conectar'}
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                    <line x1="12" y1="2" x2="12" y2="12"></line>
+                                </svg>
+                                {estado === 'conectando' ? 'Conectando...' : 'Conectar'}
                             </button>
                         )}
 
                         {estado === 'conectado' && (
                             <button onClick={desconectarBascula} style={{ ...styles.button, ...styles.destructiveButton }}>
-                                🛑 Desconectar
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                    <line x1="12" y1="2" x2="12" y2="12"></line>
+                                </svg>
+                                Desconectar
                             </button>
                         )}
 
@@ -328,7 +341,23 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
                 <div style={styles.secondaryActions}>
                     <button onClick={toggleManual} style={styles.linkButton}>
-                        {modoManual ? '↩️ Volver a Automático' : '✍️ Ingresar Manualmente'}
+                        {modoManual ? (
+                            <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                    <polyline points="1 4 1 10 7 10"></polyline>
+                                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                                </svg>
+                                Volver a Automático
+                            </>
+                        ) : (
+                            <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                                Ingresar Manualmente
+                            </>
+                        )}
                     </button>
                     <span style={styles.targetText}>
                         Campo: {campoDestino}
@@ -358,6 +387,12 @@ const styles = {
         alignItems: 'center',
         gap: spacing.sm
     },
+    iconContainer: {
+        color: colors.gray600,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
     headerText: {
         margin: 0,
         fontSize: typography.sizes.base,
@@ -368,10 +403,6 @@ const styles = {
         color: colors.gray500,
         fontSize: typography.sizes.xs,
         letterSpacing: '0.5px'
-    },
-    icon: {
-        fontSize: '1.5rem',
-        filter: 'grayscale(20%)'
     },
     statusIndicator: {
         display: 'flex',
@@ -487,96 +518,35 @@ const styles = {
         textTransform: 'uppercase',
         letterSpacing: '0.05em'
     },
-    // INPUTS Y SELECTS CON ESTILO CONSISTENTE CON OPERADORDASHBOARD
     select: {
-        width: '100%',
-        padding: `0 ${spacing.sm}`,
+        ...baseComponents.select,
         height: '36px',
-        borderRadius: radius.md,
-        border: `1px solid ${colors.gray300}`,
-        fontSize: typography.sizes.sm,
-        fontFamily: typography.fontFamily,
-        backgroundColor: colors.surface,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        outline: 'none',
-        boxSizing: 'border-box',
-        lineHeight: '36px',
-        appearance: 'none',
-        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-        backgroundPosition: `right ${spacing.xs} center`,
-        backgroundRepeat: 'no-repeat',
-        backgroundSize: '14px 14px',
-        paddingRight: '32px',
-        ':focus': {
-            borderColor: colors.primary,
-            boxShadow: `0 0 0 3px ${colors.primaryLight}`
-        }
+        paddingRight: '32px'
     },
     input: {
-        width: '100%',
-        padding: `0 ${spacing.sm}`,
+        ...baseComponents.input,
         height: '36px',
-        borderRadius: radius.md,
-        border: `1px solid ${colors.gray300}`,
-        fontSize: typography.sizes.sm,
-        fontFamily: typography.fontFamily,
-        backgroundColor: colors.surface,
-        transition: 'all 0.2s ease',
-        outline: 'none',
-        boxSizing: 'border-box',
-        lineHeight: '36px',
         textAlign: 'right',
         fontWeight: typography.weights.bold,
         fontFamily: typography.fontMono,
         border: `2px solid ${colors.warning}`,
         backgroundColor: '#FFFBEB',
-        color: '#92400E',
-        ':focus': {
-            borderColor: colors.primary,
-            boxShadow: `0 0 0 3px ${colors.primaryLight}`
-        }
+        color: '#92400E'
     },
-    // BOTONES CON ESTILO CONSISTENTE CON OPERADORDASHBOARD
     button: {
-        backgroundColor: colors.primary,
-        color: '#FFFFFF',
-        padding: `${spacing.sm} ${spacing.md}`,
-        borderRadius: radius.md,
-        border: 'none',
-        fontWeight: typography.weights.semibold,
-        fontSize: typography.sizes.sm,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        boxShadow: shadows.sm,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.xs,
-        width: '100%',
+        ...baseComponents.buttonPrimary,
         height: '36px',
-        ':hover': {
-            backgroundColor: colors.primaryHover,
-            transform: 'translateY(-1px)',
-            boxShadow: shadows.md
-        },
-        ':disabled': {
-            backgroundColor: colors.gray400,
-            cursor: 'not-allowed',
-            transform: 'none'
-        }
+        width: '100%',
+        justifyContent: 'center'
     },
     primaryButton: {
-        backgroundColor: colors.primary,
-        ':hover': {
-            backgroundColor: colors.primaryHover
-        }
+        // Hereda de button
     },
     destructiveButton: {
-        backgroundColor: colors.error,
-        ':hover': {
-            backgroundColor: '#DC2626'
-        }
+        ...baseComponents.buttonDestructive,
+        height: '36px',
+        width: '100%',
+        justifyContent: 'center'
     },
     disabledButton: {
         opacity: 0.6,
@@ -603,10 +573,12 @@ const styles = {
         color: colors.gray600,
         fontSize: typography.sizes.sm,
         cursor: 'pointer',
-        textDecoration: 'underline',
+        textDecoration: 'none',
         padding: spacing.xs,
         borderRadius: radius.sm,
         transition: 'all 0.2s ease',
+        display: 'flex',
+        alignItems: 'center',
         ':hover': {
             backgroundColor: colors.gray100,
             color: colors.gray700
