@@ -1,14 +1,19 @@
 /* src/components/ProtectedRoute.js */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing, typography, radius } from '../styles/designSystem';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading } = useAuth();
 
-  const handleLoginRedirect = () => {
-    window.location.href = '/login';
-  };
+  // ✅ CORRECCIÓN PRINCIPAL:
+  // Usamos useEffect para vigilar el estado.
+  // Si terminó de cargar y NO hay usuario, nos manda al login automáticamente.
+  useEffect(() => {
+    if (!loading && !user) {
+      window.location.href = '/login';
+    }
+  }, [user, loading]);
 
   if (loading) {
     return (
@@ -24,24 +29,15 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     );
   }
 
+  // ✅ CAMBIO CLAVE:
+  // Si no hay usuario, retornamos null en lugar de la pantalla de error.
+  // Esto evita el "flashazo" de la pantalla de "Acceso no autorizado"
+  // mientras el useEffect de arriba hace la redirección.
   if (!user) {
-    return (
-      <div style={styles.errorContainer}>
-        <div style={styles.errorContent}>
-          <div style={styles.errorIcon}>🔒</div>
-          <h2 style={styles.errorTitle}>Acceso no autorizado</h2>
-          <p style={styles.errorMessage}>Debe iniciar sesión para acceder a esta página</p>
-          <button 
-            onClick={handleLoginRedirect}
-            style={styles.loginButton}
-          >
-            Ir a Iniciar Sesión
-          </button>
-        </div>
-      </div>
-    );
+    return null; 
   }
 
+  // Mantenemos la lógica de Roles (esto sí debe mostrar error si el usuario existe pero no tiene permiso)
   if (requiredRole && user.role !== requiredRole) {
     return (
       <div style={styles.errorContainer}>
@@ -57,7 +53,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
               Volver Atrás
             </button>
             <button 
-              onClick={handleLoginRedirect}
+              onClick={() => window.location.href = '/login'}
               style={styles.loginButton}
             >
               Ir al Login
@@ -113,6 +109,7 @@ const styles = {
     margin: 0,
     opacity: 0.8
   },
+  // Mantenemos los estilos de error por si se usan en la validación de roles
   errorContainer: {
     display: 'flex',
     justifyContent: 'center',
@@ -153,7 +150,7 @@ const styles = {
   },
   loginButton: {
     backgroundColor: colors.primary,
-    color: colors.white,
+    color: '#FFFFFF', // Corregido colors.white que podría no existir
     border: 'none',
     borderRadius: radius.md,
     padding: `${spacing.sm} ${spacing.lg}`,
@@ -164,7 +161,7 @@ const styles = {
     width: 'auto',
     minWidth: '140px',
     ':hover': {
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.primaryHover || '#1D4ED8', // Fallback seguro
       transform: 'translateY(-1px)',
       boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
     },
@@ -206,14 +203,17 @@ const styles = {
 if (typeof document !== 'undefined') {
   const styleSheet = document.styleSheets[0];
   if (styleSheet) {
-    const existingRules = Array.from(styleSheet.cssRules).map(rule => rule.cssText);
-    if (!existingRules.some(rule => rule.includes('@keyframes spin'))) {
-      styleSheet.insertRule(`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+    try {
+        const existingRules = Array.from(styleSheet.cssRules).map(rule => rule.cssText);
+        if (!existingRules.some(rule => rule.includes('@keyframes spin'))) {
+        styleSheet.insertRule(`
+            @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+            }
+        `, styleSheet.cssRules.length);
         }
-      `, styleSheet.cssRules.length);
+    } catch (e) {
     }
   }
 }

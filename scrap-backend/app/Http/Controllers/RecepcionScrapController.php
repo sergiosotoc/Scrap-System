@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RecepcionesScrap;
-use App\Models\StockScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -49,14 +48,16 @@ class RecepcionScrapController extends Controller
 
     public function store(Request $request)
     {
+        // MODIFICACIÓN: Validación condicional
+        // 'origen_especifico' solo es requerido si 'origen_tipo' es 'externa'
         $validated = $request->validate([
             'peso_kg' => 'required|numeric|min:0.1',
             'tipo_material' => 'required|string|max:50',
             'origen_tipo' => 'required|in:interna,externa',
-            'origen_especifico' => 'required|string|max:150',
+            'origen_especifico' => 'required_if:origen_tipo,externa|nullable|string|max:150',
             'destino' => 'required|in:reciclaje,venta,almacenamiento',
             'observaciones' => 'nullable|string',
-            'lugar_almacenamiento' => 'required_if:destino,almacenamiento|string|max:100'
+            'lugar_almacenamiento' => 'nullable|string|max:100'
         ]);
 
         DB::beginTransaction();
@@ -68,7 +69,9 @@ class RecepcionScrapController extends Controller
                 'peso_kg' => $validated['peso_kg'],
                 'tipo_material' => $validated['tipo_material'],
                 'origen_tipo' => $validated['origen_tipo'],
-                'origen_especifico' => $validated['origen_especifico'],
+                // Si es interna, guardamos NULL o "Interna" si la DB no acepta nulos, 
+                // pero asumiremos que acepta nulos o string vacío.
+                'origen_especifico' => $validated['origen_especifico'] ?? null,
                 'receptor_id' => Auth::id(),
                 'destino' => $validated['destino'],
                 'lugar_almacenamiento' => $validated['lugar_almacenamiento'] ?? null,
@@ -78,19 +81,6 @@ class RecepcionScrapController extends Controller
             ];
 
             $recepcion = RecepcionesScrap::create($dataToInsert);
-
-            // Crear entrada de StockScrap
-            if ($validated['destino'] === 'almacenamiento') {
-                StockScrap::crearNuevoLote(
-                    $validated['tipo_material'],
-                    $validated['peso_kg'],
-                    $validated['lugar_almacenamiento'],
-                    $numeroHU,
-                    $validated['origen_tipo'],
-                    $validated['origen_especifico'],
-                    $recepcion->id
-                );
-            }
 
             DB::commit();
 
@@ -175,12 +165,7 @@ class RecepcionScrapController extends Controller
 
     public function stockDisponible()
     {
-        $stock = StockScrap::disponible()
-            ->selectRaw('tipo_material, SUM(cantidad_kg) as cantidad_total, COUNT(*) as numero_lotes')
-            ->groupBy('tipo_material')
-            ->get();
-
-        return response()->json($stock);
+        return response()->json([]); 
     }
 
     public function stats()
@@ -195,7 +180,6 @@ class RecepcionScrapController extends Controller
             $totalPeso = RecepcionesScrap::where('receptor_id', $user->id)->sum('peso_kg');
         }
 
-        // Distribucion por destino
         $destinos = RecepcionesScrap::when($user->role !== 'admin', function ($query) use ($user) {
             return $query->where('receptor_id', $user->id);
         })

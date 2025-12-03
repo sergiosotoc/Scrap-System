@@ -1,19 +1,28 @@
-/* src/pages/ReceptorDashboard.js */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import BasculaConnection from '../components/BasculaConnection';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
+
+const listaMateriales = [
+  "Lata de aluminio", "Desechos metálicos", "Desechos componentes eléctricos", 
+  "Cable aluminio", "Cobre estañado", "Cable estañado", "Purga PE", 
+  "Cable PE", "Cable PE 3.5", "Cable de batería", "Purga PVC", 
+  "Cobre", "Botellas pet", "Plástico", "Cartón", "Fleje", "Leña"
+];
 
 const ReceptorDashboard = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [recepciones, setRecepciones] = useState([]);
-  const [stock, setStock] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Estado para el buscador y filtros
+  const [searchTerm, setSearchTerm] = useState('');
 
+  const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [formData, setFormData] = useState({
     peso_kg: '',
     tipo_material: '',
@@ -24,19 +33,14 @@ const ReceptorDashboard = () => {
     observaciones: ''
   });
 
-  const [tiposMaterial, setTiposMaterial] = useState(['cobre', 'aluminio', 'mixto', 'cobre_estanado']);
-  const [showMaterialDropdown, setShowMaterialDropdown] = useState(false);
+  useEffect(() => {
+    if (showModal) setPesoBloqueado(false);
+  }, [showModal]);
 
   const loadReceptorData = useCallback(async () => {
     try {
-      const [recepcionesData, statsData, stockData] = await Promise.all([
-        apiClient.getRecepcionesScrap(),
-        apiClient.getRecepcionScrapStats(),
-        apiClient.getStockDisponible()
-      ]);
+      const recepcionesData = await apiClient.getRecepcionesScrap();
       setRecepciones(recepcionesData);
-      setStats(statsData);
-      setStock(stockData);
     } catch (error) {
       addToast('Error al cargar datos: ' + error.message, 'error');
     } finally {
@@ -48,35 +52,41 @@ const ReceptorDashboard = () => {
     loadReceptorData();
   }, [loadReceptorData]);
 
+  // Filtrado de datos en tiempo real
+  const recepcionesFiltradas = recepciones.filter(item => {
+    const term = searchTerm.toLowerCase();
+    return (
+      item.numero_hu.toLowerCase().includes(term) ||
+      item.tipo_material.toLowerCase().includes(term) ||
+      (item.origen_especifico && item.origen_especifico.toLowerCase().includes(term))
+    );
+  });
+
   const handleInputChange = (e) => {
+    if (e.target.name === 'peso_kg' && pesoBloqueado) return;
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleOrigenTipoChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value, origen_especifico: '' });
+    setFormData({ 
+        ...formData, 
+        [e.target.name]: e.target.value, 
+        origen_especifico: '' 
+    });
   };
 
-  const handleMaterialChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSelectMaterial = (material) => {
-    setFormData({ ...formData, tipo_material: material });
-    setShowMaterialDropdown(false);
-  };
-
-  const handleAddNewMaterial = (material) => {
-    if (material && !tiposMaterial.includes(material)) {
-      setTiposMaterial(prev => [...prev, material]);
+  const handlePesoFromBascula = (peso, campo) => {
+    if (!pesoBloqueado) {
+      setFormData(prev => ({ ...prev, [campo]: peso }));
     }
-    setFormData({ ...formData, tipo_material: material });
-    setShowMaterialDropdown(false);
   };
 
   const handleImprimirHU = async (id) => {
     try {
       const token = localStorage.getItem('authToken');
-      const url = `http://localhost:8000/api/recepciones-scrap/${id}/imprimir-hu`;
+      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : `http://${window.location.hostname}:8000`;
+      const url = `${baseUrl}/api/recepciones-scrap/${id}/imprimir-hu`;
+      
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/pdf' }
@@ -111,14 +121,15 @@ const ReceptorDashboard = () => {
       });
       loadReceptorData();
     } catch (error) {
-      addToast('Error al crear recepción: ' + error.message, 'error');
+      const msg = error.message || 'Error desconocido';
+      addToast('Error: ' + msg, 'error');
     }
   };
 
-
   if (loading) return (
     <div style={styles.loading}>
-      <div>Cargando dashboard receptor...</div>
+      <div style={styles.spinner}></div>
+      <p style={styles.loadingText}>Cargando dashboard...</p>
     </div>
   );
 
@@ -127,189 +138,254 @@ const ReceptorDashboard = () => {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Dashboard Receptor</h1>
-          <p style={styles.subtitle}>Bienvenido, {user.name}</p>
+          <p style={styles.subtitle}>Hola, {user?.name || 'Usuario'}</p>
         </div>
         <button onClick={() => setShowModal(true)} style={styles.primaryButton}>
-          <span>➕</span> Nueva Recepción
+          <span style={{fontSize: '1.2rem'}}>+</span> Nueva Recepción
         </button>
       </div>
 
-      {/* Estadísticas */}
-      <div style={styles.gridStats}>
-        <div style={styles.statCard}>
-          <span style={styles.statLabel}>Total Recepciones</span>
-          <span style={styles.statNumber}>{stats?.total_recepciones || 0}</span>
-        </div>
-        <div style={styles.statCard}>
-          <span style={styles.statLabel}>Peso Total</span>
-          <span style={styles.statNumber}>
-            {stats?.total_peso_kg || 0} 
-            <small style={{ fontSize: typography.sizes.base, color: colors.gray500 }}> kg</small>
-          </span>
-        </div>
-        <div style={styles.statCard}>
-          <span style={styles.statLabel}>Stock Actual</span>
-          <span style={styles.statNumber}>
-            {stock.reduce((acc, item) => acc + parseFloat(item.cantidad_total || 0), 0).toFixed(1)} 
-            <small style={{ fontSize: typography.sizes.base, color: colors.gray500 }}> kg</small>
-          </span>
-        </div>
-        <div style={styles.statCard}>
-          <span style={styles.statLabel}>Materiales Activos</span>
-          <span style={styles.statNumber}>{tiposMaterial.length}</span>
-        </div>
-      </div>
-
-      {/* Tabla de Recepciones */}
+      {/* Tarjeta Principal del Historial */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={{ margin: 0, fontSize: typography.sizes.xl, color: colors.gray800 }}>
-            📋 Historial de Recepciones
-          </h3>
+          <div>
+            <h3 style={styles.cardTitle}>📋 Historial de Recepciones</h3>
+            <p style={styles.cardSubtitle}>Gestiona y consulta las entradas de material</p>
+          </div>
+          <div style={styles.searchContainer}>
+            <span style={styles.searchIcon}>🔍</span>
+            <input 
+              type="text" 
+              placeholder="Buscar por HU, Material o Proveedor..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={styles.searchInput}
+            />
+          </div>
         </div>
+
         <div style={styles.tableContainer}>
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>HU</th>
-                <th style={styles.th}>Fecha</th>
+                <th style={styles.th}>HU ID</th>
+                <th style={styles.th}>Fecha Recepción</th>
                 <th style={styles.th}>Material</th>
-                <th style={styles.th}>Peso</th>
+                <th style={styles.th}>Peso Neto</th>
                 <th style={styles.th}>Origen</th>
+                <th style={styles.th}>Detalle Origen</th>
                 <th style={styles.th}>Destino</th>
-                <th style={styles.th}>Acciones</th>
+                <th style={styles.th} align="center">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {recepciones.map((r) => (
+              {recepcionesFiltradas.map((r) => (
                 <tr key={r.id} style={styles.tr}>
-                  <td style={styles.td}><strong>{r.numero_hu}</strong></td>
-                  <td style={styles.td}>{new Date(r.fecha_entrada).toLocaleDateString()}</td>
                   <td style={styles.td}>
-                    <span style={styles.materialBadge}>
-                      {r.tipo_material}
+                    <div style={styles.huBadge}>{r.numero_hu}</div>
+                  </td>
+                  <td style={styles.td}>
+                    <div style={styles.dateText}>
+                        {new Date(r.fecha_entrada).toLocaleDateString()}
+                    </div>
+                    <div style={styles.timeText}>
+                        {new Date(r.fecha_entrada).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </div>
+                  </td>
+                  <td style={styles.td}>
+                    <strong style={{color: colors.gray800}}>{r.tipo_material}</strong>
+                  </td>
+                  <td style={styles.td}>
+                    <span style={styles.weightBadge}>
+                        {parseFloat(r.peso_kg).toFixed(2)} kg
                     </span>
                   </td>
-                  <td style={styles.td}><strong>{r.peso_kg} kg</strong></td>
                   <td style={styles.td}>
-                    <span style={styles.origenBadge}>
-                      {r.origen_tipo === 'interna' ? '🏭 Interna' : '🌐 Externa'}
+                    <span style={r.origen_tipo === 'interna' ? styles.badgeInterna : styles.badgeExterna}>
+                      {r.origen_tipo === 'interna' ? 'Interna' : 'Externa'}
                     </span>
                   </td>
-                  <td style={styles.td}>{r.destino}</td>
                   <td style={styles.td}>
-                    <button onClick={() => handleImprimirHU(r.id)} style={styles.actionButton}>
-                      🖨️ Imprimir HU
+                    {r.origen_especifico ? (
+                        <span style={styles.providerText}>{r.origen_especifico}</span>
+                    ) : (
+                        <span style={{color: colors.gray400, fontStyle: 'italic'}}>--</span>
+                    )}
+                  </td>
+                  <td style={styles.td}>
+                    <span style={styles.destBadge}>{r.destino}</span>
+                  </td>
+                  <td style={styles.td} align="center">
+                    <button 
+                      onClick={() => handleImprimirHU(r.id)} 
+                      style={styles.actionButton}
+                      title="Imprimir Etiqueta HU"
+                    >
+                      🖨️
                     </button>
                   </td>
                 </tr>
               ))}
+              {recepcionesFiltradas.length === 0 && (
+                <tr>
+                  <td colSpan="8" style={styles.emptyState}>
+                    <div style={{fontSize: '2rem', marginBottom: '10px'}}>📭</div>
+                    <div>No se encontraron registros</div>
+                    {searchTerm && <div style={{fontSize: '0.85rem', marginTop: '5px', color: colors.gray500}}>Intenta con otro término de búsqueda</div>}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+        <div style={styles.tableFooter}>
+            Mostrando <strong>{recepcionesFiltradas.length}</strong> registros
+        </div>
       </div>
 
-      {/* Modal */}
+      {/* Modal - Con Báscula Integrada y Bloqueo */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <div style={styles.modalHeader}>
-              <h3 style={{ margin: 0, fontSize: typography.sizes.xl, color: colors.gray800 }}>
-                Nueva Recepción de Material
-              </h3>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>×</button>
+              <div>
+                <h3 style={styles.modalTitle}>Nueva Recepción</h3>
+                <p style={styles.modalSubtitle}>Ingrese los datos para generar la HU</p>
+              </div>
+              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>✕</button>
             </div>
-            <form onSubmit={handleSubmit} style={styles.form}>
-              <div style={styles.formGrid}>
-                <div>
-                    <label style={styles.label}>Origen</label>
-                    <select 
-                      name="origen_tipo" 
-                      value={formData.origen_tipo} 
-                      onChange={handleOrigenTipoChange} 
-                      style={styles.input}
-                    >
-                        <option value="externa">Externa</option>
-                        <option value="interna">Interna</option>
-                    </select>
-                </div>
-                <div>
-                    <label style={styles.label}>Peso (kg)</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      name="peso_kg" 
-                      value={formData.peso_kg} 
-                      onChange={handleInputChange} 
-                      style={styles.input} 
-                      required 
+            
+            <div style={styles.modalContent}>
+                {/* 1. Módulo de Báscula */}
+                <div style={{ padding: spacing.lg, paddingBottom: 0 }}>
+                    <BasculaConnection 
+                        onPesoObtenido={handlePesoFromBascula}
+                        campoDestino="peso_kg"
                     />
                 </div>
-                <div style={{ position: 'relative' }}>
-                    <label style={styles.label}>Material</label>
-                    <input 
-                        type="text" 
-                        name="tipo_material" 
-                        value={formData.tipo_material} 
-                        onChange={handleMaterialChange} 
-                        onFocus={() => setShowMaterialDropdown(true)}
-                        style={styles.input} 
-                        required 
-                    />
-                     {showMaterialDropdown && (
-                      <div style={styles.dropdown}>
-                        {tiposMaterial.map(m => (
-                          <div 
-                            key={m} 
-                            onClick={() => handleSelectMaterial(m)} 
-                            style={styles.dropdownItem}
-                          >
-                            {m}
-                          </div>
-                        ))}
-                        <div 
-                          onClick={() => handleAddNewMaterial(formData.tipo_material)} 
-                          style={styles.dropdownItem}
-                        >
-                          + Nuevo: {formData.tipo_material}
+
+                {/* 2. Formulario */}
+                <form onSubmit={handleSubmit} style={styles.form}>
+                <div style={styles.formGrid}>
+                    <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Tipo de Origen</label>
+                            <select 
+                            name="origen_tipo" 
+                            value={formData.origen_tipo} 
+                            onChange={handleOrigenTipoChange} 
+                            style={styles.formSelect}
+                            >
+                            <option value="externa">Externa (Proveedor)</option>
+                            <option value="interna">Interna (Planta)</option>
+                            </select>
                         </div>
-                      </div>
-                    )}
+
+                        {formData.origen_tipo === 'externa' && (
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>Nombre del Proveedor</label>
+                                <input 
+                                    type="text" 
+                                    name="origen_especifico" 
+                                    value={formData.origen_especifico} 
+                                    onChange={handleInputChange} 
+                                    style={styles.formInput} 
+                                    placeholder="Ej: Reciclados del Norte"
+                                    required 
+                                />
+                            </div>
+                        )}
+
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Destino Inicial</label>
+                            <select 
+                            name="destino" 
+                            value={formData.destino} 
+                            onChange={handleInputChange} 
+                            style={styles.formSelect}
+                            >
+                            <option value="almacenamiento">Almacenamiento General</option>
+                            <option value="reciclaje">Directo a Reciclaje</option>
+                            <option value="venta">Venta Directa</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Peso Neto (kg)</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    name="peso_kg" 
+                                    value={formData.peso_kg} 
+                                    onChange={handleInputChange} 
+                                    style={{
+                                        ...styles.formInput,
+                                        paddingRight: '110px', 
+                                        backgroundColor: pesoBloqueado ? colors.gray100 : (formData.peso_kg > 0 ? '#F0FDF4' : colors.surface),
+                                        borderColor: pesoBloqueado ? colors.error : (formData.peso_kg > 0 ? colors.success : colors.gray300),
+                                        color: pesoBloqueado ? colors.error : colors.gray900,
+                                        fontWeight: pesoBloqueado ? 'bold' : 'normal'
+                                    }} 
+                                    placeholder="0.00"
+                                    required 
+                                    readOnly={pesoBloqueado}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setPesoBloqueado(!pesoBloqueado)}
+                                    style={pesoBloqueado ? styles.btnLockedInside : styles.btnUnlockedInside}
+                                    title={pesoBloqueado ? "Desbloquear" : "Fijar peso"}
+                                >
+                                    {pesoBloqueado ? '🔒 FIJADO' : '🔓 FIJAR'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Tipo de Material</label>
+                            <select 
+                                name="tipo_material" 
+                                value={formData.tipo_material} 
+                                onChange={handleInputChange} 
+                                style={styles.formSelect}
+                                required 
+                            >
+                                <option value="">Seleccionar material...</option>
+                                {listaMateriales.map((material, index) => (
+                                    <option key={index} value={material}>
+                                        {material}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label style={styles.label}>Destino</label>
-                    <select 
-                      name="destino" 
-                      value={formData.destino} 
-                      onChange={handleInputChange} 
-                      style={styles.input}
-                    >
-                        <option value="almacenamiento">Almacenamiento</option>
-                        <option value="reciclaje">Reciclaje</option>
-                        <option value="venta">Venta</option>
-                    </select>
+
+                <div style={{marginTop: spacing.md}}>
+                    <label style={styles.label}>Observaciones</label>
+                    <textarea 
+                    name="observaciones" 
+                    value={formData.observaciones} 
+                    onChange={handleInputChange} 
+                    style={styles.formTextarea} 
+                    rows="3"
+                    placeholder="Notas adicionales..."
+                    ></textarea>
                 </div>
-              </div>
-              <div style={{marginTop: spacing.md}}>
-                 <label style={styles.label}>Observaciones</label>
-                 <textarea 
-                   name="observaciones" 
-                   value={formData.observaciones} 
-                   onChange={handleInputChange} 
-                   style={styles.input} 
-                   rows="3"
-                   placeholder="Observaciones adicionales..."
-                 ></textarea>
-              </div>
-              <div style={styles.modalFooter}>
-                <button type="button" onClick={() => setShowModal(false)} style={styles.secondaryButton}>
-                  Cancelar
-                </button>
-                <button type="submit" style={styles.primaryButton}>
-                  Guardar Recepción
-                </button>
-              </div>
-            </form>
+
+                <div style={styles.modalFooter}>
+                    <button type="button" onClick={() => setShowModal(false)} style={styles.modalSecondaryButton}>
+                    Cancelar
+                    </button>
+                    <button type="submit" style={styles.modalPrimaryButton}>
+                    Confirmar Recepción
+                    </button>
+                </div>
+                </form>
+            </div>
           </div>
         </div>
       )}
@@ -317,7 +393,9 @@ const ReceptorDashboard = () => {
   );
 };
 
-
+// ==========================================
+// ESTILOS MEJORADOS
+// ==========================================
 const styles = {
   container: {
     padding: spacing.lg,
@@ -345,8 +423,8 @@ const styles = {
   },
   subtitle: {
     color: colors.gray600,
-    marginTop: spacing.xs,
     fontSize: typography.sizes.lg,
+    margin: 0,
     fontWeight: typography.weights.medium
   },
   loading: {
@@ -354,45 +432,32 @@ const styles = {
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
-    color: colors.gray500
-  },
-  gridStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: spacing.lg,
-    marginBottom: spacing.lg
-  },
-  statCard: {
-    ...baseComponents.card,
-    padding: spacing.lg,
-    display: 'flex',
+    backgroundColor: colors.background,
     flexDirection: 'column',
-    textAlign: 'center',
-    borderLeft: `4px solid ${colors.secondary}`,
-    transition: 'all 0.3s ease',
-    ':hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: shadows.lg
-    }
+    gap: spacing.md
   },
-  statLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray600,
-    fontWeight: typography.weights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: spacing.xs
+  loadingText: {
+    fontSize: typography.sizes.lg,
+    color: colors.gray600
   },
-  statNumber: {
-    fontSize: '2.25rem',
-    fontWeight: typography.weights.extrabold,
-    color: colors.gray900,
-    lineHeight: '1'
+  spinner: {
+    width: '50px',
+    height: '50px',
+    border: `4px solid ${colors.primaryLight}`,
+    borderTop: `4px solid ${colors.primary}`,
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
   },
+  
+  // Card Principal
   card: {
-    ...baseComponents.card,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    boxShadow: shadows.md,
+    border: `1px solid ${colors.gray200}`,
     overflow: 'hidden',
-    marginBottom: spacing.lg
+    display: 'flex',
+    flexDirection: 'column'
   },
   cardHeader: {
     padding: spacing.lg,
@@ -400,171 +465,387 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.gray50
+    backgroundColor: '#FAFAFA',
+    flexWrap: 'wrap',
+    gap: spacing.md
   },
+  cardTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.gray800,
+    margin: 0
+  },
+  cardSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray500,
+    margin: '4px 0 0 0'
+  },
+  
+  // Buscador
+  searchContainer: {
+    position: 'relative',
+    width: '300px',
+    maxWidth: '100%'
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: colors.gray400,
+    fontSize: '1rem'
+  },
+  searchInput: {
+    width: '100%',
+    padding: '10px 10px 10px 36px',
+    borderRadius: radius.md,
+    border: `1px solid ${colors.gray300}`,
+    fontSize: typography.sizes.sm,
+    outline: 'none',
+    transition: 'all 0.2s',
+    boxSizing: 'border-box'
+  },
+
+  // Tabla Mejorada
   tableContainer: {
-    overflowX: 'auto'
+    overflowX: 'auto',
+    width: '100%'
   },
   table: {
     width: '100%',
-    borderCollapse: 'collapse'
+    borderCollapse: 'separate',
+    borderSpacing: '0',
+    minWidth: '900px'
   },
   th: {
-    padding: spacing.md,
+    padding: '16px',
     textAlign: 'left',
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.bold,
-    color: colors.gray600,
+    fontSize: '0.75rem',
+    fontWeight: '700',
+    color: colors.gray500,
     textTransform: 'uppercase',
-    backgroundColor: colors.gray50,
-    borderBottom: `2px solid ${colors.gray200}`,
-    letterSpacing: '0.05em'
+    letterSpacing: '0.05em',
+    backgroundColor: '#F9FAFB',
+    borderBottom: `1px solid ${colors.gray200}`,
+    position: 'sticky',
+    top: 0
   },
   tr: {
-    borderBottom: `1px solid ${colors.gray200}`,
-    transition: 'background-color 0.2s ease',
+    transition: 'background-color 0.15s ease',
     ':hover': {
-      backgroundColor: colors.gray50
+      backgroundColor: '#F3F4F6'
     }
   },
   td: {
-    padding: spacing.md,
+    padding: '14px 16px',
     fontSize: typography.sizes.sm,
-    color: colors.gray700
+    color: colors.gray700,
+    borderBottom: `1px solid ${colors.gray100}`,
+    verticalAlign: 'middle'
   },
-  primaryButton: {
-    ...baseComponents.buttonPrimary,
-    display: 'flex',
+  
+  // Badges y Elementos UI
+  huBadge: {
+    fontFamily: 'Consolas, monospace',
+    fontSize: '0.8rem',
+    backgroundColor: colors.gray100,
+    color: colors.gray700,
+    padding: '4px 8px',
+    borderRadius: radius.md,
+    border: `1px solid ${colors.gray300}`,
+    fontWeight: '600',
+    display: 'inline-block'
+  },
+  dateText: {
+    fontWeight: '600',
+    color: colors.gray800
+  },
+  timeText: {
+    fontSize: '0.75rem',
+    color: colors.gray500
+  },
+  weightBadge: {
+    fontSize: '0.9rem',
+    fontWeight: '700',
+    color: colors.primary
+  },
+  badgeInterna: {
+    display: 'inline-flex',
     alignItems: 'center',
-    gap: spacing.xs
+    padding: '4px 10px',
+    borderRadius: radius.full,
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    backgroundColor: '#DBEAFE', // Azul muy claro
+    color: '#1E40AF', // Azul oscuro
+    border: '1px solid #BFDBFE'
   },
-  secondaryButton: {
-    ...baseComponents.buttonSecondary,
-    marginRight: spacing.md
+  badgeExterna: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 10px',
+    borderRadius: radius.full,
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    backgroundColor: '#D1FAE5', // Verde muy claro
+    color: '#065F46', // Verde oscuro
+    border: '1px solid #A7F3D0'
+  },
+  destBadge: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    fontSize: '0.75rem',
+    color: colors.gray600,
+    backgroundColor: colors.gray100,
+    borderRadius: '4px',
+    textTransform: 'capitalize'
+  },
+  providerText: {
+    fontWeight: '500',
+    color: colors.gray900
   },
   actionButton: {
-    ...baseComponents.buttonSecondary,
-    padding: spacing.sm,
-    fontSize: typography.sizes.sm
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '1.2rem',
+    padding: '4px',
+    borderRadius: '4px',
+    transition: 'background 0.2s',
+    ':hover': {
+      backgroundColor: colors.gray100
+    }
   },
+  emptyState: {
+    padding: spacing.xl,
+    textAlign: 'center',
+    color: colors.gray500,
+    backgroundColor: '#FAFAFA'
+  },
+  tableFooter: {
+    padding: '12px 16px',
+    backgroundColor: '#F9FAFB',
+    borderTop: `1px solid ${colors.gray200}`,
+    fontSize: '0.85rem',
+    color: colors.gray600,
+    textAlign: 'right'
+  },
+
+  // Botón Principal
+  primaryButton: {
+    ...baseComponents.buttonPrimary,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 20px',
+    fontWeight: '600',
+    gap: '8px',
+    boxShadow: shadows.sm
+  },
+
+  // Botones de Bloqueo Integrados
+  btnLockedInside: {
+    position: 'absolute',
+    right: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: colors.error,
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: radius.sm,
+    padding: '4px 10px',
+    fontSize: '10px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    height: '24px',
+    zIndex: 5
+  },
+  btnUnlockedInside: {
+    position: 'absolute',
+    right: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: colors.gray200,
+    color: colors.gray700,
+    border: `1px solid ${colors.gray300}`,
+    borderRadius: radius.sm,
+    padding: '4px 10px',
+    fontSize: '10px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    height: '24px',
+    zIndex: 5,
+    ':hover': {
+        backgroundColor: colors.gray300
+    }
+  },
+
+  // Modal
   modalOverlay: {
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
     padding: spacing.md,
-    backdropFilter: 'blur(4px)'
+    backdropFilter: 'blur(3px)'
   },
   modal: {
-    ...baseComponents.card,
-    width: '90%',
-    maxWidth: '600px',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    width: '95%',
+    maxWidth: '750px',
     maxHeight: '90vh',
-    overflowY: 'auto',
-    boxShadow: shadows.xl
+    overflow: 'hidden',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+    display: 'flex',
+    flexDirection: 'column'
   },
   modalHeader: {
-    padding: spacing.lg,
+    padding: '20px 24px',
     borderBottom: `1px solid ${colors.gray200}`,
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.gray50
+    alignItems: 'start',
+    backgroundColor: '#FAFAFA'
   },
-  modalFooter: {
-    padding: spacing.lg,
-    borderTop: `1px solid ${colors.gray200}`,
-    display: 'flex',
-    justifyContent: 'flex-end'
+  modalTitle: {
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    color: colors.gray900,
+    margin: 0
+  },
+  modalSubtitle: {
+    fontSize: '0.875rem',
+    color: colors.gray500,
+    margin: '4px 0 0 0'
+  },
+  modalContent: {
+    overflowY: 'auto'
   },
   closeBtn: {
-    background: 'none',
+    background: 'transparent',
     border: 'none',
-    fontSize: '1.5rem',
+    color: colors.gray400,
     cursor: 'pointer',
-    color: colors.gray500,
-    padding: spacing.xs,
-    borderRadius: radius.sm,
-    transition: 'all 0.2s ease',
+    fontSize: '1.2rem',
+    padding: '4px',
+    borderRadius: '50%',
+    transition: 'all 0.2s',
     ':hover': {
       backgroundColor: colors.gray200,
       color: colors.gray700
     }
   },
   form: {
-    padding: spacing.lg
+    padding: '24px'
   },
   formGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: spacing.lg
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '24px',
+    alignItems: 'start'
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
   },
   label: {
-    display: 'block',
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    color: colors.gray700,
-    marginBottom: spacing.xs
+    fontSize: '0.75rem',
+    fontWeight: '700',
+    color: colors.gray600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
   },
-  input: {
+  formInput: {
     ...baseComponents.input,
-    width: '100%'
-  },
-  dropdown: {
-    position: 'absolute',
-    backgroundColor: colors.surface,
-    border: `1px solid ${colors.gray200}`,
-    width: '200px',
-    boxShadow: shadows.lg,
-    borderRadius: radius.md,
-    zIndex: 10,
-    maxHeight: '200px',
-    overflowY: 'auto'
-  },
-  dropdownItem: {
-    padding: spacing.sm,
-    cursor: 'pointer',
-    borderBottom: `1px solid ${colors.gray200}`,
-    transition: 'background-color 0.2s ease',
-    ':hover': {
-      backgroundColor: colors.gray100
-    },
-    ':last-child': {
-      borderBottom: 'none',
-      backgroundColor: colors.primaryLight,
-      color: colors.primary,
-      fontWeight: typography.weights.semibold
+    padding: '0 12px',
+    height: '40px',
+    width: '100%',
+    boxSizing: 'border-box',
+    fontSize: '0.9rem',
+    borderColor: colors.gray300,
+    ':focus': {
+      borderColor: colors.primary,
+      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
+      outline: 'none'
     }
   },
-  materialBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacing.xs,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    backgroundColor: colors.primaryLight,
-    color: colors.primary,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold
+  formSelect: {
+    ...baseComponents.select,
+    padding: '0 12px',
+    height: '40px',
+    width: '100%',
+    boxSizing: 'border-box',
+    fontSize: '0.9rem',
+    borderColor: colors.gray300,
+    ':focus': {
+      borderColor: colors.primary,
+      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
+      outline: 'none'
+    }
   },
-  origenBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacing.xs,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    backgroundColor: colors.gray200,
+  formTextarea: {
+    ...baseComponents.input,
+    width: '100%',
+    minHeight: '80px',
+    padding: '12px',
+    resize: 'vertical',
+    fontFamily: typography.fontFamily,
+    borderColor: colors.gray300,
+    fontSize: '0.9rem',
+    ':focus': {
+      borderColor: colors.primary,
+      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
+      outline: 'none'
+    }
+  },
+  modalFooter: {
+    marginTop: '24px',
+    paddingTop: '20px',
+    borderTop: `1px solid ${colors.gray200}`,
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px'
+  },
+  modalPrimaryButton: {
+    backgroundColor: colors.primary,
+    color: 'white',
+    padding: '10px 24px',
+    height: '40px',
+    borderRadius: radius.md,
+    border: 'none',
+    fontWeight: '600',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    boxShadow: shadows.md,
+    ':hover': {
+      backgroundColor: colors.primaryHover,
+      transform: 'translateY(-1px)'
+    }
+  },
+  modalSecondaryButton: {
+    backgroundColor: 'white',
     color: colors.gray700,
-    borderRadius: radius.sm,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold
+    padding: '10px 24px',
+    height: '40px',
+    borderRadius: radius.md,
+    border: `1px solid ${colors.gray300}`,
+    fontWeight: '500',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    ':hover': {
+      backgroundColor: colors.gray50,
+      borderColor: colors.gray400
+    }
   }
 };
-
 
 export default ReceptorDashboard;

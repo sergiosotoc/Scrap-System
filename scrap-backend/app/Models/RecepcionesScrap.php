@@ -8,15 +8,16 @@ class RecepcionesScrap extends Model
 {
     protected $table = 'recepciones_scrap';
     
+    // Eliminado 'fecha_registro' del array fillable
     protected $fillable = [
         'numero_hu', 'peso_kg', 'tipo_material', 'origen_tipo', 'origen_especifico',
         'receptor_id', 'destino', 'lugar_almacenamiento',
-        'observaciones', 'impreso', 'fecha_entrada', 'fecha_registro'
+        'observaciones', 'impreso', 'fecha_entrada'
     ];
 
     protected $casts = [
         'fecha_entrada' => 'datetime',
-        'fecha_registro' => 'datetime',
+        // 'fecha_registro' => 'datetime', // Eliminado
         'impreso' => 'boolean',
     ];
 
