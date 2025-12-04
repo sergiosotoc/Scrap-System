@@ -1,12 +1,14 @@
 /* src/components/BasculaConnection.js */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../services/api';
-import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
+import { colors, radius, spacing, typography, baseComponents } from '../styles/designSystem';
+import SmoothButton from './SmoothButton';
+import SmoothInput from './SmoothInput';
 
 const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
     const [estado, setEstado] = useState(modoInicial);
     const [peso, setPeso] = useState(0);
-    const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 2 });
+    const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 1 });
     const [puertos, setPuertos] = useState([]);
     const [modoManual, setModoManual] = useState(false);
     const [mensaje, setMensaje] = useState('');
@@ -18,7 +20,12 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     const estadoRef = useRef(estado);
     const montadoRef = useRef(true);
     const lecturaEnProgresoRef = useRef(false);
-    const ultimoPesoEnviadoRef = useRef(null);
+    
+    const campoDestinoRef = useRef(campoDestino);
+
+    useEffect(() => {
+        campoDestinoRef.current = campoDestino;
+    }, [campoDestino]);
 
     const puertosComunes = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5'];
 
@@ -55,7 +62,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         return () => { cancelado = true; };
     }, []);
 
-    // Detener lectura
     const detenerLecturaCompleta = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -68,7 +74,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         lecturaEnProgresoRef.current = false;
     }, []);
 
-    // Desconectar
     const desconectarBascula = useCallback(async () => {
         detenerLecturaCompleta();
         estadoRef.current = 'desconectado';
@@ -84,12 +89,10 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             if (montadoRef.current) {
                 setEstado('desconectado');
                 setMensaje('Sistema en espera');
-                ultimoPesoEnviadoRef.current = null;
             }
         }
     }, [config.puerto, detenerLecturaCompleta]);
 
-    // Leer Peso
     const leerPesoConCancelacion = useCallback(async () => {
         if (estadoRef.current !== 'conectado' || modoManual || !montadoRef.current || lecturaEnProgresoRef.current) return;
 
@@ -102,47 +105,45 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             if (controller.signal.aborted || estadoRef.current !== 'conectado') return;
 
             if (resultado.success && montadoRef.current) {
-                const nuevoPeso = parseFloat(resultado.peso_kg) || 0;
+                const pesoString = String(resultado.peso_kg).replace(',', '.');
+                const nuevoPeso = parseFloat(pesoString) || 0;
+                
                 setPeso(nuevoPeso);
                 setUltimaLectura(new Date());
                 setMensaje(nuevoPeso > 0 ? 'Lectura estable' : 'Báscula en cero');
 
-                if (onPesoObtenido && nuevoPeso > 0) {
-                    const diff = Math.abs((ultimoPesoEnviadoRef.current || 0) - nuevoPeso);
-                    if (diff > 0.0001) {
-                        onPesoObtenido(nuevoPeso, campoDestino);
-                        ultimoPesoEnviadoRef.current = nuevoPeso;
-                    }
+                if (onPesoObtenido && nuevoPeso >= 0) {
+                     onPesoObtenido(nuevoPeso, campoDestinoRef.current);
                 }
             }
         } catch (error) {
             if (!error.message.includes('aborted') && estadoRef.current === 'conectado') {
                 if (error.message.includes('conexión') || error.message.includes('timeout')) {
-                    desconectarBascula();
-                    setMensaje('Pérdida de señal');
+                    setMensaje('Reconectando...');
                 }
             }
         } finally {
             lecturaEnProgresoRef.current = false;
             abortControllerRef.current = null;
         }
-    }, [config, modoManual, onPesoObtenido, campoDestino, desconectarBascula]);
+    }, [config, modoManual, onPesoObtenido]); 
 
-    // Iniciar Automático
     const iniciarLecturaAutomatica = useCallback(() => {
         detenerLecturaCompleta();
         if (estadoRef.current !== 'conectado' || modoManual) return;
+        
         leerPesoConCancelacion();
+        
+        // Intervalo de 200ms
         intervaloRef.current = setInterval(() => {
             if (estadoRef.current !== 'conectado' || modoManual) {
                 detenerLecturaCompleta();
                 return;
             }
             leerPesoConCancelacion();
-        }, 1000);
+        }, 200); 
     }, [modoManual, leerPesoConCancelacion, detenerLecturaCompleta]);
 
-    // Conectar
     const conectarBascula = async () => {
         setEstado('conectando');
         setMensaje('Estableciendo enlace...');
@@ -154,12 +155,12 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             if (resultado.success) {
                 setEstado('conectado');
                 estadoRef.current = 'conectado';
-                const p = parseFloat(resultado.peso_kg) || 0;
+                const p = parseFloat(String(resultado.peso_kg).replace(',', '.')) || 0;
                 setPeso(p);
                 setMensaje('Enlace establecido');
                 setTimeout(() => {
                     if (estadoRef.current === 'conectado') iniciarLecturaAutomatica();
-                }, 500);
+                }, 200);
             } else {
                 throw new Error(resultado.mensaje);
             }
@@ -172,7 +173,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         }
     };
 
-    // Effects
     useEffect(() => {
         if (estado === 'conectado' && !modoManual) iniciarLecturaAutomatica();
         else detenerLecturaCompleta();
@@ -188,7 +188,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         };
     }, [detenerLecturaCompleta, desconectarBascula]);
 
-    // Manual Handlers
     const toggleManual = () => {
         if (modoManual) {
             setModoManual(false);
@@ -207,12 +206,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     const handleManualChange = (e) => {
         const val = parseFloat(e.target.value) || 0;
         setPeso(val);
-        if (onPesoObtenido) onPesoObtenido(val, campoDestino);
+        if (onPesoObtenido) onPesoObtenido(val, campoDestinoRef.current);
     };
 
     return (
         <div style={styles.panel}>
-            {/* Cabecera del Instrumento */}
             <div style={styles.header}>
                 <div style={styles.headerTitle}>
                     <div style={styles.iconContainer}>
@@ -223,47 +221,23 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                         </svg>
                     </div>
                     <div>
-                        <h4 style={styles.headerText}>
-                            MÓDULO DE PESAJE
-                        </h4>
-                        <small style={styles.headerSubtext}>
-                            SERIAL INTERFACE RS232
-                        </small>
+                        <h4 style={styles.headerText}>MÓDULO DE PESAJE</h4>
+                        <small style={styles.headerSubtext}>SERIAL INTERFACE RS232</small>
                     </div>
                 </div>
-                {/* Indicador LED */}
-                <div style={{
-                    ...styles.statusIndicator,
-                    borderColor: estado === 'conectado' ? colors.success :
-                        (estado === 'error' ? colors.error : colors.gray300)
-                }}>
-                    <span style={{
-                        ...styles.led,
-                        backgroundColor: estado === 'conectado' ? colors.success :
-                            (estado === 'error' ? colors.error : colors.gray400),
-                        boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none'
-                    }} />
-                    <span style={styles.statusText}>
-                        {estado === 'conectado' ? 'ONLINE' :
-                            (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}
-                    </span>
+                <div style={{...styles.statusIndicator, borderColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray300)}}>
+                    <span style={{...styles.led, backgroundColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray400), boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none'}} />
+                    <span style={styles.statusText}>{estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}</span>
                 </div>
             </div>
 
-            {/* Display LCD Industrial */}
             <div style={styles.lcdContainer}>
                 <div style={styles.lcdGlass}>
                     <div style={styles.lcdHeader}>
                         <span style={styles.lcdLabel}>PESO NETO (KG)</span>
-                        <span style={styles.lcdTime}>
-                            {ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}
-                        </span>
+                        <span style={styles.lcdTime}>{ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}</span>
                     </div>
-
-                    <div style={styles.lcdValue}>
-                        {peso.toFixed(3)}
-                    </div>
-
+                    <div style={styles.lcdValue}>{peso.toFixed(3)}</div>
                     <div style={styles.lcdFooter}>
                         <div style={styles.lcdIndicators}>
                             <span style={{ opacity: modoManual ? 1 : 0.2 }}>MAN</span>
@@ -271,79 +245,67 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             <span style={{ opacity: peso === 0 ? 1 : 0.2 }}>ZERO</span>
                             <span style={{ opacity: estado === 'conectado' ? 1 : 0.2 }}>STABLE</span>
                         </div>
-                        <div style={styles.systemMessage}>
-                            {mensaje.toUpperCase()}
-                        </div>
+                        <div style={styles.systemMessage}>{mensaje.toUpperCase()}</div>
                     </div>
                 </div>
             </div>
 
-            {/* Panel de Control */}
             <div style={styles.controls}>
                 <div style={styles.controlRow}>
                     <div style={styles.controlGroup}>
                         <label style={styles.controlLabel}>PUERTO COM</label>
-                        <select
-                            style={styles.select}
-                            value={config.puerto}
-                            disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos}
-                            onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
-                        >
-                            {cargandoPuertos ? <option>Cargando...</option> :
-                                puertos.map(p => <option key={p} value={p}>{p}</option>)}
+                        <select style={styles.select} value={config.puerto} disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos} onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}>
+                            {cargandoPuertos ? <option>Cargando...</option> : puertos.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                     </div>
-
                     <div style={styles.controlGroup}>
                         <label style={styles.controlLabel}>ACCIÓN</label>
                         {!modoManual && estado !== 'conectado' && (
-                            <button
-                                onClick={conectarBascula}
-                                disabled={estado === 'conectando'}
-                                style={{
-                                    ...styles.button,
-                                    ...styles.primaryButton,
-                                    ...(estado === 'conectando' && styles.disabledButton)
-                                }}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                            <SmoothButton onClick={conectarBascula} disabled={estado === 'conectando'} style={{ width: '100%', backgroundColor: estado === 'conectando' ? colors.gray400 : colors.primary }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
                                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                                     <line x1="12" y1="2" x2="12" y2="12"></line>
                                 </svg>
                                 {estado === 'conectando' ? 'Conectando...' : 'Conectar'}
-                            </button>
+                            </SmoothButton>
                         )}
-
                         {estado === 'conectado' && (
-                            <button onClick={desconectarBascula} style={{ ...styles.button, ...styles.destructiveButton }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}>
+                            <SmoothButton onClick={desconectarBascula} variant="destructive" style={{ width: '100%' }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
                                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                                     <line x1="12" y1="2" x2="12" y2="12"></line>
                                 </svg>
                                 Desconectar
-                            </button>
+                            </SmoothButton>
                         )}
-
                         {modoManual && (
                             <div style={styles.manualInputContainer}>
-                                <input
-                                    type="number"
-                                    step="0.001"
-                                    value={peso}
-                                    onChange={handleManualChange}
-                                    style={styles.input}
+                                <SmoothInput 
+                                    type="number" 
+                                    step="0.001" 
+                                    value={peso} 
+                                    onChange={handleManualChange} 
                                     placeholder="0.000"
+                                    // Pasamos estilos de override. SmoothInput ya tiene bordes y radius base.
+                                    style={{
+                                        textAlign: 'right',
+                                        fontWeight: 'bold',
+                                        fontFamily: typography.fontMono,
+                                        border: `2px solid ${colors.warning}`,
+                                        backgroundColor: '#FFFBEB',
+                                        color: '#92400E',
+                                        height: '36px'
+                                    }} 
                                 />
                             </div>
                         )}
                     </div>
                 </div>
-
                 <div style={styles.secondaryActions}>
-                    <button onClick={toggleManual} style={styles.linkButton}>
+                    <SmoothButton onClick={toggleManual} style={styles.linkButton} variant="secondary">
                         {modoManual ? (
                             <>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
                                     <polyline points="1 4 1 10 7 10"></polyline>
                                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
                                 </svg>
@@ -351,17 +313,15 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             </>
                         ) : (
                             <>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                 </svg>
                                 Ingresar Manualmente
                             </>
                         )}
-                    </button>
-                    <span style={styles.targetText}>
-                        Campo: {campoDestino}
-                    </span>
+                    </SmoothButton>
+                    <span style={styles.targetText}>Campo: {campoDestino}</span>
                 </div>
             </div>
         </div>
@@ -369,224 +329,183 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 };
 
 const styles = {
-    panel: {
-        ...baseComponents.card,
-        padding: spacing.lg,
-        marginBottom: spacing.lg
+    panel: { 
+        ...baseComponents.card, 
+        padding: spacing.lg, 
+        marginBottom: spacing.lg 
     },
-    header: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: spacing.md,
-        paddingBottom: spacing.sm,
-        borderBottom: `1px solid ${colors.gray200}`
+    header: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: spacing.md, 
+        paddingBottom: spacing.sm, 
+        borderBottom: `1px solid ${colors.gray200}` 
     },
-    headerTitle: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: spacing.sm
+    headerTitle: { 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: spacing.sm 
     },
-    iconContainer: {
-        color: colors.gray600,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
+    iconContainer: { 
+        color: colors.gray600, 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
     },
-    headerText: {
-        margin: 0,
-        fontSize: typography.sizes.base,
-        fontWeight: typography.weights.bold,
-        color: colors.gray800
+    headerText: { 
+        margin: 0, 
+        fontSize: typography.sizes.base, 
+        fontWeight: typography.weights.bold, 
+        color: colors.gray800 
     },
-    headerSubtext: {
-        color: colors.gray500,
-        fontSize: typography.sizes.xs,
-        letterSpacing: '0.5px'
+    headerSubtext: { 
+        color: colors.gray500, 
+        fontSize: typography.sizes.xs, 
+        letterSpacing: '0.5px' 
     },
-    statusIndicator: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: spacing.xs,
-        backgroundColor: colors.gray50,
-        padding: `${spacing.xs} ${spacing.sm}`,
-        borderRadius: radius.full,
-        border: `1px solid ${colors.gray300}`,
-        transition: 'all 0.3s ease'
+    statusIndicator: { 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: spacing.xs, 
+        backgroundColor: colors.gray50, 
+        padding: `${spacing.xs} ${spacing.sm}`, 
+        borderRadius: radius.full, 
+        border: `1px solid ${colors.gray300}`, 
+        transition: 'all 0.3s ease' 
     },
-    led: {
-        width: '8px',
-        height: '8px',
-        borderRadius: '50%',
-        transition: 'all 0.3s ease'
+    led: { 
+        width: '8px', 
+        height: '8px', 
+        borderRadius: '50%', 
+        transition: 'all 0.3s ease' 
     },
-    statusText: {
-        fontSize: typography.sizes.xs,
-        fontWeight: typography.weights.bold,
-        color: colors.gray700,
-        letterSpacing: '0.5px'
+    statusText: { 
+        fontSize: typography.sizes.xs, 
+        fontWeight: typography.weights.bold, 
+        color: colors.gray700, 
+        letterSpacing: '0.5px' 
     },
-    // LCD STYLES
-    lcdContainer: {
-        backgroundColor: colors.lcdBase,
-        background: colors.lcdGradient,
-        padding: spacing.sm,
-        borderRadius: radius.md,
-        marginBottom: spacing.md,
-        boxShadow: `${shadows.inner}, 0 1px 0 rgba(255,255,255,0.5)`,
-        border: `1px solid ${colors.gray300}`
+    lcdContainer: { 
+        backgroundColor: colors.lcdBase || '#C4D4C4', 
+        background: colors.lcdGradient || 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)', 
+        padding: spacing.sm, 
+        borderRadius: radius.md, 
+        marginBottom: spacing.md, 
+        boxShadow: `inset 0 2px 4px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.5)`, 
+        border: `1px solid ${colors.gray300}` 
     },
-    lcdGlass: {
-        border: `1px solid rgba(0,0,0,0.1)`,
-        borderRadius: radius.sm,
-        padding: spacing.md,
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        backgroundColor: 'rgba(255,255,255,0.1)'
+    lcdGlass: { 
+        border: `1px solid rgba(0,0,0,0.1)`, 
+        borderRadius: radius.sm, 
+        padding: spacing.md, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        position: 'relative', 
+        backgroundColor: 'rgba(255,255,255,0.1)' 
     },
-    lcdHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        marginBottom: spacing.xs
+    lcdHeader: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        marginBottom: spacing.xs 
     },
-    lcdLabel: {
-        fontSize: typography.sizes.xs,
-        fontWeight: typography.weights.bold,
-        color: colors.lcdText,
-        opacity: 0.8
+    lcdLabel: { 
+        fontSize: typography.sizes.xs, 
+        fontWeight: typography.weights.bold, 
+        color: colors.lcdText || '#1a2e1a', 
+        opacity: 0.8 
     },
-    lcdTime: {
-        fontSize: typography.sizes.xs,
-        fontFamily: typography.fontMono,
-        color: colors.lcdText
+    lcdTime: { 
+        fontSize: typography.sizes.xs, 
+        fontFamily: typography.fontMono, 
+        color: colors.lcdText || '#1a2e1a' 
     },
-    lcdValue: {
-        fontFamily: typography.fontMono,
-        fontSize: '3.5rem',
-        fontWeight: typography.weights.bold,
-        color: colors.lcdText,
-        textAlign: 'right',
-        lineHeight: '1',
-        letterSpacing: '-2px',
-        textShadow: '1px 1px 0 rgba(255,255,255,0.2)',
-        margin: `${spacing.xs} 0`
+    lcdValue: { 
+        fontFamily: typography.fontMono, 
+        fontSize: '3.5rem', 
+        fontWeight: typography.weights.bold, 
+        color: colors.lcdText || '#1a2e1a', 
+        textAlign: 'right', 
+        lineHeight: '1', 
+        letterSpacing: '-2px', 
+        textShadow: '1px 1px 0 rgba(255,255,255,0.2)', 
+        margin: `${spacing.xs} 0` 
     },
-    lcdFooter: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginTop: spacing.sm,
-        borderTop: `1px solid rgba(0,0,0,0.05)`,
-        paddingTop: spacing.xs
+    lcdFooter: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'flex-end', 
+        marginTop: spacing.sm, 
+        borderTop: `1px solid rgba(0,0,0,0.05)`, 
+        paddingTop: spacing.xs 
     },
-    lcdIndicators: {
-        display: 'flex',
-        gap: spacing.sm,
-        fontSize: typography.sizes.xs,
-        fontWeight: typography.weights.bold,
-        color: colors.lcdText
+    lcdIndicators: { 
+        display: 'flex', 
+        gap: spacing.sm, 
+        fontSize: typography.sizes.xs, 
+        fontWeight: typography.weights.bold, 
+        color: colors.lcdText || '#1a2e1a' 
     },
-    systemMessage: {
-        fontSize: typography.sizes.xs,
-        fontFamily: typography.fontMono,
-        color: colors.lcdText,
-        fontWeight: typography.weights.semibold
+    systemMessage: { 
+        fontSize: typography.sizes.xs, 
+        fontFamily: typography.fontMono, 
+        color: colors.lcdText || '#1a2e1a', 
+        fontWeight: typography.weights.semibold 
     },
-    // CONTROLES CON ESTILO CONSISTENTE
-    controls: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: spacing.md
+    controls: { 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: spacing.md 
     },
-    controlRow: {
-        display: 'flex',
-        gap: spacing.md,
-        alignItems: 'flex-end'
+    controlRow: { 
+        display: 'flex', 
+        gap: spacing.md, 
+        alignItems: 'flex-end' 
     },
-    controlGroup: {
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column'
+    controlGroup: { 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column' 
     },
-    controlLabel: {
-        display: 'block',
-        fontSize: typography.sizes.xs,
-        fontWeight: typography.weights.semibold,
-        color: colors.gray600,
-        marginBottom: spacing.xs,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em'
+    controlLabel: { 
+        display: 'block', 
+        fontSize: typography.sizes.xs, 
+        fontWeight: typography.weights.semibold, 
+        color: colors.gray600, 
+        marginBottom: spacing.xs, 
+        textTransform: 'uppercase', 
+        letterSpacing: '0.05em' 
     },
-    select: {
-        ...baseComponents.select,
-        height: '36px',
-        paddingRight: '32px'
+    select: { 
+        ...baseComponents.select, 
+        height: '36px', 
+        paddingRight: '32px' 
     },
-    input: {
-        ...baseComponents.input,
-        height: '36px',
-        textAlign: 'right',
-        fontWeight: typography.weights.bold,
-        fontFamily: typography.fontMono,
-        border: `2px solid ${colors.warning}`,
-        backgroundColor: '#FFFBEB',
-        color: '#92400E'
+    manualInputContainer: { 
+        height: '36px', 
+        width: '100%' 
     },
-    button: {
-        ...baseComponents.buttonPrimary,
-        height: '36px',
-        width: '100%',
-        justifyContent: 'center'
-    },
-    primaryButton: {
-        // Hereda de button
-    },
-    destructiveButton: {
-        ...baseComponents.buttonDestructive,
-        height: '36px',
-        width: '100%',
-        justifyContent: 'center'
-    },
-    disabledButton: {
-        opacity: 0.6,
-        cursor: 'not-allowed',
-        transform: 'none',
-        ':hover': {
-            transform: 'none',
-            backgroundColor: colors.gray400
-        }
-    },
-    manualInputContainer: {
-        height: '36px'
-    },
-    secondaryActions: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: spacing.sm,
+    secondaryActions: { 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        paddingTop: spacing.sm, 
         borderTop: `1px solid ${colors.gray200}`
+     },
+    linkButton: { 
+        background: 'transparent', 
+        border: 'none', 
+        color: colors.gray600, 
+        fontSize: typography.sizes.sm, 
+        padding: spacing.xs, 
+        display: 'flex', 
+        alignItems: 'center', 
+        boxShadow: 'none' 
     },
-    linkButton: {
-        background: 'none',
-        border: 'none',
-        color: colors.gray600,
-        fontSize: typography.sizes.sm,
-        cursor: 'pointer',
-        textDecoration: 'none',
-        padding: spacing.xs,
-        borderRadius: radius.sm,
-        transition: 'all 0.2s ease',
-        display: 'flex',
-        alignItems: 'center',
-        ':hover': {
-            backgroundColor: colors.gray100,
-            color: colors.gray700
-        }
-    },
-    targetText: {
-        fontSize: typography.sizes.xs,
-        color: colors.gray400
+    targetText: { 
+        fontSize: typography.sizes.xs, 
+        color: colors.gray400 
     }
 };
+
 export default BasculaConnection;

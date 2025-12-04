@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { excelService } from '../services/excelService';
 import { useToast } from '../context/ToastContext';
-import { baseComponents, colors, spacing, typography, radius } from '../styles/designSystem';
+import { colors } from '../styles/designSystem';
+import SmoothButton from './SmoothButton';
 
 const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte", buttonStyle = {} }) => {
     const [exportando, setExportando] = useState(false);
@@ -12,7 +13,6 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         setExportando(true);
         try {
             let resultado;
-            
             if (tipo === 'formato-empresa') {
                 resultado = await excelService.exportFormatoEmpresa(filters.fecha, filters.turno);
             } else {
@@ -32,7 +32,6 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
             
         } catch (error) {
             console.error('Error exportando Excel:', error);
-            
             if (error.message.includes('404')) {
                 addToast('No hay datos para exportar con los filtros seleccionados', 'warning');
             } else if (error.message.includes('500')) {
@@ -45,9 +44,21 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         }
     };
 
-    const getButtonContent = () => {
-        if (exportando) {
-            return (
+    return (
+        <SmoothButton 
+            onClick={handleExport}
+            disabled={exportando}
+            variant="primary" // Esto ya carga baseComponents.buttonPrimary
+            title="Generar Reporte en Excel"
+            style={{
+                height: '36px',
+                // Solo sobreescribimos lo necesario (color de éxito o gris)
+                backgroundColor: exportando ? colors.gray400 : colors.success,
+                opacity: exportando ? 0.7 : 1,
+                ...buttonStyle
+            }}
+        >
+            {exportando ? (
                 <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation: 'spin 1s linear infinite'}}>
                         <line x1="12" y1="2" x2="12" y2="6"></line>
@@ -61,66 +72,25 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
                     </svg>
                     <span>Generando...</span>
                 </>
-            );
-        }
-        return (
-            <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="12" y1="18" x2="12" y2="12"></line>
-                    <line x1="9" y1="15" x2="15" y2="15"></line>
-                </svg>
-                <span>{buttonText}</span>
-            </>
-        );
-    };
-
-    const styles = {
-        button: {
-            ...baseComponents.buttonPrimary,
-            height: '36px',
-            backgroundColor: exportando ? colors.gray400 : colors.success,
-            cursor: exportando ? 'not-allowed' : 'pointer',
-            opacity: exportando ? 0.7 : 1,
-            boxShadow: exportando ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
-            ':hover': exportando ? {} : {
-                backgroundColor: colors.secondaryHover,
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-            },
-            ...buttonStyle
-        }
-    };
-
-    React.useEffect(() => {
-        if (typeof document !== 'undefined') {
-            const styleSheet = document.styleSheets[0];
-            if (styleSheet) {
-                try {
-                    const rules = Array.from(styleSheet.cssRules).map(r => r.cssText).join('');
-                    if (!rules.includes('@keyframes spin')) {
-                        styleSheet.insertRule(`
-                            @keyframes spin {
-                                from { transform: rotate(0deg); }
-                                to { transform: rotate(360deg); }
-                            }
-                        `, styleSheet.cssRules.length);
-                    }
-                } catch(e) {}
-            }
-        }
-    }, []);
-
-    return (
-        <button 
-            onClick={handleExport}
-            disabled={exportando}
-            title="Generar Reporte en Excel"
-            style={styles.button}
-        >
-            {getButtonContent()}
-        </button>
+            ) : (
+                <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                    <span>{buttonText}</span>
+                </>
+            )}
+            
+            <style>{`
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
+        </SmoothButton>
     );
 };
 

@@ -1,7 +1,12 @@
 /* src/components/ProtectedRoute.js */
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { colors, spacing, typography, radius, baseComponents } from '../styles/designSystem';
+import { colors, spacing, typography, baseComponents } from '../styles/designSystem';
+
+// Componentes Smooth
+import LoadingSpinner from './LoadingSpinner';
+import SmoothButton from './SmoothButton';
+import PageWrapper from './PageWrapper';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading } = useAuth();
@@ -15,13 +20,16 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        <div style={styles.loadingContent}>
-          <div style={styles.spinner}></div>
-          <div style={styles.loadingText}>
-            <p style={styles.loadingMessage}>Verificando autenticación</p>
-            <p style={styles.loadingSubmessage}>Espere un momento por favor...</p>
-          </div>
-        </div>
+        {/* Usamos el componente unificado de carga */}
+        <LoadingSpinner 
+          size="lg" 
+          message={
+            <div style={styles.loadingTextContainer}>
+                <p style={styles.loadingMessage}>Verificando autenticación</p>
+                <p style={styles.loadingSubmessage}>Espere un momento por favor...</p>
+            </div>
+          } 
+        />
       </div>
     );
   }
@@ -33,31 +41,37 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (requiredRole && user.role !== requiredRole) {
     return (
       <div style={styles.errorContainer}>
-        <div style={styles.errorContent}>
-          <div style={styles.errorIconCircle}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-          </div>
-          <h2 style={styles.errorTitle}>Permisos insuficientes</h2>
-          <p style={styles.errorMessage}>No tiene los permisos necesarios para acceder a esta página</p>
-          <div style={styles.buttonGroup}>
-            <button 
-              onClick={() => window.history.back()}
-              style={styles.secondaryButton}
-            >
-              Volver Atrás
-            </button>
-            <button 
-              onClick={() => window.location.href = '/login'}
-              style={styles.loginButton}
-            >
-              Ir al Login
-            </button>
-          </div>
-        </div>
+        {/* Animación suave al mostrar el error */}
+        <PageWrapper>
+            <div style={styles.errorContent}>
+            <div style={styles.errorIconCircle}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            </div>
+            <h2 style={styles.errorTitle}>Permisos insuficientes</h2>
+            <p style={styles.errorMessage}>No tiene los permisos necesarios para acceder a esta página</p>
+            
+            <div style={styles.buttonGroup}>
+                <SmoothButton 
+                    onClick={() => window.history.back()}
+                    variant="secondary"
+                    style={styles.secondaryButton}
+                >
+                    Volver Atrás
+                </SmoothButton>
+                
+                <SmoothButton 
+                    onClick={() => window.location.href = '/login'}
+                    style={styles.loginButton}
+                >
+                    Ir al Login
+                </SmoothButton>
+            </div>
+            </div>
+        </PageWrapper>
       </div>
     );
   }
@@ -74,26 +88,10 @@ const styles = {
     backgroundColor: colors.background,
     padding: spacing.xl
   },
-  loadingContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: spacing.lg,
+  // Contenedor para el texto personalizado dentro del spinner
+  loadingTextContainer: {
     textAlign: 'center',
-    maxWidth: '400px'
-  },
-  spinner: {
-    width: '60px',
-    height: '60px',
-    border: `4px solid ${colors.gray200}`,
-    borderTop: `4px solid ${colors.primary}`,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
-  loadingText: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.xs
+    marginTop: spacing.xs
   },
   loadingMessage: {
     fontSize: typography.sizes.xl,
@@ -150,13 +148,10 @@ const styles = {
     lineHeight: 1.5
   },
   loginButton: {
-    ...baseComponents.buttonPrimary,
-    width: 'auto',
+    // Hereda estilos de SmoothButton, aquí ajustamos layout
     minWidth: '140px'
   },
   secondaryButton: {
-    ...baseComponents.buttonSecondary,
-    width: 'auto',
     minWidth: '140px'
   },
   buttonGroup: {
@@ -167,22 +162,5 @@ const styles = {
     flexWrap: 'wrap'
   }
 };
-
-if (typeof document !== 'undefined') {
-  const styleSheet = document.styleSheets[0];
-  if (styleSheet) {
-    try {
-        const rules = Array.from(styleSheet.cssRules).map(r => r.cssText).join('');
-        if (!rules.includes('@keyframes spin')) {
-        styleSheet.insertRule(`
-            @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-            }
-        `, styleSheet.cssRules.length);
-        }
-    } catch (e) {}
-  }
-}
 
 export default ProtectedRoute;
