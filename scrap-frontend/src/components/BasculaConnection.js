@@ -4,10 +4,12 @@ import { apiClient } from '../services/api';
 import { colors, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 import SmoothButton from './SmoothButton';
 import SmoothInput from './SmoothInput';
+import SmoothSelect from './SmoothSelect'; 
 
 const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
     const [estado, setEstado] = useState(modoInicial);
-    const [peso, setPeso] = useState(0);
+    const [peso, setPeso] = useState(0); // Ahora manejará strings durante edición manual
+    const [tara, setTara] = useState(0); 
     const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 1 });
     const [puertos, setPuertos] = useState([]);
     const [modoManual, setModoManual] = useState(false);
@@ -23,6 +25,10 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     
     const campoDestinoRef = useRef(campoDestino);
 
+    // Cálculo seguro del Peso Neto usando parseFloat para manejar strings o números
+    const pesoBrutoNum = parseFloat(peso) || 0;
+    const pesoNeto = Math.max(0, pesoBrutoNum - (parseFloat(tara) || 0));
+
     useEffect(() => {
         campoDestinoRef.current = campoDestino;
     }, [campoDestino]);
@@ -32,6 +38,13 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     useEffect(() => {
         estadoRef.current = estado;
     }, [estado]);
+
+    // Efecto para propagar cambios
+    useEffect(() => {
+        if (onPesoObtenido) {
+            onPesoObtenido(pesoNeto, campoDestinoRef.current);
+        }
+    }, [pesoNeto, onPesoObtenido]);
 
     // Cargar puertos
     useEffect(() => {
@@ -108,13 +121,9 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                 const pesoString = String(resultado.peso_kg).replace(',', '.');
                 const nuevoPeso = parseFloat(pesoString) || 0;
                 
-                setPeso(nuevoPeso);
+                setPeso(nuevoPeso); // En automático sí guardamos el número directo
                 setUltimaLectura(new Date());
                 setMensaje(nuevoPeso > 0 ? 'Lectura estable' : 'Báscula en cero');
-
-                if (onPesoObtenido && nuevoPeso >= 0) {
-                     onPesoObtenido(nuevoPeso, campoDestinoRef.current);
-                }
             }
         } catch (error) {
             if (!error.message.includes('aborted') && estadoRef.current === 'conectado') {
@@ -126,7 +135,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             lecturaEnProgresoRef.current = false;
             abortControllerRef.current = null;
         }
-    }, [config, modoManual, onPesoObtenido]); 
+    }, [config, modoManual]); 
 
     const iniciarLecturaAutomatica = useCallback(() => {
         detenerLecturaCompleta();
@@ -134,7 +143,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         
         leerPesoConCancelacion();
         
-        // Intervalo de 200ms
         intervaloRef.current = setInterval(() => {
             if (estadoRef.current !== 'conectado' || modoManual) {
                 detenerLecturaCompleta();
@@ -203,10 +211,16 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         }
     };
 
+    // --- CORRECCIÓN: MANEJO DE INPUT MANUAL ---
     const handleManualChange = (e) => {
-        const val = parseFloat(e.target.value) || 0;
-        setPeso(val);
-        if (onPesoObtenido) onPesoObtenido(val, campoDestinoRef.current);
+        let valStr = e.target.value;
+        // Permitir escribir decimales o borrar todo
+        setPeso(valStr);
+    };
+
+    const handleTaraChange = (e) => {
+        // Permitir escribir decimales o borrar todo para Tara
+        setTara(e.target.value);
     };
 
     return (
@@ -237,13 +251,21 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                         <span style={styles.lcdLabel}>PESO NETO (KG)</span>
                         <span style={styles.lcdTime}>{ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}</span>
                     </div>
-                    <div style={styles.lcdValue}>{peso.toFixed(3)}</div>
+                    {/* LCD Principal: Peso Neto Calculado */}
+                    <div style={styles.lcdValue}>{pesoNeto.toFixed(3)}</div>
+                    
+                    <div style={styles.lcdDetailRow}>
+                        <span style={styles.lcdDetailItem}>Bruto: {pesoBrutoNum.toFixed(3)}</span>
+                        <span style={styles.lcdDetailSeparator}>-</span>
+                        <span style={styles.lcdDetailItem}>Tara: {(parseFloat(tara) || 0).toFixed(3)}</span>
+                    </div>
+
                     <div style={styles.lcdFooter}>
                         <div style={styles.lcdIndicators}>
                             <span style={{ opacity: modoManual ? 1 : 0.2 }}>MAN</span>
                             <span style={{ opacity: !modoManual && estado === 'conectado' ? 1 : 0.2 }}>AUTO</span>
-                            <span style={{ opacity: peso === 0 ? 1 : 0.2 }}>ZERO</span>
-                            <span style={{ opacity: estado === 'conectado' ? 1 : 0.2 }}>STABLE</span>
+                            <span style={{ opacity: pesoNeto === 0 ? 1 : 0.2 }}>ZERO</span>
+                            <span style={{ opacity: (parseFloat(tara) || 0) > 0 ? 1 : 0.2 }}>TARA</span>
                         </div>
                         <div style={styles.systemMessage}>{mensaje.toUpperCase()}</div>
                     </div>
@@ -253,54 +275,75 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             <div style={styles.controls}>
                 <div style={styles.controlRow}>
                     <div style={styles.controlGroup}>
-                        <label style={styles.controlLabel}>PUERTO COM</label>
-                        <select style={styles.select} value={config.puerto} disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos} onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}>
+                        <SmoothSelect 
+                            label="PUERTO COM" 
+                            value={config.puerto} 
+                            disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos} 
+                            onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
+                            style={{ height: '36px' }}
+                        >
                             {cargandoPuertos ? <option>Cargando...</option> : puertos.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        </SmoothSelect>
                     </div>
+                    
                     <div style={styles.controlGroup}>
-                        <label style={styles.controlLabel}>ACCIÓN</label>
-                        {!modoManual && estado !== 'conectado' && (
-                            <SmoothButton onClick={conectarBascula} disabled={estado === 'conectando'} style={{ width: '100%', backgroundColor: estado === 'conectando' ? colors.gray400 : colors.primary }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                                    <line x1="12" y1="2" x2="12" y2="12"></line>
-                                </svg>
-                                {estado === 'conectando' ? 'Conectando...' : 'Conectar'}
-                            </SmoothButton>
-                        )}
-                        {estado === 'conectado' && (
-                            <SmoothButton onClick={desconectarBascula} variant="destructive" style={{ width: '100%' }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                                    <line x1="12" y1="2" x2="12" y2="12"></line>
-                                </svg>
-                                Desconectar
-                            </SmoothButton>
-                        )}
-                        {modoManual && (
-                            <div style={styles.manualInputContainer}>
-                                <SmoothInput 
-                                    type="number" 
-                                    step="0.001" 
-                                    value={peso} 
-                                    onChange={handleManualChange} 
-                                    placeholder="0.000"
-                                    // Pasamos estilos de override. SmoothInput ya tiene bordes y radius base.
-                                    style={{
-                                        textAlign: 'right',
-                                        fontWeight: 'bold',
-                                        fontFamily: typography.fontMono,
-                                        border: `2px solid ${colors.warning}`,
-                                        backgroundColor: '#FFFBEB',
-                                        color: '#92400E',
-                                        height: '36px'
-                                    }} 
-                                />
-                            </div>
-                        )}
+                        <SmoothInput 
+                            label="PESO CONTENEDOR (TARA)"
+                            type="number"
+                            step="0.001"
+                            // CORRECCIÓN: Se muestra vacío si es 0 o cadena vacía para no molestar
+                            value={tara === 0 || tara === '0' ? '' : tara}
+                            onChange={handleTaraChange}
+                            placeholder="0.000"
+                            style={{ height: '36px', textAlign: 'right', fontWeight: '600' }}
+                            rightElement={<span style={{fontSize: '10px', color: colors.gray500, fontWeight: 'bold'}}>KG</span>}
+                        />
                     </div>
                 </div>
+
+                <div style={styles.controlGroup}>
+                    <label style={styles.controlLabel}>ACCIÓN</label>
+                    {!modoManual && estado !== 'conectado' && (
+                        <SmoothButton onClick={conectarBascula} disabled={estado === 'conectando'} style={{ width: '100%', backgroundColor: estado === 'conectando' ? colors.gray400 : colors.primary }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                <line x1="12" y1="2" x2="12" y2="12"></line>
+                            </svg>
+                            {estado === 'conectando' ? 'Conectando...' : 'Conectar'}
+                        </SmoothButton>
+                    )}
+                    {estado === 'conectado' && (
+                        <SmoothButton onClick={desconectarBascula} variant="destructive" style={{ width: '100%' }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                <line x1="12" y1="2" x2="12" y2="12"></line>
+                            </svg>
+                            Desconectar
+                        </SmoothButton>
+                    )}
+                    {modoManual && (
+                        <div style={styles.manualInputContainer}>
+                            <SmoothInput 
+                                type="number" 
+                                step="0.001" 
+                                // CORRECCIÓN: Se muestra vacío si es 0 o cadena vacía
+                                value={peso === 0 || peso === '0' ? '' : peso}
+                                onChange={handleManualChange} 
+                                placeholder="INGRESO MANUAL BRUTO"
+                                style={{
+                                    textAlign: 'right',
+                                    fontWeight: 'bold',
+                                    fontFamily: typography.fontMono,
+                                    border: `2px solid ${colors.warning}`,
+                                    backgroundColor: '#FFFBEB',
+                                    color: '#92400E',
+                                    height: '36px'
+                                }} 
+                            />
+                        </div>
+                    )}
+                </div>
+
                 <div style={styles.secondaryActions}>
                     <SmoothButton onClick={toggleManual} style={styles.linkButton} variant="secondary">
                         {modoManual ? (
@@ -429,7 +472,24 @@ const styles = {
         lineHeight: '1', 
         letterSpacing: '-2px', 
         textShadow: '1px 1px 0 rgba(255,255,255,0.2)', 
-        margin: `${spacing.xs} 0` 
+        margin: '0' 
+    },
+    lcdDetailRow: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: spacing.sm,
+        fontSize: typography.sizes.xs,
+        color: colors.lcdText || '#1a2e1a',
+        fontFamily: typography.fontMono,
+        opacity: 0.8,
+        marginTop: '-4px'
+    },
+    lcdDetailItem: {
+        fontWeight: '600'
+    },
+    lcdDetailSeparator: {
+        opacity: 0.5
     },
     lcdFooter: { 
         display: 'flex', 
@@ -475,11 +535,6 @@ const styles = {
         marginBottom: spacing.xs, 
         textTransform: 'uppercase', 
         letterSpacing: '0.05em' 
-    },
-    select: { 
-        ...baseComponents.select, 
-        height: '36px', 
-        paddingRight: '32px' 
     },
     manualInputContainer: { 
         height: '36px', 

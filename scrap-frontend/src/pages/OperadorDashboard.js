@@ -64,14 +64,25 @@ const OperadorDashboard = () => {
   // Estado para disparar animaciones de entrada
   const [triggerAnimation, setTriggerAnimation] = useState(false);
 
-  // Bloquear scroll del body al abrir modal
+  // Modificado: Bloquear scroll del body al abrir modal Y cerrar con tecla ESC
   useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.keyCode === 27 || event.key === 'Escape') {
+        setShowModal(false);
+      }
+    };
+
     if (showModal) {
       document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleEscKey);
     } else {
       document.body.style.overflow = 'unset';
     }
-    return () => { document.body.style.overflow = 'unset'; };
+
+    return () => { 
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleEscKey);
+    };
   }, [showModal]);
 
   const getTodayLocal = () => {
@@ -153,11 +164,15 @@ const OperadorDashboard = () => {
   // --- ESTILOS LIMPIOS Y AJUSTADOS ---
   const styles = {
     container: {
-      padding: spacing.lg,
+      // CORRECCIÓN: Eliminamos padding para que el Layout controle los márgenes y no se sumen.
+      // padding: spacing.lg, 
       backgroundColor: colors.background,
-      minHeight: '100vh',
       fontFamily: typography.fontFamily,
-      animation: 'fadeIn 0.5s ease-out'
+      animation: 'fadeIn 0.5s ease-out',
+      boxSizing: 'border-box',
+      width: '100%',
+      // Aseguramos que no fuerce altura extra
+      height: 'auto' 
     },
     header: {
       display: 'flex',
@@ -193,11 +208,13 @@ const OperadorDashboard = () => {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      height: '100vh',
+      // CORRECCIÓN: Usamos 100% para llenar el contenedor padre (Layout) sin desbordar la ventana
+      height: '100%', 
+      minHeight: '50vh', // Mínimo razonable
       backgroundColor: colors.background,
       flexDirection: 'column'
     },
-    // Modal Styles Corregidos
+    // Modal Styles
     modalLoading: {
       position: 'absolute',
       top: 0,
@@ -232,7 +249,7 @@ const OperadorDashboard = () => {
       borderRadius: radius.xl,
       width: '98%', 
       maxWidth: '1400px',
-      maxHeight: '90vh', // Altura adaptable
+      maxHeight: '90vh',
       height: 'auto',
       overflow: 'hidden',
       boxShadow: shadows.xl,
@@ -274,7 +291,6 @@ const OperadorDashboard = () => {
       overflowX: 'hidden',
       padding: 0,
       position: 'relative',
-      // CORRECCIÓN: Espacio reducido drásticamente (de 80px/120px a 20px)
       paddingBottom: '20px' 
     },
     closeBtn: {
@@ -537,7 +553,10 @@ const OperadorDashboard = () => {
 
   return (
     <div style={styles.container}>
-      <PageWrapper>
+      {/* Override del PageWrapper para que no fuerce height: 100%.
+        Esto permite que el contenido dicte la altura y evita scroll si no hay datos.
+      */}
+      <PageWrapper style={{ height: 'auto' }}>
         {/* Header */}
         <CardTransition delay={0} style={styles.header}>
             <div>
@@ -669,10 +688,6 @@ const OperadorDashboard = () => {
                 </div>
                 <h3 style={styles.emptyStateText}>No hay registros</h3>
                 <p style={styles.emptyStateSubtext}>No se encontraron registros con los filtros seleccionados</p>
-                <SmoothButton onClick={() => setShowModal(true)} style={styles.primaryButton}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    Crear Primer Registro
-                </SmoothButton>
                 </div>
             )}
             </div>

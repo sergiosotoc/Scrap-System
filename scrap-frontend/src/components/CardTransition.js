@@ -2,7 +2,8 @@
 import React from "react";
 import { useInViewAnimation } from "../hooks/useInViewAnimation";
 
-const CardTransition = ({ children, delay = 0, style, className }) => {
+// Agregamos ...props para capturar onClick, onMouseEnter, etc.
+const CardTransition = ({ children, delay = 0, style, className, ...props }) => {
   const { ref, isInView } = useInViewAnimation(0.1);
 
   return (
@@ -16,6 +17,7 @@ const CardTransition = ({ children, delay = 0, style, className }) => {
         willChange: "opacity, transform",
         ...style,
       }}
+      {...props} // CORRECCIÓN: Pasamos todas las propiedades extra al div
     >
       {children}
     </div>

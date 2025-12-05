@@ -1,12 +1,16 @@
 /* src/components/UserManagement.js */
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 import SmoothButton from './SmoothButton';
 import SmoothInput from './SmoothInput';
+import SmoothSelect from './SmoothSelect'; // <--- IMPORTACIÓN NUEVA
 import LoadingSpinner from './LoadingSpinner';
+
+// (El componente local SmoothSelect ha sido eliminado para usar el importado)
 
 const UserManagement = () => {
     const { user: currentUser } = useAuth();
@@ -84,10 +88,7 @@ const UserManagement = () => {
         container: { ...baseComponents.card, padding: spacing.lg, position: 'relative', border: `1px solid ${colors.gray200}` },
         header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg, paddingBottom: spacing.md, borderBottom: `1px solid ${colors.gray200}` },
         title: { fontSize: typography.sizes['2xl'], fontWeight: typography.weights.bold, color: colors.gray900, margin: 0 },
-        
-        // Eliminamos baseComponents.buttonPrimary aquí porque SmoothButton ya lo aplica
         createButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, padding: `${spacing.sm} ${spacing.md}`, height: '40px' },
-        
         loadingContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: spacing.xl, flexDirection: 'column', gap: spacing.md },
         tableContainer: { overflowX: 'auto', borderRadius: radius.md, border: `1px solid ${colors.gray200}` },
         table: { width: '100%', borderCollapse: 'collapse', backgroundColor: colors.surface },
@@ -101,26 +102,137 @@ const UserManagement = () => {
         actionBtnBase: { padding: `4px ${spacing.sm}`, fontSize: typography.sizes.xs, height: '36px', width: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, border: 'none', fontWeight: '500' },
         editBtn: { backgroundColor: colors.gray100, color: colors.gray700 },
         deleteBtn: { backgroundColor: '#FEE2E2', color: colors.error },
-        modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: spacing.md, backdropFilter: 'blur(2px)' },
-        modal: { ...baseComponents.card, padding: spacing.lg, width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: shadows.xl },
-        modalTitle: { fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, color: colors.gray900, margin: `0 0 ${spacing.md} 0` },
-        form: { display: 'flex', flexDirection: 'column', gap: spacing.md },
-        formGroup: { display: 'flex', flexDirection: 'column', gap: spacing.xs },
-        label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.gray700 },
         
-        // Eliminamos baseComponents.input aquí porque SmoothInput ya lo aplica
-        input: { height: '42px' }, 
-        
-        select: { ...baseComponents.select, height: '42px' },
-        modalActions: { display: 'flex', gap: spacing.md, marginTop: spacing.md },
-        
-        submitButton: { flex: 1, height: '42px' },
-        cancelButton: { flex: 1, height: '42px' },
+        // MODAL (PORTAL + FLEXBOX)
+        modalOverlay: { 
+            position: 'fixed', 
+            top: 0, left: 0, right: 0, bottom: 0, 
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            zIndex: 99999, 
+            padding: spacing.md, 
+            backdropFilter: 'blur(3px)' 
+        },
+        modal: { 
+            backgroundColor: colors.surface,
+            borderRadius: radius.lg,
+            border: `1px solid ${colors.gray200}`,
+            width: '100%', 
+            maxWidth: '500px', 
+            maxHeight: '85vh', 
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: shadows.xl,
+            position: 'relative',
+            overflow: 'hidden'
+        },
+        modalHeader: {
+            padding: `${spacing.md} ${spacing.lg}`,
+            borderBottom: `1px solid ${colors.gray200}`,
+            backgroundColor: colors.surface,
+            flex: '0 0 auto', 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 2
+        },
+        modalTitle: { 
+            fontSize: typography.sizes.lg, 
+            fontWeight: typography.weights.bold, 
+            color: colors.gray900, 
+            margin: 0
+        },
+        modalContent: {
+            padding: spacing.lg,
+            overflowY: 'auto', 
+            flex: '1 1 auto', 
+            minHeight: 0 
+        },
+        form: { 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: spacing.md 
+        },
+        formGroup: { 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '4px' 
+        },
+        modalActions: { 
+            padding: `${spacing.md} ${spacing.lg}`,
+            borderTop: `1px solid ${colors.gray200}`,
+            backgroundColor: colors.gray50,
+            display: 'flex', 
+            gap: spacing.md, 
+            flex: '0 0 auto', 
+            zIndex: 2
+        },
+        submitButton: { flex: 1, height: '40px' },
+        cancelButton: { flex: 1, height: '40px' },
         
         roleBadge: { ...baseComponents.badge, backgroundColor: colors.primary + '15', color: colors.primary, textTransform: 'capitalize' }
     };
 
     if (loading) return <div style={styles.container}><div style={styles.loadingContainer}><LoadingSpinner message="Cargando usuarios..." /></div></div>;
+
+    const modalContent = (
+        <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
+            <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>{editingUser ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</h3>
+                    <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.gray500 }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                
+                <div style={styles.modalContent}>
+                    <form id="userForm" onSubmit={handleSubmit} style={styles.form}>
+                        <div style={styles.formGroup}><SmoothInput label="Nombre completo" type="text" name="name" value={formData.name} onChange={handleInputChange} style={styles.input} required placeholder="Ej. Juan Pérez" /></div>
+                        <div style={styles.formGroup}><SmoothInput label="Usuario" type="text" name="username" value={formData.username} onChange={handleInputChange} style={styles.input} required placeholder="Ej. jperez" /></div>
+                        <div style={styles.formGroup}>
+                            <SmoothInput 
+                                label={editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña'} 
+                                type={showPassword ? "text" : "password"} 
+                                name="password" 
+                                value={formData.password} 
+                                onChange={handleInputChange} 
+                                style={{paddingRight: '40px'}} 
+                                required={!editingUser} 
+                                minLength="6" 
+                                rightElement={
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.gray500, display: 'flex', alignItems: 'center' }}>
+                                        {showPassword ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+                                    </button>
+                                } 
+                            />
+                        </div>
+                        <div style={styles.formGroup}>
+                            {/* USO DEL COMPONENTE UNIFICADO */}
+                            <SmoothSelect 
+                                label="Rol" 
+                                name="role" 
+                                value={formData.role} 
+                                onChange={handleInputChange} 
+                                required
+                            >
+                                <option value="">Seleccionar rol...</option>
+                                <option value="operador">Operador de Logística</option>
+                                <option value="receptor">Receptor de Scrap</option>
+                                <option value="admin">Administrador</option>
+                            </SmoothSelect>
+                        </div>
+                    </form>
+                </div>
+
+                <div style={styles.modalActions}>
+                    <SmoothButton type="button" onClick={() => setShowModal(false)} variant="secondary" style={styles.cancelButton} disabled={actionInProgressRef.current}>Cancelar</SmoothButton>
+                    <SmoothButton onClick={handleSubmit} style={{ ...styles.submitButton, backgroundColor: actionInProgressRef.current ? colors.gray400 : colors.primary }} disabled={actionInProgressRef.current}>{actionInProgressRef.current ? 'Guardando...' : 'Guardar Usuario'}</SmoothButton>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div style={styles.container}>
@@ -166,38 +278,7 @@ const UserManagement = () => {
                 {users.length === 0 && <div style={{ textAlign: 'center', padding: spacing.xl, color: colors.gray500 }}>No hay usuarios registrados en el sistema.</div>}
             </div>
 
-            {showModal && (
-                <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
-                    <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-                        <h3 style={styles.modalTitle}>{editingUser ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</h3>
-                        <form onSubmit={handleSubmit} style={styles.form}>
-                            <div style={styles.formGroup}><label style={styles.label}>Nombre completo</label><SmoothInput type="text" name="name" value={formData.name} onChange={handleInputChange} style={styles.input} required placeholder="Ej. Juan Pérez" /></div>
-                            <div style={styles.formGroup}><label style={styles.label}>Usuario</label><SmoothInput type="text" name="username" value={formData.username} onChange={handleInputChange} style={styles.input} required placeholder="Ej. jperez" /></div>
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>{editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
-                                <SmoothInput type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleInputChange} style={{...styles.input, paddingRight: '40px'}} required={!editingUser} minLength="6" rightElement={
-                                    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.gray500, display: 'flex', alignItems: 'center' }}>
-                                        {showPassword ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
-                                    </button>
-                                } />
-                            </div>
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Rol</label>
-                                <select name="role" value={formData.role} onChange={handleInputChange} style={styles.select} required>
-                                    <option value="">Seleccionar rol...</option>
-                                    <option value="operador">Operador de Logística</option>
-                                    <option value="receptor">Receptor de Scrap</option>
-                                    <option value="admin">Administrador</option>
-                                </select>
-                            </div>
-                            <div style={styles.modalActions}>
-                                <SmoothButton type="button" onClick={() => setShowModal(false)} variant="secondary" style={styles.cancelButton} disabled={actionInProgressRef.current}>Cancelar</SmoothButton>
-                                <SmoothButton onClick={handleSubmit} style={{ ...styles.submitButton, backgroundColor: actionInProgressRef.current ? colors.gray400 : colors.primary }} disabled={actionInProgressRef.current}>{actionInProgressRef.current ? 'Guardando...' : 'Guardar Usuario'}</SmoothButton>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            {showModal && createPortal(modalContent, document.body)}
         </div>
     );
 };

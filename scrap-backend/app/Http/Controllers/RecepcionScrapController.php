@@ -7,6 +7,7 @@ use App\Models\RecepcionesScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RecepcionScrapController extends Controller
 {
@@ -60,7 +61,17 @@ class RecepcionScrapController extends Controller
 
         DB::beginTransaction();
         try {
-            $numeroHU = 'HU-' . strtoupper(Str::random(3)) . '-' . date('Ymd-His');
+            // --- GENERACIÓN DE HU EXACTA (AAMMDD + 4 dígitos) ---
+            // Ejemplo: 2512059844 (Año 25, Mes 12, Día 05, Random 9844)
+            $fecha = date('ymd'); // 6 dígitos
+            $random = rand(1000, 9999); // 4 dígitos
+            $numeroHU = $fecha . $random;
+
+            // Verificamos colisión para garantizar unicidad
+            while(RecepcionesScrap::where('numero_hu', $numeroHU)->exists()){
+                $random = rand(1000, 9999);
+                $numeroHU = $fecha . $random;
+            }
 
             $dataToInsert = [
                 'numero_hu' => $numeroHU,
@@ -73,7 +84,7 @@ class RecepcionScrapController extends Controller
                 'lugar_almacenamiento' => $validated['lugar_almacenamiento'] ?? null,
                 'observaciones' => $validated['observaciones'] ?? null,
                 'fecha_entrada' => now(),
-                'fecha_registro' => now(),
+                'fecha_registro' => now(), 
             ];
 
             $recepcion = RecepcionesScrap::create($dataToInsert);
@@ -89,7 +100,7 @@ class RecepcionScrapController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
+            Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Error interno del servidor: ' . $e->getMessage()
             ], 500);
@@ -106,7 +117,6 @@ class RecepcionScrapController extends Controller
             $query->where('receptor_id', $user->id);
         }
 
-        // Filtros
         if ($request->has('fecha_inicio') && $request->has('fecha_fin')) {
             $query->whereBetween('fecha_entrada', [
                 $request->fecha_inicio,
@@ -128,7 +138,6 @@ class RecepcionScrapController extends Controller
 
         $recepciones = $query->orderBy('fecha_entrada', 'desc')->get();
 
-        // Totales
         $totales = [
             'total_recepciones' => $recepciones->count(),
             'total_peso' => $recepciones->sum('peso_kg'),

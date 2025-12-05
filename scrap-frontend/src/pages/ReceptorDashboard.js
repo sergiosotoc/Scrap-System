@@ -1,10 +1,24 @@
 /* src/pages/ReceptorDashboard.js */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import BasculaConnection from '../components/BasculaConnection';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
+
+// Librerías para PDF y Código de Barras
+import jsPDF from 'jspdf';
+import JsBarcode from 'jsbarcode';
+
+// Componentes Smooth Integrados
+import SmoothButton from '../components/SmoothButton';
+import SmoothInput from '../components/SmoothInput';
+import SmoothSelect from '../components/SmoothSelect';
+import LoadingSpinner from '../components/LoadingSpinner';
+import CardTransition from '../components/CardTransition';
+import PageWrapper from '../components/PageWrapper';
+import TabsAnimated from '../components/TabsAnimated'; 
 
 const listaMateriales = [
   "Lata de aluminio", "Desechos metálicos", "Desechos componentes eléctricos", 
@@ -13,6 +27,55 @@ const listaMateriales = [
   "Cobre", "Botellas pet", "Plástico", "Cartón", "Fleje", "Leña"
 ];
 
+// --- UTILIDAD PARA CARGAR IMAGEN DEL LOGO ---
+const getImageDataUrl = (url) => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = (e) => reject(e);
+        img.src = url;
+    });
+};
+
+// --- UTILIDAD: CONTADOR ANIMADO ---
+const AnimatedCounter = ({ value, duration = 1000, decimals = 2 }) => {
+    const [count, setCount] = useState(0);
+  
+    useEffect(() => {
+      let startTime;
+      let animationFrame;
+      const startValue = 0;
+      const endValue = parseFloat(value) || 0;
+      
+      if (endValue === 0) { setCount(0); return; }
+  
+      const step = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        const easeOut = 1 - Math.pow(2, -10 * progress);
+        const current = easeOut * (endValue - startValue) + startValue;
+        setCount(current);
+        if (progress < 1) {
+          animationFrame = window.requestAnimationFrame(step);
+        } else {
+          setCount(endValue);
+        }
+      };
+      animationFrame = window.requestAnimationFrame(step);
+      return () => window.cancelAnimationFrame(animationFrame);
+    }, [value, duration]);
+  
+    return <span>{count.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</span>;
+};
+
 const ReceptorDashboard = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
@@ -20,8 +83,9 @@ const ReceptorDashboard = () => {
   const [recepciones, setRecepciones] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  const [selectedClasif, setSelectedClasif] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-
+  const [enviando, setEnviando] = useState(false);
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [formData, setFormData] = useState({
     peso_kg: '',
@@ -34,7 +98,24 @@ const ReceptorDashboard = () => {
   });
 
   useEffect(() => {
-    if (showModal) setPesoBloqueado(false);
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape' || event.keyCode === 27) {
+        setShowModal(false);
+      }
+    };
+
+    if (showModal) {
+      setPesoBloqueado(false);
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleEscKey);
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => { 
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleEscKey);
+    };
   }, [showModal]);
 
   const loadReceptorData = useCallback(async () => {
@@ -52,6 +133,160 @@ const ReceptorDashboard = () => {
     loadReceptorData();
   }, [loadReceptorData]);
 
+  // --- FUNCIÓN DE IMPRESIÓN MEJORADA VISUALMENTE ---
+  const handleImprimirHU = async (id) => {
+    try {
+        const recepcion = recepciones.find(r => r.id === id);
+        if (!recepcion) throw new Error("Recepción no encontrada");
+
+        let logoData = null;
+        try {
+            logoData = await getImageDataUrl('/Logo-COFICAB.png');
+        } catch (e) {
+            console.warn("No se pudo cargar el logo.");
+        }
+
+        const doc = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: [100, 150] 
+        });
+
+        // --- MARCO EXTERIOR ---
+        doc.setLineWidth(0.8); 
+        doc.setDrawColor(0); 
+        doc.rect(5, 5, 140, 90); 
+
+        // --- LOGO (Top Izquierda) ---
+        if (logoData) {
+            doc.addImage(logoData, 'PNG', 10, 10, 40, 10); 
+        } else {
+            doc.setFontSize(18);
+            doc.setTextColor(0, 51, 153);
+            doc.setFont("helvetica", "bold");
+            doc.text("COFICAB", 12, 18);
+        }
+
+        // --- TÍTULO "Stock" y FECHA (Top Derecha/Centro) ---
+        doc.setFontSize(32); 
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "bold");
+        // Un poco más arriba y a la derecha
+        doc.text("Stock", 110, 18, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        const fechaIngreso = new Date(recepcion.fecha_entrada).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        // Más espaciado debajo del título
+        doc.text(`Fecha de entrada a stock:  ${fechaIngreso}`, 110, 26, { align: 'center' });
+
+        // --- CÓDIGO DE BARRAS (Izquierda Abajo) ---
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, recepcion.numero_hu, {
+            format: "CODE128",
+            displayValue: true, 
+            fontSize: 14, // Fuente del número más pequeña
+            fontOptions: "bold",
+            height: 35,   // Altura del código REDUCIDA (era 50)
+            width: 2.0,   // Ancho de barras REDUCIDO (era 2.5)
+            margin: 0,
+            textMargin: 3
+        });
+        const barcodeImg = canvas.toDataURL("image/jpeg");
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        // Posición más abajo para dar aire al título
+        doc.text("HU", 15, 45); 
+        // Código más pequeño y más abajo
+        doc.addImage(barcodeImg, 'JPEG', 15, 48, 45, 20); 
+
+        // --- DETALLES (Derecha - Alineación Tabular con Aire) ---
+        const labelX = 85;  // Donde termina la etiqueta (alineación derecha)
+        const valueX = 88;  // Donde empieza el valor (alineación izquierda) - GAP PEQUEÑO
+        let cursorY = 48;   // Posición vertical inicial (alineada con el código)
+        const maxTextWidth = 55; // Un poco más de ancho permitido
+        const lineSpacing = 5.5; // Espaciado entre líneas de texto multilínea
+
+        doc.setFontSize(11); // Tamaño base etiquetas
+
+        // 1. Material (Con soporte multilínea)
+        doc.setFont("helvetica", "bold");
+        doc.text("Material:", labelX, cursorY, { align: 'right' });
+        
+        doc.setFontSize(12); // Tamaño valor
+        const materialLines = doc.splitTextToSize(recepcion.tipo_material.toUpperCase(), maxTextWidth);
+        doc.text(materialLines, valueX, cursorY);
+        
+        // Espaciado dinámico + Margen fijo extra (6mm)
+        cursorY += (materialLines.length * lineSpacing) + 2; 
+
+        // 2. Cantidad
+        doc.setFontSize(11);
+        doc.text("Cantidad:", labelX, cursorY, { align: 'right' });
+        doc.setFontSize(12);
+        doc.text(`${parseFloat(recepcion.peso_kg).toFixed(1)}  KG`, valueX, cursorY);
+
+        cursorY += 8; // Salto fijo simple
+
+        // 3. Origen
+        doc.setFontSize(11);
+        doc.text("Origen:", labelX, cursorY, { align: 'right' });
+        doc.setFontSize(12);
+        const origenTexto = recepcion.origen_tipo === 'interna' ? 'PRODUCTION' : (recepcion.origen_especifico || 'EXTERNAL');
+        const origenLines = doc.splitTextToSize(origenTexto.toUpperCase(), maxTextWidth);
+        doc.text(origenLines, valueX, cursorY);
+
+        cursorY += (origenLines.length * lineSpacing) + 2;
+
+        // 4. Destino (Nuevo campo)
+        doc.setFontSize(11);
+        doc.text("Destino:", labelX, cursorY, { align: 'right' });
+        doc.setFontSize(12);
+        let destinoLabel = (recepcion.destino || 'ALMACEN').toUpperCase();
+        if(destinoLabel.includes('ALMACEN')) destinoLabel = 'ALMACÉN';
+        if(destinoLabel.includes('VENTA')) destinoLabel = 'VENTA';
+        if(destinoLabel.includes('RECICLAJE')) destinoLabel = 'RECICLAJE';
+        
+        doc.text(destinoLabel, valueX, cursorY);
+
+
+        // --- FOOTER ---
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        const fechaImpresion = new Date().toLocaleString('es-MX', { hour12: true });
+        // Footer más abajo para asegurar espacio
+        doc.text(`Fecha y hora de impresión:    ${fechaImpresion}`, 75, 92, { align: 'center' });
+
+        doc.save(`HU_${recepcion.numero_hu}.pdf`);
+        addToast('Etiqueta generada exitosamente', 'success');
+
+    } catch (error) {
+        console.error("Error generando PDF:", error);
+        addToast('Error al generar etiqueta: ' + error.message, 'error');
+    }
+  };
+
+  const handleUpdateDestino = async (id, nuevoDestino) => {
+    const previousState = [...recepciones];
+    
+    setRecepciones(prev => prev.map(r => 
+        r.id === id ? { ...r, destino: nuevoDestino } : r
+    ));
+
+    try {
+        if (apiClient.updateRecepcionScrap) {
+             await apiClient.updateRecepcionScrap(id, { destino: nuevoDestino });
+             addToast(`Destino actualizado a: ${nuevoDestino}`, 'success');
+        } else {
+             console.warn('El método apiClient.updateRecepcionScrap no está definido. Se actualizó solo localmente.');
+        }
+    } catch (error) {
+        setRecepciones(previousState);
+        addToast('Error al actualizar destino: ' + error.message, 'error');
+    }
+  };
+
   const recepcionesFiltradas = recepciones.filter(item => {
     const term = searchTerm.toLowerCase();
     return (
@@ -61,9 +296,53 @@ const ReceptorDashboard = () => {
     );
   });
 
+  const statsClasificacion = useMemo(() => {
+      const stats = {
+          almacenamiento: { peso: 0, count: 0, label: 'Almacenamiento General', color: colors.primary },
+          reciclaje: { peso: 0, count: 0, label: 'Directo a Reciclaje', color: colors.success },
+          venta: { peso: 0, count: 0, label: 'Venta Directa', color: colors.warning }
+      };
+
+      recepciones.forEach(r => {
+          let key = 'almacenamiento';
+          const destinoLower = r.destino?.toLowerCase() || '';
+          
+          if (destinoLower.includes('reciclaje')) key = 'reciclaje';
+          else if (destinoLower.includes('venta')) key = 'venta';
+          
+          stats[key].peso += parseFloat(r.peso_kg) || 0;
+          stats[key].count += 1;
+      });
+
+      return stats;
+  }, [recepciones]);
+
+  const materialesDetalle = useMemo(() => {
+    if (!selectedClasif) return [];
+    
+    const filtered = recepciones.filter(r => {
+        const destinoLower = r.destino?.toLowerCase() || '';
+        if (selectedClasif === 'reciclaje') return destinoLower.includes('reciclaje');
+        if (selectedClasif === 'venta') return destinoLower.includes('venta');
+        return !destinoLower.includes('reciclaje') && !destinoLower.includes('venta'); 
+    });
+
+    const agrupado = {};
+    filtered.forEach(r => {
+        const mat = r.tipo_material || 'Desconocido';
+        if (!agrupado[mat]) agrupado[mat] = 0;
+        agrupado[mat] += parseFloat(r.peso_kg) || 0;
+    });
+
+    return Object.entries(agrupado)
+        .map(([material, peso]) => ({ material, peso }))
+        .sort((a, b) => b.peso - a.peso);
+  }, [recepciones, selectedClasif]);
+
   const handleInputChange = (e) => {
-    if (e.target.name === 'peso_kg' && pesoBloqueado) return;
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'peso_kg' && pesoBloqueado) return;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleOrigenTipoChange = (e) => {
@@ -74,42 +353,31 @@ const ReceptorDashboard = () => {
     });
   };
 
-  const handlePesoFromBascula = (peso, campo) => {
+  const handlePesoFromBascula = useCallback((peso, campo) => {
     if (!pesoBloqueado) {
-      setFormData(prev => ({ ...prev, [campo]: peso }));
-    }
-  };
-
-  const handleImprimirHU = async (id) => {
-    try {
-      const token = localStorage.getItem('authToken');
-      const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : `http://${window.location.hostname}:8000`;
-      const url = `${baseUrl}/api/recepciones-scrap/${id}/imprimir-hu`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/pdf' }
+      setFormData(prev => {
+          if (prev[campo] === peso) return prev;
+          return { ...prev, [campo]: peso };
       });
-
-      if (!response.ok) throw new Error(`Error ${response.status}`);
-
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', `HU-${id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      addToast('HU descargada correctamente', 'success');
-    } catch (error) {
-      addToast('Error al imprimir HU: ' + error.message, 'error');
     }
+  }, [pesoBloqueado]);
+
+  const triggerSubmit = () => {
+      const form = document.getElementById('recepcionForm');
+      if (form) {
+          if (form.requestSubmit) {
+              form.requestSubmit();
+          } else {
+              form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+          }
+      }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (enviando) return; 
+
+    setEnviando(true);
     try {
       const response = await apiClient.createRecepcionScrap(formData);
       addToast(`Recepción creada! HU: ${response.numero_hu}`, 'success');
@@ -122,56 +390,331 @@ const ReceptorDashboard = () => {
     } catch (error) {
       const msg = error.message || 'Error desconocido';
       addToast('Error: ' + msg, 'error');
+    } finally {
+        setEnviando(false);
+    }
+  };
+
+  const styles = {
+    container: {
+      backgroundColor: colors.background,
+      fontFamily: typography.fontFamily,
+      boxSizing: 'border-box',
+      width: '100%',
+      height: 'auto'
+    },
+    header: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.md, 
+      flexWrap: 'wrap',
+      gap: spacing.md
+    },
+    title: {
+      fontSize: typography.sizes['3xl'],
+      fontWeight: typography.weights.extrabold,
+      color: colors.gray900,
+      margin: 0,
+      background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text'
+    },
+    subtitle: {
+      color: colors.gray600,
+      fontSize: typography.sizes.lg,
+      margin: 0,
+      fontWeight: typography.weights.medium
+    },
+    loadingPage: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100%',
+      minHeight: '50vh',
+      backgroundColor: colors.background,
+    },
+    card: {
+      ...baseComponents.card,
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '400px'
+    },
+    cardHeader: {
+      padding: spacing.lg,
+      borderBottom: `1px solid ${colors.gray200}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: '#FAFAFA',
+      flexWrap: 'wrap',
+      gap: spacing.md
+    },
+    cardTitle: {
+      fontSize: typography.sizes.xl,
+      fontWeight: typography.weights.bold,
+      color: colors.gray800,
+      margin: 0
+    },
+    cardSubtitle: {
+      fontSize: typography.sizes.sm,
+      color: colors.gray500,
+      margin: '4px 0 0 0'
+    },
+    tableContainer: {
+      overflowX: 'auto',
+      width: '100%'
+    },
+    table: {
+      width: '100%',
+      borderCollapse: 'separate',
+      borderSpacing: '0',
+      minWidth: '900px'
+    },
+    th: {
+      padding: '16px',
+      textAlign: 'left',
+      fontSize: '0.75rem',
+      fontWeight: '700',
+      color: colors.gray500,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      backgroundColor: '#F9FAFB',
+      borderBottom: `1px solid ${colors.gray200}`,
+      position: 'sticky',
+      top: 0
+    },
+    tr: {
+      transition: 'background-color 0.15s ease',
+      ':hover': {
+        backgroundColor: '#F3F4F6'
+      }
+    },
+    td: {
+      padding: '14px 16px',
+      fontSize: typography.sizes.sm,
+      color: colors.gray700,
+      borderBottom: `1px solid ${colors.gray100}`,
+      verticalAlign: 'middle'
+    },
+    huBadge: {
+      fontFamily: 'Consolas, monospace',
+      fontSize: '0.8rem',
+      backgroundColor: colors.gray100,
+      color: colors.gray700,
+      padding: '4px 8px',
+      borderRadius: radius.md,
+      border: `1px solid ${colors.gray300}`,
+      fontWeight: '600',
+      display: 'inline-block'
+    },
+    weightBadge: {
+      fontSize: '0.9rem',
+      fontWeight: '700',
+      color: colors.primary
+    },
+    badgeInterna: {
+      ...baseComponents.badge,
+      backgroundColor: '#DBEAFE', 
+      color: '#1E40AF', 
+      border: '1px solid #BFDBFE'
+    },
+    badgeExterna: {
+      ...baseComponents.badge,
+      backgroundColor: '#D1FAE5', 
+      color: '#065F46', 
+      border: '1px solid #A7F3D0'
+    },
+    destBadge: {
+      display: 'inline-block',
+      padding: '2px 8px',
+      fontSize: '0.75rem',
+      color: colors.gray600,
+      backgroundColor: colors.gray100,
+      borderRadius: '4px',
+      textTransform: 'capitalize'
+    },
+    actionButton: {
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '1.2rem',
+      padding: '4px',
+      borderRadius: '4px',
+      transition: 'background 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: colors.gray600,
+      ':hover': {
+        backgroundColor: colors.gray100,
+        color: colors.gray900
+      }
+    },
+    clasifGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: spacing.lg,
+        marginTop: spacing.md
+    },
+    clasifCard: (color) => ({
+        ...baseComponents.card,
+        padding: spacing.lg,
+        borderTop: `4px solid ${color}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: spacing.sm,
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        userSelect: 'none'
+    }),
+    clasifLabel: {
+        fontSize: typography.sizes.sm,
+        color: colors.gray600,
+        fontWeight: typography.weights.bold,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
+    },
+    clasifValue: (color) => ({
+        fontSize: '2.5rem',
+        fontWeight: typography.weights.extrabold,
+        color: color,
+        lineHeight: 1.1
+    }),
+    clasifSubtext: {
+        fontSize: typography.sizes.sm,
+        color: colors.gray500,
+        marginTop: 'auto',
+        paddingTop: spacing.sm,
+        borderTop: `1px solid ${colors.gray100}`,
+        display: 'flex',
+        justifyContent: 'space-between'
+    },
+    modalOverlay: {
+      position: 'fixed',
+      top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 99999,
+      padding: spacing.md,
+      backdropFilter: 'blur(3px)'
+    },
+    modal: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.xl,
+      width: '95%',
+      maxWidth: '750px',
+      maxHeight: '85vh',
+      overflow: 'hidden',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+      display: 'flex',
+      flexDirection: 'column',
+      position: 'relative',
+      animation: 'slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' 
+    },
+    modalHeader: {
+      padding: '20px 24px',
+      borderBottom: `1px solid ${colors.gray200}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'start',
+      backgroundColor: '#FAFAFA',
+      flexShrink: 0
+    },
+    modalTitle: {
+      fontSize: '1.25rem',
+      fontWeight: 'bold',
+      color: colors.gray900,
+      margin: 0
+    },
+    modalSubtitle: {
+      fontSize: '0.875rem',
+      color: colors.gray500,
+      margin: '4px 0 0 0'
+    },
+    modalContent: {
+      overflowY: 'auto',
+      flex: '1 1 auto',
+      minHeight: 0,
+      padding: 0
+    },
+    closeBtn: {
+      background: 'transparent',
+      border: 'none',
+      color: colors.gray400,
+      cursor: 'pointer',
+      fontSize: '1.2rem',
+      padding: '4px',
+      borderRadius: '50%',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '32px',
+      height: '32px',
+      ':hover': {
+        backgroundColor: colors.gray200,
+        color: colors.gray700
+      }
+    },
+    form: {
+      padding: '24px'
+    },
+    formGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+      gap: '24px',
+      alignItems: 'start'
+    },
+    formGroup: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px'
+    },
+    modalFooter: {
+      padding: '20px 24px',
+      borderTop: `1px solid ${colors.gray200}`,
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: '12px',
+      flexShrink: 0,
+      backgroundColor: colors.surface
     }
   };
 
   if (loading) return (
-    <div style={styles.loading}>
-      <div style={styles.spinner}></div>
-      <p style={styles.loadingText}>Cargando dashboard...</p>
+    <div style={styles.loadingPage}>
+      <LoadingSpinner message="Cargando dashboard..." />
     </div>
   );
 
-  return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Dashboard Receptor</h1>
-          <p style={styles.subtitle}>Bienvenido, {user?.name || 'Usuario'}</p>
-        </div>
-        <button onClick={() => setShowModal(true)} style={styles.primaryButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Nueva Recepción
-        </button>
-      </div>
-
-      <div style={styles.card}>
+  const HistorialContent = () => (
+    <CardTransition delay={100} style={styles.card}>
         <div style={styles.cardHeader}>
-          <div>
+        <div>
             <h3 style={styles.cardTitle}>Historial de Recepciones</h3>
             <p style={styles.cardSubtitle}>Gestiona y consulta las entradas de material</p>
-          </div>
-          <div style={styles.searchContainer}>
-            <span style={styles.searchIcon}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            </span>
-            <input 
-              type="text" 
-              placeholder="Buscar por HU, Material o Proveedor..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.searchInput}
+        </div>
+        <div style={{ width: '300px', maxWidth: '100%' }}>
+            <SmoothInput 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por HU, Material..."
+            style={{ height: '40px' }}
+            rightElement={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.gray400}}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            }
             />
-          </div>
+        </div>
         </div>
 
         <div style={styles.tableContainer}>
-          <table style={styles.table}>
+        <table style={styles.table}>
             <thead>
-              <tr>
+            <tr>
                 <th style={styles.th}>HU ID</th>
                 <th style={styles.th}>Fecha Recepción</th>
                 <th style={styles.th}>Material</th>
@@ -180,684 +723,382 @@ const ReceptorDashboard = () => {
                 <th style={styles.th}>Detalle Origen</th>
                 <th style={styles.th}>Destino</th>
                 <th style={styles.th} align="center">Acciones</th>
-              </tr>
+            </tr>
             </thead>
             <tbody>
-              {recepcionesFiltradas.map((r) => (
+            {recepcionesFiltradas.map((r) => (
                 <tr key={r.id} style={styles.tr}>
-                  <td style={styles.td}>
+                <td style={styles.td}>
                     <div style={styles.huBadge}>{r.numero_hu}</div>
-                  </td>
-                  <td style={styles.td}>
-                    <div style={styles.dateText}>
-                        {new Date(r.fecha_entrada).toLocaleDateString()}
-                    </div>
-                    <div style={styles.timeText}>
-                        {new Date(r.fecha_entrada).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </div>
-                  </td>
-                  <td style={styles.td}>
+                </td>
+                <td style={styles.td}>
+                    <div style={{fontWeight: '600', color: colors.gray800}}>{new Date(r.fecha_entrada).toLocaleDateString()}</div>
+                    <div style={{fontSize: '0.75rem', color: colors.gray500}}>{new Date(r.fecha_entrada).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </td>
+                <td style={styles.td}>
                     <strong style={{color: colors.gray800}}>{r.tipo_material}</strong>
-                  </td>
-                  <td style={styles.td}>
-                    <span style={styles.weightBadge}>
-                        {parseFloat(r.peso_kg).toFixed(2)} kg
-                    </span>
-                  </td>
-                  <td style={styles.td}>
+                </td>
+                <td style={styles.td}>
+                    <span style={styles.weightBadge}>{parseFloat(r.peso_kg).toFixed(2)} kg</span>
+                </td>
+                <td style={styles.td}>
                     <span style={r.origen_tipo === 'interna' ? styles.badgeInterna : styles.badgeExterna}>
-                      {r.origen_tipo === 'interna' ? 'Interna' : 'Externa'}
+                    {r.origen_tipo === 'interna' ? 'Interna' : 'Externa'}
                     </span>
-                  </td>
-                  <td style={styles.td}>
+                </td>
+                <td style={styles.td}>
                     {r.origen_especifico ? (
-                        <span style={styles.providerText}>{r.origen_especifico}</span>
+                        <span style={{fontWeight: '500', color: colors.gray900}}>{r.origen_especifico}</span>
                     ) : (
                         <span style={{color: colors.gray400, fontStyle: 'italic'}}>--</span>
                     )}
-                  </td>
-                  <td style={styles.td}>
+                </td>
+                <td style={styles.td}>
+                    {/* EN EL HISTORIAL GENERAL, EL DESTINO ES SOLO LECTURA */}
                     <span style={styles.destBadge}>{r.destino}</span>
-                  </td>
-                  <td style={styles.td} align="center">
-                    <button 
-                      onClick={() => handleImprimirHU(r.id)} 
-                      style={styles.actionButton}
-                      title="Imprimir Etiqueta HU"
+                </td>
+                <td style={styles.td} align="center">
+                    <SmoothButton 
+                    onClick={() => handleImprimirHU(r.id)} 
+                    variant="secondary"
+                    style={styles.actionButton}
+                    title="Imprimir Etiqueta HU"
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                    </button>
-                  </td>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    </SmoothButton>
+                </td>
                 </tr>
-              ))}
-              {recepcionesFiltradas.length === 0 && (
+            ))}
+            {recepcionesFiltradas.length === 0 && (
                 <tr>
-                  <td colSpan="8" style={styles.emptyState}>
-                    <div style={{marginBottom: '10px'}}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.gray300}}>
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                      </svg>
-                    </div>
-                    <div>No se encontraron registros</div>
-                    {searchTerm && <div style={{fontSize: '0.85rem', marginTop: '5px', color: colors.gray500}}>Intenta con otro término de búsqueda</div>}
-                  </td>
+                <td colSpan="8" style={{padding: spacing.xl, textAlign: 'center', color: colors.gray500, backgroundColor: '#FAFAFA'}}>
+                    No se encontraron registros
+                </td>
                 </tr>
-              )}
+            )}
             </tbody>
-          </table>
+        </table>
         </div>
-        <div style={styles.tableFooter}>
-            Mostrando <strong>{recepcionesFiltradas.length}</strong> registros
-        </div>
-      </div>
+    </CardTransition>
+  );
 
-      {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
+  const ClasificacionContent = () => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+        {/* Grid de Tarjetas Interactivas */}
+        <div style={styles.clasifGrid}>
+            {Object.entries(statsClasificacion).map(([key, data], index) => {
+                const isSelected = selectedClasif === key;
+                return (
+                <CardTransition 
+                    key={key} 
+                    delay={index * 100} 
+                    style={{
+                        ...styles.clasifCard(data.color),
+                        transform: isSelected ? 'translateY(-4px)' : 'translateY(0)',
+                        boxShadow: isSelected ? `0 0 0 2px ${data.color}, ${shadows.lg}` : shadows.md,
+                        opacity: selectedClasif && !isSelected ? 0.6 : 1
+                    }}
+                    onClick={() => setSelectedClasif(isSelected ? null : key)}
+                >
+                    <div style={styles.clasifLabel}>{data.label}</div>
+                    <div style={styles.clasifValue(data.color)}>
+                        <AnimatedCounter value={data.peso} decimals={2} />
+                        <span style={{fontSize: '1rem', color: colors.gray400, marginLeft: '8px', fontWeight: 'normal'}}>kg</span>
+                    </div>
+                    <div style={styles.clasifSubtext}>
+                        <span>Entradas: <strong><AnimatedCounter value={data.count} decimals={0} duration={500} /></strong></span>
+                        <span style={{textDecoration: isSelected ? 'underline' : 'none', color: isSelected ? data.color : colors.gray400}}>
+                            {isSelected ? 'Ocultar detalle' : 'Ver detalle'}
+                        </span>
+                    </div>
+                </CardTransition>
+            )})}
+        </div>
+
+        {/* LISTA DETALLADA DE REGISTROS POR CLASIFICACIÓN */}
+        {selectedClasif && (
+            <CardTransition delay={0} style={{...styles.card, animation: 'slideInUp 0.3s ease-out'}}>
+                <div style={{...styles.cardHeader, backgroundColor: statsClasificacion[selectedClasif].color + '10', borderBottomColor: statsClasificacion[selectedClasif].color + '30'}}>
+                    <h3 style={{...styles.cardTitle, color: statsClasificacion[selectedClasif].color, fontSize: '1.1rem'}}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+                            <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        Gestión de Stock: {statsClasificacion[selectedClasif].label}
+                    </h3>
+                    <SmoothButton variant="secondary" onClick={() => setSelectedClasif(null)} style={{height: '32px', padding: '0 12px', fontSize: '0.8rem'}}>
+                        Cerrar
+                    </SmoothButton>
+                </div>
+                <div style={styles.tableContainer}>
+                    <table style={styles.table}>
+                        <thead>
+                            <tr>
+                                <th style={styles.th}>HU</th>
+                                <th style={styles.th}>Fecha</th>
+                                <th style={styles.th}>Material</th>
+                                <th style={styles.th}>Origen</th>
+                                <th style={{...styles.th, textAlign: 'right'}}>Peso (kg)</th>
+                                <th style={{...styles.th, width: '200px'}}>Mover a...</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {/* CAMBIO: Mapeamos 'materialesDetalle' (agrupado) a registros individuales para poder editarlos */}
+                            {/* Nota: materialesDetalle es un resumen. Necesitamos 'registrosCategoria' que es la lista real. */}
+                            {/* He creado la variable registrosCategoria dentro del componente principal para esto */}
+                            
+                            {/* Usamos una lista filtrada en el componente principal, aquí accedemos a ella si la pasamos o calculamos */}
+                            {/* Para simplificar, recrearé la lista filtrada aquí visualmente, pero lo ideal es usar la variable del padre */}
+                            
+                            {recepcionesFiltradas.filter(r => {
+                                const destinoLower = r.destino?.toLowerCase() || '';
+                                if (selectedClasif === 'reciclaje') return destinoLower.includes('reciclaje');
+                                if (selectedClasif === 'venta') return destinoLower.includes('venta');
+                                return !destinoLower.includes('reciclaje') && !destinoLower.includes('venta'); 
+                            }).map((r) => (
+                                <tr key={r.id} style={styles.tr}>
+                                    <td style={styles.td}><div style={styles.huBadge}>{r.numero_hu}</div></td>
+                                    <td style={styles.td}><div style={{fontSize: '0.8rem', color: colors.gray600}}>{new Date(r.fecha_entrada).toLocaleDateString()}</div></td>
+                                    <td style={styles.td}><strong>{r.tipo_material}</strong></td>
+                                    <td style={styles.td}><span style={{fontSize: '0.8rem'}}>{r.origen_especifico || 'Interno'}</span></td>
+                                    <td style={{...styles.td, textAlign: 'right', fontFamily: typography.fontMono, fontWeight: 'bold'}}>
+                                        {parseFloat(r.peso_kg).toFixed(2)}
+                                    </td>
+                                    <td style={styles.td}>
+                                        {/* AQUÍ ESTÁ EL SELECTOR PARA MOVER DE CATEGORÍA */}
+                                        <div style={{width: '180px'}}>
+                                            <SmoothSelect 
+                                                value={r.destino?.toLowerCase() || 'almacenamiento'}
+                                                onChange={(e) => handleUpdateDestino(r.id, e.target.value)}
+                                                style={{ 
+                                                    height: '32px', 
+                                                    fontSize: '0.8rem', 
+                                                    padding: '0 30px 0 10px',
+                                                    backgroundColor: colors.surface,
+                                                    borderColor: colors.gray300
+                                                }}
+                                            >
+                                                <option value="almacenamiento">Almacenamiento</option>
+                                                <option value="reciclaje">Reciclaje</option>
+                                                <option value="venta">Venta</option>
+                                            </SmoothSelect>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </CardTransition>
+        )}
+      </div>
+  );
+
+  // --- RENDER DEL MODAL (Igual) ---
+  const modalContent = (
+    <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
+        <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <div>
-                <h3 style={styles.modalTitle}>Nueva Recepción</h3>
-                <p style={styles.modalSubtitle}>Ingrese los datos para generar la HU</p>
-              </div>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+                <div>
+                    <h3 style={styles.modalTitle}>Nueva Recepción</h3>
+                    <p style={styles.modalSubtitle}>Ingrese los datos para generar la HU</p>
+                </div>
+                <SmoothButton 
+                    onClick={() => setShowModal(false)} 
+                    variant="secondary"
+                    style={{ 
+                        padding: '6px', 
+                        width: '32px', 
+                        height: '32px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        border: 'none',
+                        background: 'transparent'
+                    }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.gray500}}>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </SmoothButton>
             </div>
             
             <div style={styles.modalContent}>
-              <div style={{ padding: spacing.lg, paddingBottom: 0 }}>
-                  <BasculaConnection 
-                      onPesoObtenido={handlePesoFromBascula}
-                      campoDestino="peso_kg"
-                  />
-              </div>
+                <div style={{ padding: spacing.lg, paddingBottom: 0 }}>
+                    <BasculaConnection 
+                        onPesoObtenido={handlePesoFromBascula}
+                        campoDestino="peso_kg"
+                    />
+                </div>
 
-              <form onSubmit={handleSubmit} style={styles.form}>
-              <div style={styles.formGrid}>
-                  <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
-                      <div style={styles.formGroup}>
-                          <label style={styles.label}>Tipo de Origen</label>
-                          <select 
-                          name="origen_tipo" 
-                          value={formData.origen_tipo} 
-                          onChange={handleOrigenTipoChange} 
-                          style={styles.formSelect}
-                          >
-                          <option value="externa">Externa (Proveedor)</option>
-                          <option value="interna">Interna (Planta)</option>
-                          </select>
-                      </div>
+                <form id="recepcionForm" onSubmit={handleSubmit} style={styles.form}>
+                    <div style={styles.formGrid}>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: spacing.md}}> {/* GAP REDUCIDO A MD */}
+                            <SmoothSelect 
+                                label="Tipo de Origen"
+                                name="origen_tipo" 
+                                value={formData.origen_tipo} 
+                                onChange={handleOrigenTipoChange} 
+                            >
+                                <option value="externa">Externa (Proveedor)</option>
+                                <option value="interna">Interna (Planta)</option>
+                            </SmoothSelect>
 
-                      {formData.origen_tipo === 'externa' && (
-                          <div style={styles.formGroup}>
-                              <label style={styles.label}>Nombre del Proveedor</label>
-                              <input 
-                                  type="text" 
-                                  name="origen_especifico" 
-                                  value={formData.origen_especifico} 
-                                  onChange={handleInputChange} 
-                                  style={styles.formInput} 
-                                  placeholder="Ej: Reciclados del Norte"
-                                  required 
-                              />
-                          </div>
-                      )}
+                            {formData.origen_tipo === 'externa' && (
+                                <SmoothInput 
+                                    label="Nombre del Proveedor"
+                                    type="text" 
+                                    name="origen_especifico" 
+                                    value={formData.origen_especifico} 
+                                    onChange={handleInputChange} 
+                                    placeholder="Ej: Reciclados del Norte"
+                                    required 
+                                />
+                            )}
 
-                      <div style={styles.formGroup}>
-                          <label style={styles.label}>Destino Inicial</label>
-                          <select 
-                          name="destino" 
-                          value={formData.destino} 
-                          onChange={handleInputChange} 
-                          style={styles.formSelect}
-                          >
-                          <option value="almacenamiento">Almacenamiento General</option>
-                          <option value="reciclaje">Directo a Reciclaje</option>
-                          <option value="venta">Venta Directa</option>
-                          </select>
-                      </div>
-                  </div>
+                            <SmoothSelect 
+                                label="Destino Inicial"
+                                name="destino" 
+                                value={formData.destino} 
+                                onChange={handleInputChange} 
+                            >
+                                <option value="almacenamiento">Almacenamiento General</option>
+                                <option value="reciclaje">Directo a Reciclaje</option>
+                                <option value="venta">Venta Directa</option>
+                            </SmoothSelect>
+                        </div>
 
-                  <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
-                      <div style={styles.formGroup}>
-                          <label style={styles.label}>Peso Neto (kg)</label>
-                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                              <input 
-                                  type="number" 
-                                  step="0.01" 
-                                  name="peso_kg" 
-                                  value={formData.peso_kg} 
-                                  onChange={handleInputChange} 
-                                  style={{
-                                      ...styles.formInput,
-                                      paddingRight: '120px', 
-                                      backgroundColor: pesoBloqueado ? colors.gray100 : (formData.peso_kg > 0 ? '#F0FDF4' : colors.surface),
-                                      borderColor: pesoBloqueado ? colors.error : (formData.peso_kg > 0 ? colors.success : colors.gray300),
-                                      color: pesoBloqueado ? colors.error : colors.gray900,
-                                      fontWeight: pesoBloqueado ? 'bold' : 'normal'
-                                  }} 
-                                  placeholder="0.00"
-                                  required 
-                                  readOnly={pesoBloqueado}
-                              />
-                              <button
-                                  type="button"
-                                  onClick={() => setPesoBloqueado(!pesoBloqueado)}
-                                  style={pesoBloqueado ? styles.btnLockedInside : styles.btnUnlockedInside}
-                                  title={pesoBloqueado ? "Desbloquear" : "Fijar peso"}
-                              >
-                                  {pesoBloqueado ? (
-                                    <>
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
-                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                                      </svg>
-                                      FIJADO
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}>
-                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-                                      </svg>
-                                      FIJAR
-                                    </>
-                                  )}
-                              </button>
-                          </div>
-                      </div>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: spacing.md}}> {/* GAP REDUCIDO A MD */}
+                            <div style={styles.formGroup}>
+                                <SmoothInput 
+                                    label="Peso Neto (kg)"
+                                    type="number" 
+                                    step="0.01" 
+                                    name="peso_kg" 
+                                    value={formData.peso_kg} 
+                                    onChange={handleInputChange} 
+                                    placeholder="0.00"
+                                    required 
+                                    disabled={pesoBloqueado}
+                                    style={{
+                                        backgroundColor: pesoBloqueado ? colors.gray100 : (formData.peso_kg > 0 ? '#F0FDF4' : colors.surface),
+                                        borderColor: pesoBloqueado ? colors.error : undefined,
+                                        color: pesoBloqueado ? colors.error : undefined,
+                                        fontWeight: pesoBloqueado ? 'bold' : 'normal'
+                                    }}
+                                    rightElement={
+                                        <SmoothButton
+                                            type="button"
+                                            onClick={() => setPesoBloqueado(!pesoBloqueado)}
+                                            variant={pesoBloqueado ? 'destructive' : 'secondary'}
+                                            style={{
+                                                padding: '0 8px',
+                                                height: '24px',
+                                                fontSize: '10px',
+                                                textTransform: 'uppercase',
+                                            }}
+                                            title={pesoBloqueado ? "Desbloquear" : "Fijar peso"}
+                                        >
+                                            {pesoBloqueado ? "Fijado" : "Fijar"}
+                                        </SmoothButton>
+                                    }
+                                />
+                            </div>
 
-                      <div style={styles.formGroup}>
-                          <label style={styles.label}>Tipo de Material</label>
-                          <select 
-                              name="tipo_material" 
-                              value={formData.tipo_material} 
-                              onChange={handleInputChange} 
-                              style={styles.formSelect}
-                              required 
-                          >
-                              <option value="">Seleccionar material...</option>
-                              {listaMateriales.map((material, index) => (
-                                  <option key={index} value={material}>
-                                      {material}
-                                  </option>
-                              ))}
-                          </select>
-                      </div>
-                  </div>
-              </div>
+                            <SmoothSelect 
+                                label="Tipo de Material"
+                                name="tipo_material" 
+                                value={formData.tipo_material} 
+                                onChange={handleInputChange} 
+                                required 
+                            >
+                                <option value="">Seleccionar material...</option>
+                                {listaMateriales.map((material, index) => (
+                                    <option key={index} value={material}>{material}</option>
+                                ))}
+                            </SmoothSelect>
+                        </div>
+                    </div>
 
-              <div style={{marginTop: spacing.md}}>
-                  <label style={styles.label}>Observaciones</label>
-                  <textarea 
-                  name="observaciones" 
-                  value={formData.observaciones} 
-                  onChange={handleInputChange} 
-                  style={styles.formTextarea} 
-                  rows="3"
-                  placeholder="Notas adicionales..."
-                  ></textarea>
-              </div>
-
-              <div style={styles.modalFooter}>
-                  <button type="button" onClick={() => setShowModal(false)} style={styles.modalSecondaryButton}>
-                  Cancelar
-                  </button>
-                  <button type="submit" style={styles.modalPrimaryButton}>
-                  Confirmar Recepción
-                  </button>
-              </div>
-              </form>
+                    <div style={{marginTop: spacing.md}}>
+                        <label style={{fontSize: typography.sizes.xs, fontWeight: 700, color: colors.gray600, textTransform: 'uppercase', letterSpacing: '0.05em', marginLeft: '2px', display: 'block', marginBottom: '6px'}}>Observaciones</label>
+                        <textarea 
+                            name="observaciones" 
+                            value={formData.observaciones} 
+                            onChange={handleInputChange} 
+                            style={{
+                                ...baseComponents.input,
+                                width: '100%',
+                                minHeight: '80px',
+                                padding: '12px',
+                                resize: 'vertical',
+                                fontFamily: typography.fontFamily,
+                                borderColor: colors.gray300,
+                                fontSize: '0.9rem',
+                                outline: 'none',
+                                transition: 'all 0.2s ease',
+                                borderRadius: radius.md,
+                                boxSizing: 'border-box'
+                            }}
+                            rows="3"
+                            placeholder="Notas adicionales..."
+                            onFocus={(e) => {
+                                e.target.style.borderColor = colors.primary;
+                                e.target.style.boxShadow = `0 0 0 4px ${colors.primary}15`;
+                            }}
+                            onBlur={(e) => {
+                                e.target.style.borderColor = colors.gray300;
+                                e.target.style.boxShadow = 'none';
+                            }}
+                        ></textarea>
+                    </div>
+                </form>
             </div>
-          </div>
+
+            <div style={styles.modalFooter}>
+                <SmoothButton type="button" onClick={() => setShowModal(false)} variant="secondary">Cancelar</SmoothButton>
+                <SmoothButton onClick={triggerSubmit} variant="primary" disabled={enviando}>{enviando ? 'Guardando...' : 'Confirmar Recepción'}</SmoothButton>
+            </div>
         </div>
-      )}
+    </div>
+  );
+
+  return (
+    <div style={styles.container}>
+      <style>{`
+        @keyframes slideInUp {
+          from { opacity: 0; transform: translateY(30px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
+
+      <PageWrapper style={{ height: 'auto' }}>
+        <div style={styles.header}>
+          <div>
+            <h1 style={styles.title}>Dashboard Receptor</h1>
+            <p style={styles.subtitle}>Bienvenido, {user?.name || 'Usuario'}</p>
+          </div>
+          <SmoothButton onClick={() => setShowModal(true)} variant="primary" style={{ paddingLeft: '20px', paddingRight: '20px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Nueva Recepción
+          </SmoothButton>
+        </div>
+
+        {/* IMPLEMENTACIÓN DE TABS */}
+        <TabsAnimated
+            tabs={[
+                { id: 'historial', label: 'Historial de Entradas', content: <HistorialContent /> },
+                { id: 'clasificacion', label: 'Clasificación y Destino', content: <ClasificacionContent /> }
+            ]}
+        />
+
+        {showModal && createPortal(modalContent, document.body)}
+      </PageWrapper>
     </div>
   );
 };
-
-const styles = {
-  container: {
-    padding: spacing.lg,
-    backgroundColor: colors.background,
-    minHeight: '100vh',
-    fontFamily: typography.fontFamily
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    flexWrap: 'wrap',
-    gap: spacing.md
-  },
-  title: {
-    fontSize: typography.sizes['3xl'],
-    fontWeight: typography.weights.extrabold,
-    color: colors.gray900,
-    margin: 0,
-    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text'
-  },
-  subtitle: {
-    color: colors.gray600,
-    fontSize: typography.sizes.lg,
-    margin: 0,
-    fontWeight: typography.weights.medium
-  },
-  loading: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    backgroundColor: colors.background,
-    flexDirection: 'column',
-    gap: spacing.md
-  },
-  loadingText: {
-    fontSize: typography.sizes.lg,
-    color: colors.gray600,
-    marginTop: spacing.sm
-  },
-  // Spinner actualizado al diseño unificado
-  spinner: {
-    width: '60px',
-    height: '60px',
-    border: `3px solid ${colors.primaryLight}`,
-    borderTop: `3px solid ${colors.primary}`,
-    borderRight: `3px solid ${colors.secondary}`,
-    borderBottom: `3px solid ${colors.secondary}`,
-    borderRadius: '50%',
-    animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite'
-  },
-  card: {
-    ...baseComponents.card,
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  cardHeader: {
-    padding: spacing.lg,
-    borderBottom: `1px solid ${colors.gray200}`,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    flexWrap: 'wrap',
-    gap: spacing.md
-  },
-  cardTitle: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.gray800,
-    margin: 0
-  },
-  cardSubtitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray500,
-    margin: '4px 0 0 0'
-  },
-  searchContainer: {
-    position: 'relative',
-    width: '300px',
-    maxWidth: '100%'
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: '12px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: colors.gray400,
-    fontSize: '1rem',
-    display: 'flex'
-  },
-  searchInput: {
-    width: '100%',
-    padding: '10px 10px 10px 36px',
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
-    fontSize: typography.sizes.sm,
-    outline: 'none',
-    transition: 'all 0.2s',
-    boxSizing: 'border-box'
-  },
-  tableContainer: {
-    overflowX: 'auto',
-    width: '100%'
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'separate',
-    borderSpacing: '0',
-    minWidth: '900px'
-  },
-  th: {
-    padding: '16px',
-    textAlign: 'left',
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    color: colors.gray500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    backgroundColor: '#F9FAFB',
-    borderBottom: `1px solid ${colors.gray200}`,
-    position: 'sticky',
-    top: 0
-  },
-  tr: {
-    transition: 'background-color 0.15s ease',
-    ':hover': {
-      backgroundColor: '#F3F4F6'
-    }
-  },
-  td: {
-    padding: '14px 16px',
-    fontSize: typography.sizes.sm,
-    color: colors.gray700,
-    borderBottom: `1px solid ${colors.gray100}`,
-    verticalAlign: 'middle'
-  },
-  huBadge: {
-    fontFamily: 'Consolas, monospace',
-    fontSize: '0.8rem',
-    backgroundColor: colors.gray100,
-    color: colors.gray700,
-    padding: '4px 8px',
-    borderRadius: radius.md,
-    border: `1px solid ${colors.gray300}`,
-    fontWeight: '600',
-    display: 'inline-block'
-  },
-  dateText: {
-    fontWeight: '600',
-    color: colors.gray800
-  },
-  timeText: {
-    fontSize: '0.75rem',
-    color: colors.gray500
-  },
-  weightBadge: {
-    fontSize: '0.9rem',
-    fontWeight: '700',
-    color: colors.primary
-  },
-  badgeInterna: {
-    ...baseComponents.badge,
-    backgroundColor: '#DBEAFE', 
-    color: '#1E40AF', 
-    border: '1px solid #BFDBFE'
-  },
-  badgeExterna: {
-    ...baseComponents.badge,
-    backgroundColor: '#D1FAE5', 
-    color: '#065F46', 
-    border: '1px solid #A7F3D0'
-  },
-  destBadge: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    color: colors.gray600,
-    backgroundColor: colors.gray100,
-    borderRadius: '4px',
-    textTransform: 'capitalize'
-  },
-  providerText: {
-    fontWeight: '500',
-    color: colors.gray900
-  },
-  actionButton: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '1.2rem',
-    padding: '4px',
-    borderRadius: '4px',
-    transition: 'background 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: colors.gray600,
-    ':hover': {
-      backgroundColor: colors.gray100,
-      color: colors.gray900
-    }
-  },
-  emptyState: {
-    padding: spacing.xl,
-    textAlign: 'center',
-    color: colors.gray500,
-    backgroundColor: '#FAFAFA'
-  },
-  tableFooter: {
-    padding: '12px 16px',
-    backgroundColor: '#F9FAFB',
-    borderTop: `1px solid ${colors.gray200}`,
-    fontSize: '0.85rem',
-    color: colors.gray600,
-    textAlign: 'right'
-  },
-  primaryButton: {
-    ...baseComponents.buttonPrimary,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '10px 20px',
-    fontWeight: '600',
-    gap: '8px',
-    boxShadow: shadows.sm
-  },
-  btnLockedInside: {
-    position: 'absolute',
-    right: '6px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    backgroundColor: colors.error,
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: radius.sm,
-    padding: '4px 10px',
-    fontSize: '10px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    height: '24px',
-    zIndex: 5,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px'
-  },
-  btnUnlockedInside: {
-    position: 'absolute',
-    right: '6px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    backgroundColor: colors.gray200,
-    color: colors.gray700,
-    border: `1px solid ${colors.gray300}`,
-    borderRadius: radius.sm,
-    padding: '4px 10px',
-    fontSize: '10px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    height: '24px',
-    zIndex: 5,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    ':hover': {
-        backgroundColor: colors.gray300
-    }
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-    padding: spacing.md,
-    backdropFilter: 'blur(3px)'
-  },
-  modal: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    width: '95%',
-    maxWidth: '750px',
-    maxHeight: '90vh',
-    overflow: 'hidden',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  modalHeader: {
-    padding: '20px 24px',
-    borderBottom: `1px solid ${colors.gray200}`,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'start',
-    backgroundColor: '#FAFAFA'
-  },
-  modalTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 'bold',
-    color: colors.gray900,
-    margin: 0
-  },
-  modalSubtitle: {
-    fontSize: '0.875rem',
-    color: colors.gray500,
-    margin: '4px 0 0 0'
-  },
-  modalContent: {
-    overflowY: 'auto'
-  },
-  closeBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: colors.gray400,
-    cursor: 'pointer',
-    fontSize: '1.2rem',
-    padding: '4px',
-    borderRadius: '50%',
-    transition: 'all 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    ':hover': {
-      backgroundColor: colors.gray200,
-      color: colors.gray700
-    }
-  },
-  form: {
-    padding: '24px'
-  },
-  formGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '24px',
-    alignItems: 'start'
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
-  },
-  label: {
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    color: colors.gray600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em'
-  },
-  formInput: {
-    ...baseComponents.input,
-    padding: '0 12px',
-    height: '40px',
-    width: '100%',
-    boxSizing: 'border-box',
-    fontSize: '0.9rem',
-    borderColor: colors.gray300,
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
-      outline: 'none'
-    }
-  },
-  formSelect: {
-    ...baseComponents.select,
-    padding: '0 12px',
-    height: '40px',
-    width: '100%',
-    boxSizing: 'border-box',
-    fontSize: '0.9rem',
-    borderColor: colors.gray300,
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
-      outline: 'none'
-    }
-  },
-  formTextarea: {
-    ...baseComponents.input,
-    width: '100%',
-    minHeight: '80px',
-    padding: '12px',
-    resize: 'vertical',
-    fontFamily: typography.fontFamily,
-    borderColor: colors.gray300,
-    fontSize: '0.9rem',
-    ':focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primaryLight}`,
-      outline: 'none'
-    }
-  },
-  modalFooter: {
-    marginTop: '24px',
-    paddingTop: '20px',
-    borderTop: `1px solid ${colors.gray200}`,
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px'
-  },
-  modalPrimaryButton: {
-    ...baseComponents.buttonPrimary,
-    padding: '10px 24px',
-    height: '40px',
-    fontSize: '0.9rem',
-    boxShadow: shadows.md
-  },
-  modalSecondaryButton: {
-    ...baseComponents.buttonSecondary,
-    padding: '10px 24px',
-    height: '40px',
-    fontSize: '0.9rem'
-  }
-};
-
-// Inyección de estilos de animación global
-const styleSheet = document.styleSheets[0];
-if (styleSheet) {
-  try {
-    styleSheet.insertRule(`
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    `, styleSheet.cssRules.length);
-  } catch (e) {}
-}
 
 export default ReceptorDashboard;

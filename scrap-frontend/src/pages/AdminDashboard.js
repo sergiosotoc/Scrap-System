@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import UserManagement from '../components/UserManagement';
-import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
+import { colors, spacing, typography, baseComponents } from '../styles/designSystem';
 
 // Componentes Smooth Importados
 import PageWrapper from '../components/PageWrapper';
@@ -110,7 +110,7 @@ const AdminDashboard = () => {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      // setLoading(true); // Opcional: Desactivar loading visual en actualizaciones automáticas
       const data = await apiClient.getDashboardStats();
       if (data.grafica_barras) {
         const { meses, produccion, recepcion } = data.grafica_barras;
@@ -126,7 +126,8 @@ const AdminDashboard = () => {
       setTimeout(() => setTriggerAnimation(true), 100);
     } catch (error) {
       console.error('Error cargando datos:', error);
-      addToast('Error cargando datos: ' + error.message, 'error');
+      if (loading) addToast('Error cargando datos: ' + error.message, 'error');
+      
       const ejemploMeses = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN'];
       setChartData(ejemploMeses.map(mes => ({ label: mes, value: Math.floor(Math.random() * 10000), value2: Math.floor(Math.random() * 8000) })));
       setMesesGrafica(ejemploMeses);
@@ -139,10 +140,28 @@ const AdminDashboard = () => {
   const calcularTotalDistribucion = () => distribucionData.reduce((total, item) => total + (item.value || 0), 0);
 
   const styles = {
-    container: { padding: spacing.lg, backgroundColor: colors.background, minHeight: '100vh', fontFamily: typography.fontFamily },
+    // CORRECCIÓN: Layout ajustado para evitar scroll global innecesario
+    container: { 
+      // padding: spacing.lg, // Quitamos padding para que lo maneje el Layout o el wrapper interno si se desea
+      backgroundColor: colors.background, 
+      fontFamily: typography.fontFamily,
+      boxSizing: 'border-box',
+      width: '100%',
+      height: 'auto' 
+    },
     header: { marginBottom: spacing.lg, display: 'flex', flexDirection: 'column', gap: spacing.md },
     title: { fontSize: typography.sizes['3xl'], fontWeight: typography.weights.extrabold, color: colors.gray900, margin: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' },
-    loading: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: colors.gray500, flexDirection: 'column', gap: spacing.md },
+    // CORRECCIÓN: Altura de carga ajustada
+    loading: { 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      height: '100%', 
+      minHeight: '50vh',
+      color: colors.gray500, 
+      flexDirection: 'column', 
+      gap: spacing.md 
+    },
     chartsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: spacing.lg, marginBottom: spacing.lg },
     chartCard: { ...baseComponents.card, padding: spacing.lg, display: 'flex', flexDirection: 'column', gap: spacing.md, minHeight: '350px', transition: 'transform 0.2s ease, box-shadow 0.2s ease' },
     chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
@@ -162,7 +181,6 @@ const AdminDashboard = () => {
     actividadDesc: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.gray800, marginBottom: '2px' },
     actividadDetalle: { fontSize: typography.sizes.xs, color: colors.gray600, display: 'flex', gap: spacing.sm },
     actividadFecha: { fontSize: typography.sizes.xs, color: colors.gray500, whiteSpace: 'nowrap' },
-    refreshButton: { ...baseComponents.buttonSecondary, marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: spacing.xs, padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.sizes.xs },
   };
 
   if (loading && !stats) return <div style={styles.loading}><LoadingSpinner message="Cargando datos del dashboard..." /></div>;
@@ -235,18 +253,11 @@ const AdminDashboard = () => {
 
   return (
     <div style={styles.container}>
-      <PageWrapper>
+      {/* CORRECCIÓN: PageWrapper con height auto para que el contenido dicte la altura */}
+      <PageWrapper style={{ height: 'auto' }}>
         <div style={styles.header}>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
             <h1 style={styles.title}>Panel de Control Administrativo</h1>
-            <SmoothButton 
-              onClick={loadData} 
-              disabled={loading} 
-              style={styles.refreshButton}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-              {loading ? 'Actualizando...' : 'Actualizar Datos'}
-            </SmoothButton>
           </div>
 
           <TabsAnimated

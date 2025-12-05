@@ -66,7 +66,7 @@ const Login = () => {
       maxWidth: '440px', 
       boxShadow: shadows.xl, 
       backgroundColor: colors.surface,
-      margin: '0 auto' // CORRECCIÓN CLAVE: Centra horizontalmente el componente
+      margin: '0 auto' 
     },
     logoContainer: { display: 'flex', justifyContent: 'center', marginBottom: spacing.lg },
     logo: { height: '80px', width: 'auto', maxWidth: '200px', objectFit: 'contain' },
@@ -78,14 +78,7 @@ const Login = () => {
     },
     subtitle: { textAlign: 'center', color: colors.gray600, fontSize: typography.sizes.lg, marginBottom: spacing.lg, fontWeight: typography.weights.medium },
     form: { display: 'flex', flexDirection: 'column', gap: spacing.md },
-    inputGroup: { display: 'flex', flexDirection: 'column', gap: spacing.xs },
-    label: { display: 'block', fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.gray700 },
-    // Mantenemos tus alturas originales
-    input: { ...baseComponents.input, height: '42px' },
-    button: {
-      ...baseComponents.buttonPrimary, marginTop: spacing.sm, height: '46px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', fontSize: typography.sizes.base
-    },
+    input: { height: '42px' },
     error: {
       backgroundColor: colors.error + '10', color: colors.error, padding: spacing.md,
       borderRadius: radius.md, marginBottom: spacing.md, textAlign: 'center',
@@ -113,9 +106,8 @@ const Login = () => {
           <form onSubmit={handleSubmit} style={styles.form}>
             {error && <div style={styles.error}>{error}</div>}
             
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Usuario:</label>
-              <SmoothInput
+            <SmoothInput
+                label="Usuario"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -123,12 +115,10 @@ const Login = () => {
                 placeholder="Ingresa tu usuario"
                 required
                 disabled={loading}
-              />
-            </div>
+            />
             
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Contraseña:</label>
-              <SmoothInput
+            <SmoothInput
+                label="Contraseña"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -137,27 +127,23 @@ const Login = () => {
                 required
                 disabled={loading}
                 rightElement={
-                  <button
+                    <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: spacing.xs, color: colors.gray500, display: 'flex', alignItems: 'center' }}
-                  >
+                    >
                     {showPassword ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
                     ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     )}
-                  </button>
+                    </button>
                 }
-              />
-            </div>
+            />
             
             <SmoothButton 
               type="submit" 
-              style={{
-                ...styles.button,
-                ...(loading && { backgroundColor: colors.gray400, cursor: 'not-allowed', transform: 'none' })
-              }}
+              style={{ marginTop: spacing.sm, width: '100%', height: '46px' }}
               disabled={loading}
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}

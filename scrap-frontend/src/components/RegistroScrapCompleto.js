@@ -110,7 +110,6 @@ const ScrapRow = React.memo(({
                 step="0.001"
                 value={valor === 0 ? '' : valor}
                 onChange={(e) => onChange(realIndex, tipo.columna_db, e.target.value)}
-                // CORRECCIÓN: onClick asegura el foco en navegadores estrictos
                 onClick={() => onFocus(realIndex, tipo.columna_db, fila.area_real, fila.maquina_real)}
                 onFocus={() => onFocus(realIndex, tipo.columna_db, fila.area_real, fila.maquina_real)}
                 style={{
@@ -121,7 +120,6 @@ const ScrapRow = React.memo(({
                   ...(pesoBloqueado && !celdaEstaActiva ? styles.disabledInput : {})
                 }}
                 placeholder="-"
-                // CORRECCIÓN: readOnly permite cambiar el foco aunque no se pueda escribir
                 readOnly={pesoBloqueado} 
               />
             </div>
@@ -179,7 +177,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const campoBasculaActivoRef = useRef(campoBasculaActivo);
   const pesoCongeladoRef = useRef(0);
   
-  // REF DEL CANDADO
   const lockedTargetRef = useRef(null);
   
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
@@ -187,7 +184,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   useEffect(() => { pesoBloqueadoRef.current = pesoBloqueado; }, [pesoBloqueado]);
   useEffect(() => { campoBasculaActivoRef.current = campoBasculaActivo; }, [campoBasculaActivo]);
 
-  // EFECTO PARA EL CANDADO DE DESTINO
   useEffect(() => {
     if (pesoBloqueado) {
         lockedTargetRef.current = {
@@ -284,24 +280,17 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     return safeSum(camposPeso.map(c => fila[c]));
   };
 
-  // CALLBACK OPTIMIZADO CON PROTECCIÓN DE ESCRITURA ESTRICTA
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado) => {
     const currentBloqueado = pesoBloqueadoRef.current;
     const currentMaquinaSel = maquinaSeleccionadaRef.current;
     const currentCelda = celdaActivaRef.current;
     
-    // 1. DEFINIR DESTINO REAL: Siempre usamos lo que el padre sabe que está activo
     const campoRealActivo = campoBasculaActivoRef.current;
 
-    // 2. PROTECCIÓN CONTRA DATOS VIEJOS (CORRECCIÓN CRÍTICA)
-    // Si la báscula manda un dato "etiquetado" para un campo (campoDestinoEnviado) 
-    // que NO es el que tenemos activo actualmente (campoRealActivo), lo descartamos.
-    // Esto evita que un paquete retrasado del "campo error" sobrescriba el nuevo campo o viceversa.
     if (campoDestinoEnviado && campoDestinoEnviado !== campoRealActivo) {
         return; 
     }
 
-    // Usamos el campo activo real como destino final
     const campoDestino = campoRealActivo;
     if (!campoDestino) return;
 
@@ -312,10 +301,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       targetIndex = currentCelda.areaIndex;
     }
 
-    // 3. PROTECCIÓN DE CANDADO
     if (currentBloqueado && lockedTargetRef.current) {
         const locked = lockedTargetRef.current;
-        // Si estamos bloqueados, SOLO permitimos escribir si seguimos en la misma celda exacta
         if (locked.index !== targetIndex || locked.field !== campoDestino) {
             return; 
         }
@@ -420,7 +407,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   };
 
-  // DATOS FILTRADOS
   const datosFiltrados = useMemo(() => {
     return tablaData.filter(fila => {
         if (filtroArea && fila.area_real !== filtroArea) return false;
@@ -429,7 +415,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     });
   }, [tablaData, filtroArea, filtroMaquina]);
 
-  // CALCULO DE TOTALES
   const totales = useMemo(() => {
     const acc = {};
     const camposPeso = [
@@ -523,6 +508,22 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 {maquinaSeleccionada.maquina ? (
                   <>
                     <strong style={styles.fixedMachineName}>{maquinaSeleccionada.maquina}</strong>
+                    
+                    {/* INDICADOR DE PESO EN MÁQUINA FIJADA */}
+                    <span style={{
+                        ...styles.fixedMachineArea, 
+                        backgroundColor: colors.primary, 
+                        color: '#fff',
+                        marginLeft: '4px',
+                        border: 'none',
+                        minWidth: '70px',
+                        textAlign: 'center'
+                    }}>
+                        {(maquinaSeleccionada.index !== null && tablaData[maquinaSeleccionada.index] && tablaData[maquinaSeleccionada.index][campoBasculaActivo] 
+                            ? tablaData[maquinaSeleccionada.index][campoBasculaActivo].toFixed(3) 
+                            : '0.000')} kg
+                    </span>
+
                     <span style={styles.fixedMachineArea}>{maquinaSeleccionada.area}</span>
                     <button type="button" onClick={() => { setMaquinaSeleccionada({ area: '', maquina: '', index: null }); setCeldaActiva(null); }} style={styles.unfixButton} title="Liberar máquina">✕</button>
                   </>
@@ -665,7 +666,7 @@ const styles = {
     ...baseComponents.select, 
     height: '42px', 
     borderWidth: '2px', 
-    borderColor: colors.primary,
+    borderColor: colors.primary, 
     backgroundColor: colors.primaryLight, 
     paddingRight: '40px' 
   },
@@ -968,7 +969,7 @@ const styles = {
   },
   fixedTotalValue: { 
     padding: `${spacing.xs} ${spacing.md}`, 
-    borderWidth: '1px',
+    borderWidth: '1px', 
     borderStyle: 'solid', 
     borderColor: colors.gray700, 
     textAlign: 'center', 
@@ -1067,10 +1068,10 @@ const styles = {
     gap: spacing.xs, 
     padding: spacing.sm, 
     backgroundColor: colors.primaryLight, 
-    borderRadius: radius.md,
+    borderRadius: radius.md, 
     borderWidth: '2px', 
     borderStyle: 'solid', 
-    borderColor: colors.primary,
+    borderColor: colors.primary, 
     minHeight: '42px' 
   },
   fixedMachineName: { 

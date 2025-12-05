@@ -1,100 +1,6 @@
-/* src/App.css */
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* ============================================
-   ANIMACIONES Y ESTILOS GLOBALES MODERNOS
+   RESET Y NORMALIZACIÓN CROSS-BROWSER
    ============================================ */
-
-/* Animaciones para las notificaciones Toast */
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideInDown {
-  from {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.toast-enter {
-  animation: slideInRight 0.3s ease-out;
-}
-
-/* Scroll suave */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Estilos globales para mejorar la experiencia */
 * {
   box-sizing: border-box;
 }
@@ -105,36 +11,22 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background-color: #F3F4F6;
   color: #374151;
+  /* Suavizado de fuentes */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Inputs Modernos */
-.modern-input:focus,
-.modern-select:focus,
-.modern-textarea:focus {
-  outline: none;
-  border-color: #2563EB !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+/* ============================================
+   SCROLLBARS PERSONALIZADAS (Chrome, Edge, Safari, Firefox)
+   ============================================ */
+
+/* Estándar Moderno (Firefox) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
 }
 
-/* Efecto Hover suave para tarjetas */
-.hover-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.hover-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-}
-
-/* Estados de carga */
-.loading-pulse {
-  animation: pulse 2s infinite;
-}
-
-.fade-in {
-  animation: fadeIn 0.5s ease-in;
-}
-
-/* Scrollbar personalizado */
+/* Webkit (Chrome, Edge, Safari) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -146,84 +38,52 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background-color: #c1c1c1;
   border-radius: 4px;
+  border: 2px solid #f1f1f1;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background-color: #a8a8a8;
 }
 
-/* Mejora para móviles */
-@media (max-width: 768px) {
-  .toast-container {
-    top: 60px;
-    right: 10px;
-    left: 10px;
-    max-width: none;
-  }
-  
-  .toast {
-    min-width: auto;
-    max-width: none;
-  }
-  
-  .quick-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .save-container {
-    margin-left: 0;
-    justify-content: center;
-  }
-
-  /* Mejoras de responsive para tablas */
-  .table-responsive {
-    font-size: 0.875rem;
-  }
-  
-  /* Botones más grandes en móviles */
-  .mobile-friendly-btn {
-    padding: 1rem 1.5rem !important;
-    font-size: 1rem !important;
-  }
+/* ============================================
+   FIX CROSS-BROWSER PARA SELECTS
+   ============================================ */
+/* Elimina la flecha nativa en IE/Edge Legacy */
+select::-ms-expand {
+  display: none;
 }
 
-/* Utilidades de texto */
-.text-gradient {
-  background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* Clase para forzar estilos en selects rebeldes */
+.smooth-select-reset {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  text-indent: 0.01px; 
+  text-overflow: '';
 }
 
-/* Estados de focus mejorados para accesibilidad */
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid #2563EB;
-  outline-offset: 2px;
+/* ============================================
+   ANIMACIONES
+   ============================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* Transiciones suaves para interacciones */
-button, 
-input, 
-select, 
-textarea,
-.card,
-.table-row {
-  transition: all 0.2s ease-in-out;
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Mejoras para impresión */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  .print-break {
-    page-break-after: always;
-  }
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
