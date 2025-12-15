@@ -15,14 +15,11 @@ class AppConfigServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Configurar APP_URL dinámicamente
         $appHost = env('APP_HOST', 'localhost');
         $appUrl = "http://{$appHost}:8000";
         
-        // Actualizar configuración
         config(['app.url' => $appUrl]);
         
-        // Forzar URL en generación de links
         URL::forceRootUrl($appUrl);
     }
 }

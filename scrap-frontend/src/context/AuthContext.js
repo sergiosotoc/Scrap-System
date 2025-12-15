@@ -34,21 +34,17 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   };
 
-  // Función para analizar errores del servidor
   const parseAuthError = (error) => {
     console.log('🔍 Parseando error de autenticación:', error);
 
-    // Si el error ya tiene un mensaje específico del backend, usarlo directamente
     if (error.message) {
       return error;
     }
 
-    // Si es un error de red
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
       return new Error('Error de conexión. Verifica tu internet o contacta al administrador');
     }
 
-    // Si no se puede determinar el error, devolver genérico
     return new Error('Error desconocido al iniciar sesión');
   };
 
@@ -56,7 +52,6 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔐 AuthContext - Iniciando login para:', username);
 
-      // Validaciones básicas del lado del cliente
       if (!username.trim() || !password.trim()) {
         throw new Error('Usuario y contraseña son requeridos');
       }
@@ -84,7 +79,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('❌ AuthContext - Error en login:', error);
 
-      // Parsear el error para dar un mensaje más específico
       const parsedError = parseAuthError(error);
 
       return {

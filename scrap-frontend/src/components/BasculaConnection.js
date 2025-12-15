@@ -8,7 +8,7 @@ import SmoothSelect from './SmoothSelect';
 
 const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
     const [estado, setEstado] = useState(modoInicial);
-    const [peso, setPeso] = useState(0); // Ahora manejará strings durante edición manual
+    const [peso, setPeso] = useState(0); 
     const [tara, setTara] = useState(0); 
     const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 1 });
     const [puertos, setPuertos] = useState([]);
@@ -25,9 +25,12 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     
     const campoDestinoRef = useRef(campoDestino);
 
-    // Cálculo seguro del Peso Neto usando parseFloat para manejar strings o números
+    // Cálculo seguro del Peso Neto
     const pesoBrutoNum = parseFloat(peso) || 0;
     const pesoNeto = Math.max(0, pesoBrutoNum - (parseFloat(tara) || 0));
+
+    // Determinar si es lectura automática real
+    const esLecturaAutomatica = !modoManual && estado === 'conectado';
 
     useEffect(() => {
         campoDestinoRef.current = campoDestino;
@@ -39,12 +42,13 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         estadoRef.current = estado;
     }, [estado]);
 
-    // Efecto para propagar cambios
+    // ✅ CORRECCIÓN: Enviar bandera de esAutomatico al padre
     useEffect(() => {
         if (onPesoObtenido) {
-            onPesoObtenido(pesoNeto, campoDestinoRef.current);
+            // Tercer argumento: true si es báscula, false si es manual
+            onPesoObtenido(pesoNeto, campoDestinoRef.current, esLecturaAutomatica);
         }
-    }, [pesoNeto, onPesoObtenido]);
+    }, [pesoNeto, onPesoObtenido, esLecturaAutomatica]);
 
     // Cargar puertos
     useEffect(() => {
@@ -121,7 +125,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                 const pesoString = String(resultado.peso_kg).replace(',', '.');
                 const nuevoPeso = parseFloat(pesoString) || 0;
                 
-                setPeso(nuevoPeso); // En automático sí guardamos el número directo
+                setPeso(nuevoPeso); 
                 setUltimaLectura(new Date());
                 setMensaje(nuevoPeso > 0 ? 'Lectura estable' : 'Báscula en cero');
             }
@@ -211,15 +215,12 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         }
     };
 
-    // --- CORRECCIÓN: MANEJO DE INPUT MANUAL ---
     const handleManualChange = (e) => {
         let valStr = e.target.value;
-        // Permitir escribir decimales o borrar todo
         setPeso(valStr);
     };
 
     const handleTaraChange = (e) => {
-        // Permitir escribir decimales o borrar todo para Tara
         setTara(e.target.value);
     };
 
@@ -249,7 +250,18 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                 <div style={styles.lcdGlass}>
                     <div style={styles.lcdHeader}>
                         <span style={styles.lcdLabel}>PESO NETO (KG)</span>
-                        <span style={styles.lcdTime}>{ultimaLectura ? ultimaLectura.toLocaleTimeString() : '--:--:--'}</span>
+                        {/* ✅ INDICADOR VISUAL DE MODO */}
+                        <span style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: modoManual ? colors.warning : (estado === 'conectado' ? colors.success : colors.gray400),
+                            color: modoManual ? '#78350f' : '#ffffff',
+                            letterSpacing: '0.5px'
+                        }}>
+                            {modoManual ? 'MANUAL' : (estado === 'conectado' ? 'DIGITAL' : '---')}
+                        </span>
                     </div>
                     {/* LCD Principal: Peso Neto Calculado */}
                     <div style={styles.lcdValue}>{pesoNeto.toFixed(3)}</div>
@@ -291,7 +303,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             label="PESO CONTENEDOR (TARA)"
                             type="number"
                             step="0.001"
-                            // CORRECCIÓN: Se muestra vacío si es 0 o cadena vacía para no molestar
                             value={tara === 0 || tara === '0' ? '' : tara}
                             onChange={handleTaraChange}
                             placeholder="0.000"
@@ -326,7 +337,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             <SmoothInput 
                                 type="number" 
                                 step="0.001" 
-                                // CORRECCIÓN: Se muestra vacío si es 0 o cadena vacía
                                 value={peso === 0 || peso === '0' ? '' : peso}
                                 onChange={handleManualChange} 
                                 placeholder="INGRESO MANUAL BRUTO"
@@ -450,7 +460,8 @@ const styles = {
     lcdHeader: { 
         display: 'flex', 
         justifyContent: 'space-between', 
-        marginBottom: spacing.xs 
+        marginBottom: spacing.xs,
+        alignItems: 'center'
     },
     lcdLabel: { 
         fontSize: typography.sizes.xs, 

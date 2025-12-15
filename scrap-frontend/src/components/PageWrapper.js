@@ -1,27 +1,8 @@
 /* src/components/PageWrapper.js */
-import React, { useEffect } from "react";
+import React from "react";
 
 const PageWrapper = ({ children, animationDelay = 0, style }) => {
-  useEffect(() => {
-    // Inyectar estilos de animación si no existen
-    if (!document.getElementById('page-transitions-css')) {
-      const styleElement = document.createElement("style");
-      styleElement.id = 'page-transitions-css';
-      styleElement.innerHTML = `
-        @keyframes pageEntry {
-          from {
-            opacity: 0;
-            transform: translateY(15px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `;
-      document.head.appendChild(styleElement);
-    }
-  }, []);
+  // Ya no inyectamos estilos aquí, se hace en App.js globalmente
 
   return (
     <div

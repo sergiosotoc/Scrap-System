@@ -13,14 +13,8 @@ export const keyframes = {
   `,
   pageEntry: `
     @keyframes pageEntry {
-      from {
-        opacity: 0;
-        transform: translateY(15px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   `,
   fadeIn: `
@@ -34,10 +28,27 @@ export const keyframes = {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+  `,
+  slideInRight: `
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  `,
+  slideOutRight: `
+    @keyframes slideOutRight {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+  `,
+  tabFadeIn: `
+    @keyframes tabFadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `
 };
 
-// Función utilitaria para inyectar estilos si no existen
 export const injectGlobalStyles = () => {
   if (typeof document === 'undefined') return;
   

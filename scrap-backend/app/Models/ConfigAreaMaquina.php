@@ -12,10 +12,7 @@ class ConfigAreaMaquina extends Model
         'area_nombre', 'maquina_nombre', 'orden', 'activa'
     ];
 
-    public function scopeActivas($query)
-    {
-        return $query->where('activa', true);
-    }
+    // ELIMINADO: scopeActivas (Aunque la columna exista, ya no la usaremos para filtrar)
 
     public function scopePorArea($query, $area)
     {
@@ -25,9 +22,9 @@ class ConfigAreaMaquina extends Model
     public static function getMaquinasPorArea($area)
     {
         return self::where('area_nombre', $area)
-                  ->where('activa', true)
-                  ->orderBy('orden')
-                  ->pluck('maquina_nombre')
-                  ->toArray();
+                   // ->where('activa', true) <-- ELIMINADO EL FILTRO
+                   ->orderBy('orden')
+                   ->pluck('maquina_nombre')
+                   ->toArray();
     }
 }

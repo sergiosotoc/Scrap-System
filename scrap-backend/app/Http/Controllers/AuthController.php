@@ -15,7 +15,6 @@ class AuthController extends Controller
             'password' => 'required|string'
         ]);
 
-        // Primero buscar el usuario sin importar si está activo
         $user = User::where('username', $request->username)->first();
 
         if (!$user) {
@@ -24,21 +23,15 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // Verificar si el usuario está activo
-        if (!$user->activo) {
-            return response()->json([
-                'message' => 'El usuario está desactivado. Contacta al administrador'
-            ], 401);
-        }
+        // CHEQUEO DE ACTIVO ELIMINADO
+        // if (!$user->activo) { ... }
 
-        // Verificar contraseña
         if (!password_verify($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Contraseña incorrecta'
             ], 401);
         }
 
-        // Si todo está correcto, generar token
         $token = $user->createToken('scrap-system')->plainTextToken;
         
         return response()->json([
@@ -48,7 +41,6 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'username' => $user->username,
                 'role' => $user->role,
-                'activo' => $user->activo
             ],
             'token' => $token
         ]);
@@ -58,35 +50,25 @@ class AuthController extends Controller
     {
         try {
             $user = $request->user();
-            
             if ($user) {
                 $user->tokens()->delete();
-                return response()->json([
-                    'message' => 'Logout exitoso'
-                ]);
+                return response()->json(['message' => 'Logout exitoso']);
             }
-            
-            return response()->json([
-                'message' => 'Usuario no autenticado'
-            ], 401);
+            return response()->json(['message' => 'Usuario no autenticado'], 401);
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
     public function user(Request $request)
     {
         $user = $request->user();
-        
         return response()->json([
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'username' => $user->username,
                 'role' => $user->role,
-                'activo' => $user->activo
             ],
             'message' => 'Usuario autenticado'
         ]);

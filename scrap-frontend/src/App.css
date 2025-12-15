@@ -11,22 +11,16 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background-color: #F3F4F6;
   color: #374151;
-  /* Suavizado de fuentes */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ============================================
-   SCROLLBARS PERSONALIZADAS (Chrome, Edge, Safari, Firefox)
-   ============================================ */
 
-/* Estándar Moderno (Firefox) */
 * {
   scrollbar-width: thin;
   scrollbar-color: #c1c1c1 #f1f1f1;
 }
 
-/* Webkit (Chrome, Edge, Safari) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -47,15 +41,10 @@ body {
   background-color: #a8a8a8;
 }
 
-/* ============================================
-   FIX CROSS-BROWSER PARA SELECTS
-   ============================================ */
-/* Elimina la flecha nativa en IE/Edge Legacy */
 select::-ms-expand {
   display: none;
 }
 
-/* Clase para forzar estilos en selects rebeldes */
 .smooth-select-reset {
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
@@ -64,9 +53,6 @@ select::-ms-expand {
   text-overflow: '';
 }
 
-/* ============================================
-   ANIMACIONES
-   ============================================ */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

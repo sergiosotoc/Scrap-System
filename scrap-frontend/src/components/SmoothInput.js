@@ -13,20 +13,17 @@ const SmoothInput = ({
   style,
   rightElement,
   required = false,
-  name
+  name,
+  ...props // Capturamos props adicionales (como list, autoComplete, etc.)
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
-  // Extraer estilos del sistema base
   const { ':focus': focusStyles, ...baseInputStyles } = baseComponents.input;
 
-  // Estilos combinados
   const currentInputStyles = {
     ...baseInputStyles,
     width: "100%",
-    // Si hay error, borde rojo. Si está en foco, borde primario (o lo que diga tu DS).
     borderColor: error ? colors.error : (isFocused ? colors.primary : baseInputStyles.borderColor),
-    // Aplicar box-shadow del sistema si está en foco
     boxShadow: isFocused && !error ? focusStyles.boxShadow : (error ? 'none' : 'none'),
     backgroundColor: disabled ? colors.gray100 : baseInputStyles.backgroundColor,
     opacity: disabled ? 0.7 : 1,
@@ -56,12 +53,13 @@ const SmoothInput = ({
           type={type}
           value={value}
           onChange={onChange}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={(e) => { setIsFocused(true); if(props.onFocus) props.onFocus(e); }}
+          onBlur={(e) => { setIsFocused(false); if(props.onBlur) props.onBlur(e); }}
           placeholder={placeholder}
           disabled={disabled}
           required={required}
           style={currentInputStyles}
+          {...props} // Pasamos las props adicionales al input nativo
         />
         
         {rightElement && (

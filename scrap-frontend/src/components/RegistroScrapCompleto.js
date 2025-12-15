@@ -1,38 +1,26 @@
-/* src/components/RegistroScrapCompleto.js - Alineación de Tabla Corregida */
+/* src/components/RegistroScrapCompleto.js */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
 import { useToast } from '../context/ToastContext';
-import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
-
-// Componentes Smooth
+import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem'; // ✅ CORREGIDO: shadows agregado
 import SmoothButton from './SmoothButton';
 import LoadingSpinner from './LoadingSpinner';
 import CardTransition from './CardTransition';
 
-// --- UTILIDAD: CORRECCIÓN MATEMÁTICA (Redondeo simple) ---
 const round3 = (num) => {
   return Math.round((parseFloat(num) || 0) * 1000) / 1000;
 };
 
-// --- UTILIDAD: SUMA SEGURA (Precisión Decimal Absoluta) ---
-const safeSum = (numeros) => {
-  const sumaEntera = numeros.reduce((acc, num) => {
-    return acc + Math.round((parseFloat(num) || 0) * 1000);
-  }, 0);
-  return sumaEntera / 1000;
-};
-
-// --- CONTADOR ANIMADO ---
 const AnimatedCounter = ({ value, duration = 800, decimals = 2 }) => {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
     let startTime;
     let animationFrame;
-    const startValue = count; 
+    const startValue = count;
     const endValue = parseFloat(value) || 0;
-    
+
     if (endValue === count) return;
 
     const step = (timestamp) => {
@@ -48,26 +36,27 @@ const AnimatedCounter = ({ value, duration = 800, decimals = 2 }) => {
         setCount(endValue);
       }
     };
-    
+
     animationFrame = window.requestAnimationFrame(step);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [value, duration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration]); // count excluido intencionalmente para evitar loops de animación
 
   return <span>{count.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</span>;
 };
 
-// --- FILA DE TABLA ---
-const ScrapRow = React.memo(({ 
-  fila, 
-  realIndex, 
-  tiposScrap, 
-  campoBasculaActivo, 
-  celdaActiva, 
-  pesoBloqueado, 
-  onFocus, 
+// Componente de Fila Optimizado
+const ScrapRow = React.memo(({
+  fila,
+  realIndex,
+  materialesFlat,
+  campoBasculaActivo,
+  celdaActiva,
+  pesoBloqueado,
+  onFocus,
   onChange,
-  animate, 
-  indexDisplay 
+  animate,
+  indexDisplay
 }) => {
   const estaActiva = celdaActiva?.areaIndex === realIndex;
   const tieneDatos = fila.peso_total > 0;
@@ -94,13 +83,14 @@ const ScrapRow = React.memo(({
         <strong style={styles.machineText}>{fila.maquina_real}</strong>
       </td>
 
-      {tiposScrap.map(tipo => {
-        const valor = fila[tipo.columna_db];
-        const celdaEstaActiva = estaActiva && campoBasculaActivo === tipo.columna_db;
+      {materialesFlat.map(mat => {
+        const inputKey = `material_${mat.id}`;
+        const valor = fila[inputKey];
+        const celdaEstaActiva = estaActiva && campoBasculaActivo === inputKey;
         const tieneValor = valor > 0;
 
         return (
-          <td key={tipo.columna_db} style={{
+          <td key={mat.id} style={{
             ...styles.dataCell,
             ...(celdaEstaActiva ? styles.activeColumn : {})
           }}>
@@ -108,19 +98,19 @@ const ScrapRow = React.memo(({
               <input
                 type="number"
                 step="0.001"
-                value={valor === 0 ? '' : valor}
-                onChange={(e) => onChange(realIndex, tipo.columna_db, e.target.value)}
-                onClick={() => onFocus(realIndex, tipo.columna_db, fila.area_real, fila.maquina_real)}
-                onFocus={() => onFocus(realIndex, tipo.columna_db, fila.area_real, fila.maquina_real)}
+                value={valor === 0 || valor === undefined ? '' : valor}
+                onChange={(e) => onChange(realIndex, inputKey, e.target.value)}
+                onClick={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
+                onFocus={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
                 style={{
                   ...styles.inputCell,
                   ...(tieneValor ? styles.hasData : {}),
                   ...(celdaEstaActiva ? styles.activeInput : {}),
-                  ...(pesoBloqueado && celdaEstaActiva ? styles.frozenInput : {}), 
+                  ...(pesoBloqueado && celdaEstaActiva ? styles.frozenInput : {}),
                   ...(pesoBloqueado && !celdaEstaActiva ? styles.disabledInput : {})
                 }}
                 placeholder="-"
-                readOnly={pesoBloqueado} 
+                readOnly={pesoBloqueado}
               />
             </div>
           </td>
@@ -133,29 +123,32 @@ const ScrapRow = React.memo(({
     </tr>
   );
 }, (prevProps, nextProps) => {
-  if (prevProps.fila === nextProps.fila && 
-      prevProps.campoBasculaActivo === nextProps.campoBasculaActivo &&
-      prevProps.pesoBloqueado === nextProps.pesoBloqueado &&
-      prevProps.animate === nextProps.animate) {
-      
-      const prevActive = prevProps.celdaActiva?.areaIndex === prevProps.realIndex;
-      const nextActive = nextProps.celdaActiva?.areaIndex === nextProps.realIndex;
-      
-      return prevActive === nextActive;
+  if (prevProps.fila === nextProps.fila &&
+    prevProps.campoBasculaActivo === nextProps.campoBasculaActivo &&
+    prevProps.pesoBloqueado === nextProps.pesoBloqueado &&
+    prevProps.animate === nextProps.animate) {
+
+    const prevActive = prevProps.celdaActiva?.areaIndex === prevProps.realIndex;
+    const nextActive = nextProps.celdaActiva?.areaIndex === nextProps.realIndex;
+
+    return prevActive === nextActive;
   }
   return false;
 });
 
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete }) => {
   const { addToast } = useToast();
-  
+
   const [config, setConfig] = useState(null);
+  const [materialesFlat, setMaterialesFlat] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [tablaData, setTablaData] = useState([]);
-  
+
   const [filtroArea, setFiltroArea] = useState('');
   const [filtroMaquina, setFiltroMaquina] = useState('');
-  const [campoBasculaActivo, setCampoBasculaActivo] = useState('peso_cobre');
+  
+  const [campoBasculaActivo, setCampoBasculaActivo] = useState(''); 
+  
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [triggerAnimation, setTriggerAnimation] = useState(false);
@@ -176,9 +169,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const pesoBloqueadoRef = useRef(pesoBloqueado);
   const campoBasculaActivoRef = useRef(campoBasculaActivo);
   const pesoCongeladoRef = useRef(0);
-  
   const lockedTargetRef = useRef(null);
-  
+
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
   useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
   useEffect(() => { pesoBloqueadoRef.current = pesoBloqueado; }, [pesoBloqueado]);
@@ -186,44 +178,79 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   useEffect(() => {
     if (pesoBloqueado) {
-        lockedTargetRef.current = {
-            index: maquinaSeleccionadaRef.current.index !== null ? maquinaSeleccionadaRef.current.index : celdaActivaRef.current?.areaIndex,
-            field: campoBasculaActivoRef.current
-        };
+      lockedTargetRef.current = {
+        index: maquinaSeleccionadaRef.current.index !== null ? maquinaSeleccionadaRef.current.index : celdaActivaRef.current?.areaIndex,
+        field: campoBasculaActivoRef.current
+      };
     } else {
-        lockedTargetRef.current = null;
+      lockedTargetRef.current = null;
     }
   }, [pesoBloqueado]);
 
-  const tiposScrap = useMemo(() => {
-    return config?.tipos_scrap ? Object.values(config.tipos_scrap).flat() : [];
-  }, [config]);
+  // Función auxiliar para normalizar tipos de scrap
+  const normalizarTiposScrap = (tiposData) => {
+    let flatMats = [];
+    
+    if (!tiposData) return flatMats;
+    
+    // LÓGICA ACTUALIZADA: Detectar si es array o objeto
+    if (Array.isArray(tiposData)) {
+      flatMats = tiposData;
+    } else {
+      // Fallback para estructura antigua agrupada
+      Object.values(tiposData).forEach(grupo => {
+        if (Array.isArray(grupo)) {
+          flatMats = [...flatMats, ...grupo];
+        }
+      });
+    }
+    
+    // Ordenar por orden si existe
+    if (flatMats.length > 0 && flatMats[0].orden !== undefined) {
+      flatMats.sort((a, b) => a.orden - b.orden);
+    }
+    
+    return flatMats;
+  };
 
+  // Carga Inicial Dinámica
   useEffect(() => {
     let mounted = true;
     const initData = async () => {
       try {
         const configData = await apiClient.getRegistrosConfig();
         if (!mounted) return;
+        
         setConfig(configData);
+
+        // Normalizar tipos de scrap
+        const flatMats = normalizarTiposScrap(configData.tipos_scrap);
+        setMaterialesFlat(flatMats);
+        
+        if (flatMats.length > 0) {
+          setCampoBasculaActivo(`material_${flatMats[0].id}`);
+        }
 
         if (configData?.areas_maquinas) {
           const data = [];
           const areas = [];
+          
           Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
             areas.push(areaNombre);
             maquinas.forEach(maquina => {
-              data.push({
+              const row = {
                 area_real: areaNombre,
                 maquina_real: maquina.maquina_nombre,
-                peso_cobre: 0, peso_cobre_estanado: 0, peso_purga_pvc: 0, peso_purga_pe: 0,
-                peso_purga_pur: 0, peso_purga_pp: 0, peso_cable_pvc: 0, peso_cable_pe: 0,
-                peso_cable_pur: 0, peso_cable_pp: 0, peso_cable_aluminio: 0,
-                peso_cable_estanado_pvc: 0, peso_cable_estanado_pe: 0,
-                peso_total: 0, conexion_bascula: false
+                peso_total: 0,
+                conexion_bascula: false
+              };
+              flatMats.forEach(m => {
+                row[`material_${m.id}`] = 0;
               });
+              data.push(row);
             });
           });
+          
           setTablaData(data);
           setAreasDisponibles(areas);
         }
@@ -239,7 +266,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     };
     initData();
     return () => { mounted = false; };
-  }, []); 
+  }, [addToast, onLoadComplete]); // ✅ CORREGIDO: Dependencias agregadas
 
   useEffect(() => {
     if (!config?.areas_maquinas || !filtroArea) {
@@ -248,9 +275,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
     const maquinas = config.areas_maquinas[filtroArea]?.map(m => m.maquina_nombre) || [];
     setMaquinasDisponibles(maquinas);
-    if (maquinas.length === 1) {
-      setFiltroMaquina(maquinas[0]);
-    } else {
+    if (maquinas.length !== 1) {
       setFiltroMaquina('');
     }
   }, [filtroArea, config]);
@@ -270,26 +295,24 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
-  const calcularTotalFila = (fila) => {
-    const camposPeso = [
-      'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
-      'peso_purga_pur', 'peso_purga_pp', 'peso_cable_pvc', 'peso_cable_pe',
-      'peso_cable_pur', 'peso_cable_pp', 'peso_cable_aluminio',
-      'peso_cable_estanado_pvc', 'peso_cable_estanado_pe'
-    ];
-    return safeSum(camposPeso.map(c => fila[c]));
-  };
+  // ✅ CORREGIDO: Envuelto en useCallback para uso estable en dependencias
+  const calcularTotalFila = useCallback((fila) => {
+    let total = 0;
+    materialesFlat.forEach(m => {
+      const val = parseFloat(fila[`material_${m.id}`]) || 0;
+      total += val;
+    });
+    return round3(total);
+  }, [materialesFlat]);
 
-  const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado) => {
+  // Manejo de Báscula
+  const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
     const currentMaquinaSel = maquinaSeleccionadaRef.current;
     const currentCelda = celdaActivaRef.current;
-    
     const campoRealActivo = campoBasculaActivoRef.current;
 
-    if (campoDestinoEnviado && campoDestinoEnviado !== campoRealActivo) {
-        return; 
-    }
+    if (campoDestinoEnviado && campoDestinoEnviado !== campoRealActivo) return;
 
     const campoDestino = campoRealActivo;
     if (!campoDestino) return;
@@ -302,57 +325,57 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
 
     if (currentBloqueado && lockedTargetRef.current) {
-        const locked = lockedTargetRef.current;
-        if (locked.index !== targetIndex || locked.field !== campoDestino) {
-            return; 
-        }
+      const locked = lockedTargetRef.current;
+      if (locked.index !== targetIndex || locked.field !== campoDestino) return;
     }
 
     let nuevoValor = 0;
-
     if (currentBloqueado) {
-        nuevoValor = pesoCongeladoRef.current || 0;
+      nuevoValor = pesoCongeladoRef.current || 0;
     } else {
-        if (pesoInput === undefined || pesoInput === null) return;
-        nuevoValor = parseFloat(pesoInput) || 0;
-        pesoCongeladoRef.current = nuevoValor; 
+      if (pesoInput === undefined || pesoInput === null) return;
+      nuevoValor = parseFloat(pesoInput) || 0;
+      pesoCongeladoRef.current = nuevoValor;
     }
-    
+
     nuevoValor = round3(nuevoValor);
 
     if (targetIndex !== -1) {
       setTablaData(prevData => {
         const valorActual = prevData[targetIndex][campoDestino];
-        
-        if (Math.abs(valorActual - nuevoValor) < 0.0001) {
-            return prevData; 
-        }
+        if (Math.abs(valorActual - nuevoValor) < 0.0001) return prevData;
 
         const newData = [...prevData];
         const filaActualizada = { ...newData[targetIndex] };
-        
+
         filaActualizada[campoDestino] = nuevoValor;
-        filaActualizada.conexion_bascula = nuevoValor > 0;
+        filaActualizada.conexion_bascula = esAutomatico;
+        // Ahora calcularTotalFila es estable y se puede usar
         filaActualizada.peso_total = calcularTotalFila(filaActualizada);
-        
+
         newData[targetIndex] = filaActualizada;
         return newData;
       });
     }
-  }, []);
+  }, [calcularTotalFila]); // ✅ CORREGIDO: calcularTotalFila agregado como dependencia
 
-  const handleMaterialChange = (newMaterial) => {
-    setCampoBasculaActivo(newMaterial);
+  const handleMaterialChange = (newMaterialKey) => {
+    setCampoBasculaActivo(newMaterialKey);
     if (celdaActiva && celdaActiva.areaIndex !== null) {
-        setCeldaActiva(prev => ({ ...prev, campo: newMaterial }));
+      setCeldaActiva(prev => ({ ...prev, campo: newMaterialKey }));
     }
   };
 
+  const limpiarFiltros = () => {
+    setFiltroArea('');
+    setFiltroMaquina('');
+    setMaquinaSeleccionada({ area: '', maquina: '', index: null });
+    setCeldaActiva(null);
+  };
+
   const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
-    if (celdaActivaRef.current?.areaIndex === areaIndex && campoBasculaActivoRef.current === campo) {
-        return;
-    }
-    
+    if (celdaActivaRef.current?.areaIndex === areaIndex && campoBasculaActivoRef.current === campo) return;
+
     setCeldaActiva({ areaIndex, campo });
     setCampoBasculaActivo(campo);
     setMaquinaSeleccionada({ area, maquina, index: areaIndex });
@@ -362,15 +385,24 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
     setTablaData(prev => {
-      const val = round3(parseFloat(valor) || 0); 
+      const val = round3(parseFloat(valor) || 0);
       if (prev[areaIndex][campo] === val) return prev;
 
       const newData = [...prev];
-      newData[areaIndex] = {
-        ...newData[areaIndex],
-        [campo]: val,
-        peso_total: calcularTotalFila({ ...newData[areaIndex], [campo]: val })
-      };
+      const fila = { ...newData[areaIndex] };
+      fila[campo] = val;
+      
+      // Recalcular total manualmente para evitar deps circulares complejas
+      let total = 0;
+      Object.keys(fila).forEach(k => {
+        if (k.startsWith('material_')) {
+          total += parseFloat(fila[k]) || 0;
+        }
+      });
+      
+      fila.peso_total = round3(total);
+      fila.conexion_bascula = false;
+      newData[areaIndex] = fila;
       return newData;
     });
   }, []);
@@ -378,26 +410,36 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.turno) { addToast('Seleccione el turno', 'warning'); return; }
+    
     const filasConPeso = tablaData.filter(fila => fila.peso_total > 0);
     if (filasConPeso.length === 0) { addToast('Ingrese al menos un peso en alguna fila', 'warning'); return; }
 
     setEnviando(true);
     try {
       const promises = filasConPeso.map(fila => {
+        const detalles = [];
+        materialesFlat.forEach(mat => {
+          const key = `material_${mat.id}`;
+          const peso = fila[key];
+          if (peso > 0) {
+            detalles.push({
+              id: mat.id,
+              peso: peso
+            });
+          }
+        });
+
         const datosEnvio = {
-            turno: formData.turno,
-            fecha_registro: formData.fecha,
-            area_real: fila.area_real,
-            maquina_real: fila.maquina_real,
-            conexion_bascula: fila.conexion_bascula || false,
-            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-            observaciones: 'Registro masivo',
-            material_seleccionado: campoBasculaActivo, 
-            peso_actual: fila[campoBasculaActivo] || 0,
-            ...fila
+          turno: formData.turno,
+          area_real: fila.area_real,
+          maquina_real: fila.maquina_real,
+          conexion_bascula: fila.conexion_bascula || false,
+          observaciones: 'Registro masivo',
+          detalles: detalles
         };
         return apiClient.createRegistroScrap(datosEnvio);
       });
+
       await Promise.all(promises);
       if (onRegistroCreado) onRegistroCreado();
     } catch (error) {
@@ -409,43 +451,36 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const datosFiltrados = useMemo(() => {
     return tablaData.filter(fila => {
-        if (filtroArea && fila.area_real !== filtroArea) return false;
-        if (filtroMaquina && fila.maquina_real !== filtroMaquina) return false;
-        return true;
+      if (filtroArea && fila.area_real !== filtroArea) return false;
+      return true;
     });
-  }, [tablaData, filtroArea, filtroMaquina]);
+  }, [tablaData, filtroArea]);
 
   const totales = useMemo(() => {
     const acc = {};
-    const camposPeso = [
-      'peso_cobre', 'peso_cobre_estanado', 'peso_purga_pvc', 'peso_purga_pe',
-      'peso_purga_pur', 'peso_purga_pp', 'peso_cable_pvc', 'peso_cable_pe',
-      'peso_cable_pur', 'peso_cable_pp', 'peso_cable_aluminio',
-      'peso_cable_estanado_pvc', 'peso_cable_estanado_pe'
-    ];
-
-    camposPeso.forEach(c => acc[c] = 0);
-    let generalInt = 0; 
+    materialesFlat.forEach(m => acc[`material_${m.id}`] = 0);
+    let generalInt = 0;
 
     tablaData.forEach(fila => {
-        camposPeso.forEach(c => {
-            acc[c] += Math.round((parseFloat(fila[c]) || 0) * 1000);
-        });
-        generalInt += Math.round((parseFloat(fila.peso_total) || 0) * 1000);
+      materialesFlat.forEach(m => {
+        const key = `material_${m.id}`;
+        acc[key] = (acc[key] || 0) + Math.round((parseFloat(fila[key]) || 0) * 1000);
+      });
+      generalInt += Math.round((parseFloat(fila.peso_total) || 0) * 1000);
     });
 
-    camposPeso.forEach(c => acc[c] = acc[c] / 1000);
+    Object.keys(acc).forEach(key => acc[key] = acc[key] / 1000);
     acc.general = generalInt / 1000;
 
     return acc;
-  }, [tablaData]); 
+  }, [tablaData, materialesFlat]);
 
   if (loading) {
-    return <div style={styles.loading}><LoadingSpinner message="Cargando configuración de máquinas..." /></div>;
+    return <div style={styles.loading}><LoadingSpinner message="Cargando configuración..." /></div>;
   }
 
-  const filasConPeso = tablaData.filter(fila => fila.peso_total > 0).length;
-  const isSaveDisabled = enviando || !formData.turno || filasConPeso === 0;
+  const numFilasConPeso = tablaData.filter(fila => fila.peso_total > 0).length;
+  const isSaveDisabled = enviando || !formData.turno || numFilasConPeso === 0;
 
   return (
     <div style={styles.container}>
@@ -477,7 +512,9 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Material Activo</label>
                 <select value={campoBasculaActivo} onChange={(e) => handleMaterialChange(e.target.value)} style={styles.selectPrimary}>
-                  {tiposScrap.map(t => <option key={t.columna_db} value={t.columna_db}>{t.tipo_nombre}</option>)}
+                  {materialesFlat.map(m => (
+                    <option key={m.id} value={`material_${m.id}`}>{m.tipo_nombre}</option>
+                  ))}
                 </select>
               </div>
               <div style={styles.inputGroup}>
@@ -488,42 +525,54 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 </select>
               </div>
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Filtrar por Máquina</label>
+                <label style={styles.label}>Seleccionar Máquina</label>
                 <select value={filtroMaquina} onChange={(e) => setFiltroMaquina(e.target.value)} style={styles.select} disabled={!filtroArea}>
-                  <option value="">Todas las máquinas</option>
+                  <option value="">Seleccionar...</option>
                   {maquinasDisponibles.map(maquina => <option key={maquina} value={maquina}>{maquina}</option>)}
                 </select>
               </div>
+
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Control Báscula</label>
-                <SmoothButton type="button" onClick={() => setPesoBloqueado(!pesoBloqueado)} style={pesoBloqueado ? styles.btnLocked : styles.btnUnlocked} variant={pesoBloqueado ? 'destructive' : 'primary'}>
-                  {pesoBloqueado ? 'PESO CONGELADO' : 'LECTURA ACTIVA'}
-                </SmoothButton>
+                <label style={styles.label}>Controles</label>
+                <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                  <SmoothButton
+                    type="button"
+                    onClick={() => setPesoBloqueado(!pesoBloqueado)}
+                    style={{
+                      ...(pesoBloqueado ? styles.btnLocked : styles.btnUnlocked),
+                      flex: 1, height: '42px', width: 'auto', fontSize: '0.7rem', padding: '0 4px'
+                    }}
+                    variant={pesoBloqueado ? 'destructive' : 'primary'}
+                    title="Congelar/Descongelar el peso de la báscula"
+                  >
+                    {pesoBloqueado ? 'CONGELADO' : 'LECTURA'}
+                  </SmoothButton>
+
+                  <SmoothButton
+                    type="button"
+                    onClick={limpiarFiltros}
+                    variant="secondary"
+                    disabled={!filtroArea && !filtroMaquina}
+                    style={{ flex: 1, height: '42px', width: 'auto', justifyContent: 'center', fontSize: '0.7rem', padding: '0 4px' }}
+                    title="Limpiar filtros de área y máquina"
+                  >
+                    LIMPIAR
+                  </SmoothButton>
+                </div>
               </div>
             </div>
-            
-            <div style={{...styles.inputGroup, marginTop: spacing.md}}>
+
+            <div style={{ ...styles.inputGroup, marginTop: spacing.md }}>
               <label style={styles.label}>Máquina Fijada</label>
               <div style={styles.fixedMachineDisplay}>
                 {maquinaSeleccionada.maquina ? (
                   <>
                     <strong style={styles.fixedMachineName}>{maquinaSeleccionada.maquina}</strong>
-                    
-                    {/* INDICADOR DE PESO EN MÁQUINA FIJADA */}
-                    <span style={{
-                        ...styles.fixedMachineArea, 
-                        backgroundColor: colors.primary, 
-                        color: '#fff',
-                        marginLeft: '4px',
-                        border: 'none',
-                        minWidth: '70px',
-                        textAlign: 'center'
-                    }}>
-                        {(maquinaSeleccionada.index !== null && tablaData[maquinaSeleccionada.index] && tablaData[maquinaSeleccionada.index][campoBasculaActivo] 
-                            ? tablaData[maquinaSeleccionada.index][campoBasculaActivo].toFixed(3) 
-                            : '0.000')} kg
+                    <span style={{ ...styles.fixedMachineArea, backgroundColor: colors.primary, color: '#fff', marginLeft: '4px', border: 'none', minWidth: '70px', textAlign: 'center' }}>
+                      {(maquinaSeleccionada.index !== null && tablaData[maquinaSeleccionada.index] && tablaData[maquinaSeleccionada.index][campoBasculaActivo]
+                        ? tablaData[maquinaSeleccionada.index][campoBasculaActivo].toFixed(3)
+                        : '0.000')} kg
                     </span>
-
                     <span style={styles.fixedMachineArea}>{maquinaSeleccionada.area}</span>
                     <button type="button" onClick={() => { setMaquinaSeleccionada({ area: '', maquina: '', index: null }); setCeldaActiva(null); }} style={styles.unfixButton} title="Liberar máquina">✕</button>
                   </>
@@ -539,11 +588,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           <div style={styles.tableHeader}>
             <div style={styles.tableTitleSection}>
               <h3 style={styles.sectionTitle}>Datos de Producción</h3>
-              <p style={styles.tableSubtitle}>{filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}{filtroMaquina ? ` | Máquina: ${filtroMaquina}` : ''}</p>
+              <p style={styles.tableSubtitle}>{filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}{filtroMaquina ? ` | Seleccionada: ${filtroMaquina}` : ''}</p>
             </div>
             <div style={styles.stats}>
               <div style={styles.statItem}><span style={styles.statLabel}>Máquinas</span><strong style={styles.statValue}><AnimatedCounter value={datosFiltrados.length} duration={500} decimals={0} /></strong></div>
-              <div style={styles.statItem}><span style={styles.statLabel}>Con Datos</span><strong style={{ ...styles.statValue, color: colors.success }}><AnimatedCounter value={filasConPeso} duration={500} decimals={0} /></strong></div>
+              <div style={styles.statItem}><span style={styles.statLabel}>Con Datos</span><strong style={{ ...styles.statValue, color: colors.success }}><AnimatedCounter value={numFilasConPeso} duration={500} decimals={0} /></strong></div>
               <div style={styles.statItem}><span style={styles.statLabel}>Total Kg</span><strong style={{ ...styles.statValue, color: colors.primary }}><AnimatedCounter value={totales.general} decimals={3} /></strong></div>
             </div>
           </div>
@@ -554,14 +603,17 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 <tr>
                   <th style={styles.fixedHeaderArea}>ÁREA</th>
                   <th style={styles.fixedHeaderMachine}>MÁQUINA</th>
-                  {tiposScrap.map(tipo => (
-                    <th key={tipo.columna_db} style={{ ...styles.tableHeaderCell, ...(campoBasculaActivo === tipo.columna_db ? styles.activeColumnHeader : {}) }}>
-                      <div style={styles.columnHeader}>
-                        <span style={styles.columnName}>{tipo.tipo_nombre}</span>
-                        {campoBasculaActivo === tipo.columna_db && <div style={styles.activeColumnIndicator}></div>}
-                      </div>
-                    </th>
-                  ))}
+                  {materialesFlat.map(mat => {
+                    const key = `material_${mat.id}`;
+                    return (
+                      <th key={mat.id} style={{ ...styles.tableHeaderCell, ...(campoBasculaActivo === key ? styles.activeColumnHeader : {}) }}>
+                        <div style={styles.columnHeader}>
+                          <span style={styles.columnName}>{mat.tipo_nombre}</span>
+                          {campoBasculaActivo === key && <div style={styles.activeColumnIndicator}></div>}
+                        </div>
+                      </th>
+                    );
+                  })}
                   <th style={styles.fixedHeaderTotal}>TOTAL</th>
                 </tr>
               </thead>
@@ -569,14 +621,26 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 {datosFiltrados.map((fila, index) => {
                   const realIndex = tablaData.findIndex(item => item.area_real === fila.area_real && item.maquina_real === fila.maquina_real);
                   return (
-                    <ScrapRow key={`${fila.area_real}-${fila.maquina_real}`} fila={fila} realIndex={realIndex} tiposScrap={tiposScrap} campoBasculaActivo={campoBasculaActivo} celdaActiva={celdaActiva} pesoBloqueado={pesoBloqueado} onFocus={handleCellFocus} onChange={handleInputChangeTabla} animate={triggerAnimation} indexDisplay={index} />
+                    <ScrapRow 
+                      key={`${fila.area_real}-${fila.maquina_real}`} 
+                      fila={fila} 
+                      realIndex={realIndex} 
+                      materialesFlat={materialesFlat} 
+                      campoBasculaActivo={campoBasculaActivo} 
+                      celdaActiva={celdaActiva} 
+                      pesoBloqueado={pesoBloqueado} 
+                      onFocus={handleCellFocus} 
+                      onChange={handleInputChangeTabla} 
+                      animate={triggerAnimation} 
+                      indexDisplay={index} 
+                    />
                   );
                 })}
                 <tr style={styles.totalsRow}>
                   <td style={styles.fixedTotalArea} colSpan="2">TOTALES</td>
-                  {tiposScrap.map(tipo => (
-                    <td key={tipo.columna_db} style={styles.columnTotalCell}>
-                      <strong style={styles.columnTotalValue}><AnimatedCounter value={totales[tipo.columna_db]} duration={500} decimals={3} /></strong>
+                  {materialesFlat.map(mat => (
+                    <td key={mat.id} style={styles.columnTotalCell}>
+                      <strong style={styles.columnTotalValue}><AnimatedCounter value={totales[`material_${mat.id}`]} duration={500} decimals={3} /></strong>
                     </td>
                   ))}
                   <td style={styles.fixedTotalValue}><strong style={styles.grandTotalValue}><AnimatedCounter value={totales.general} decimals={3} /></strong></td>
@@ -587,7 +651,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         </CardTransition>
 
         <CardTransition delay={300} style={styles.actions}>
-          <div style={styles.summary}><span style={styles.summaryCount}><AnimatedCounter value={filasConPeso} duration={500} decimals={0} /> registros listos | Total: <AnimatedCounter value={totales.general} decimals={3} /> kg</span></div>
+          <div style={styles.summary}><span style={styles.summaryCount}><AnimatedCounter value={numFilasConPeso} duration={500} decimals={0} /> registros listos | Total: <AnimatedCounter value={totales.general} decimals={3} /> kg</span></div>
           <div style={styles.actionButtons}>
             <SmoothButton type="button" onClick={onCancelar} style={styles.btnCancel} variant="secondary">Cancelar</SmoothButton>
             <SmoothButton type="submit" disabled={isSaveDisabled} style={{ ...styles.btnSave, ...(isSaveDisabled ? styles.btnDisabled : {}) }}>{enviando ? 'Guardando...' : 'Guardar Todo'}</SmoothButton>
@@ -598,7 +662,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   );
 };
 
-// ... CONSTANTES y ESTILOS (Mismos que los definidos en turnos anteriores para consistencia visual) ...
 const COL_AREA_WIDTH = '100px';
 const COL_MACHINE_WIDTH = '120px';
 const COL_TOTAL_WIDTH = '100px';
@@ -607,522 +670,75 @@ const COL_DATA_MIN_WIDTH = '110px';
 const baseHeaderStyle = { backgroundColor: colors.gray800, color: colors.surface, padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold, textAlign: 'center', borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray700, textTransform: 'uppercase', letterSpacing: '0.05em', position: 'sticky', top: 0, zIndex: 10, height: '40px', boxSizing: 'border-box' };
 
 const styles = {
-  container: { 
-    padding: spacing.lg, 
-    backgroundColor: colors.background, 
-    minHeight: '100vh', 
-    fontFamily: typography.fontFamily 
-  },
-  form: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: spacing.xl 
-  },
-  controls: { 
-    display: 'grid', 
-    gridTemplateColumns: '1fr 1.2fr', 
-    gap: spacing.lg, 
-    alignItems: 'start' 
-  },
-  section: { 
-    ...baseComponents.card, 
-    padding: spacing.lg 
-  },
-  sectionTitle: { 
-    fontSize: typography.sizes.lg, 
-    fontWeight: typography.weights.semibold, 
-    color: colors.gray700, 
-    margin: `0 0 ${spacing.md} 0` 
-  },
-  configGrid: { 
-    display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-    gap: spacing.md, 
-    alignItems: 'start' 
-  },
-  inputGroup: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: spacing.xs, 
-    minHeight: '80px' 
-  },
-  label: { 
-    fontSize: typography.sizes.sm, 
-    fontWeight: typography.weights.semibold, 
-    color: colors.gray700, 
-    marginBottom: spacing.xs, 
-    height: '20px' 
-  },
-  input: { 
-    ...baseComponents.input, 
-    height: '42px' 
-  },
-  select: { 
-    ...baseComponents.select, 
-    height: '42px', 
-    paddingRight: '40px' 
-  },
-  selectPrimary: { 
-    ...baseComponents.select, 
-    height: '42px', 
-    borderWidth: '2px', 
-    borderColor: colors.primary, 
-    backgroundColor: colors.primaryLight, 
-    paddingRight: '40px' 
-  },
-  btnLocked: { 
-    height: '42px', 
-    width: '100%', 
-    justifyContent: 'center' 
-  },
-  btnUnlocked: { 
-    height: '42px', 
-    width: '100%', 
-    justifyContent: 'center' 
-  },
-  dataSection: { 
-    ...baseComponents.card, 
-    padding: spacing.lg 
-  },
-  tableHeader: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start', 
-    marginBottom: spacing.md, 
-    flexWrap: 'wrap', 
-    gap: spacing.md 
-  },
-  tableTitleSection: { 
-    flex: 1 
-  },
-  tableSubtitle: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.gray600, 
-    marginTop: spacing.xs 
-  },
-  stats: { 
-    display: 'flex', 
-    gap: spacing.md 
-  },
-  statItem: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    alignItems: 'center', 
-    padding: spacing.sm, 
-    backgroundColor: colors.gray50, 
-    borderRadius: radius.md, 
-    minWidth: '70px' 
-  },
-  statLabel: { 
-    fontSize: typography.sizes.xs, 
-    color: colors.gray600, 
-    fontWeight: typography.weights.semibold, 
-    textTransform: 'uppercase' 
-  },
-  statValue: { 
-    fontSize: typography.sizes.base, 
-    fontWeight: typography.weights.bold 
-  },
-  tableContainer: { 
-    overflow: 'auto', 
-    maxHeight: '600px', 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray200, 
-    borderRadius: radius.md, 
-    boxShadow: shadows.sm 
-  },
-  table: { 
-    width: '100%', 
-    borderCollapse: 'collapse', 
-    minWidth: '1200px', 
-    backgroundColor: colors.surface 
-  },
-  fixedHeaderArea: { 
-    ...baseHeaderStyle, 
-    left: 0, 
-    width: COL_AREA_WIDTH, 
-    minWidth: COL_AREA_WIDTH, 
-    maxWidth: COL_AREA_WIDTH, 
-    zIndex: 20 
-  },
-  fixedHeaderMachine: { 
-    ...baseHeaderStyle, 
-    left: COL_AREA_WIDTH, 
-    width: COL_MACHINE_WIDTH, 
-    minWidth: COL_MACHINE_WIDTH, 
-    maxWidth: COL_MACHINE_WIDTH, 
-    zIndex: 20 
-  },
-  tableHeaderCell: { 
-    ...baseHeaderStyle, 
-    minWidth: COL_DATA_MIN_WIDTH 
-  },
-  fixedHeaderTotal: { 
-    ...baseHeaderStyle, 
-    right: 0, 
-    width: COL_TOTAL_WIDTH, 
-    minWidth: COL_TOTAL_WIDTH, 
-    maxWidth: COL_TOTAL_WIDTH, 
-    backgroundColor: colors.primary, 
-    borderColor: colors.primary, 
-    zIndex: 20 
-  },
-  activeColumnHeader: { 
-    backgroundColor: colors.primary, 
-    borderColor: colors.primary 
-  },
-  columnHeader: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '2px', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    height: '100%' 
-  },
-  columnName: { 
-    fontSize: typography.sizes.xs, 
-    fontWeight: typography.weights.bold, 
-    lineHeight: 1.2 
-  },
-  activeColumnIndicator: { 
-    width: '3px', 
-    height: '3px', 
-    backgroundColor: colors.surface, 
-    borderRadius: '50%', 
-    marginTop: '1px' 
-  },
-  tableRow: { 
-    borderBottom: `1px solid ${colors.gray200}`, 
-    transition: 'all 0.2s ease', 
-    ':hover': { 
-      backgroundColor: colors.gray50 
-    } 
-  },
-  activeRow: { 
-    backgroundColor: colors.primaryLight, 
-    borderLeft: `3px solid ${colors.primary}` 
-  },
-  dataRow: { 
-    backgroundColor: colors.secondaryLight + '15' 
-  },
-  areaCell: { 
-    padding: spacing.sm, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray200, 
-    textAlign: 'center', 
-    backgroundColor: colors.gray50, 
-    position: 'sticky', 
-    left: 0, width: COL_AREA_WIDTH, 
-    minWidth: COL_AREA_WIDTH, 
-    maxWidth: COL_AREA_WIDTH, 
-    zIndex: 15, 
-    height: '48px', 
-    boxSizing: 'border-box' 
-  },
-  machineCell: { 
-    padding: spacing.sm, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray200, 
-    textAlign: 'center', 
-    backgroundColor: colors.gray50, 
-    position: 'sticky', 
-    left: COL_AREA_WIDTH, 
-    width: COL_MACHINE_WIDTH, 
-    minWidth: COL_MACHINE_WIDTH, 
-    maxWidth: COL_MACHINE_WIDTH, 
-    zIndex: 15, 
-    height: '48px', 
-    boxSizing: 'border-box' 
-  },
-  dataCell: { 
-    padding: spacing.xs, 
-    borderWidth: '1px',
-    borderStyle: 'solid', 
-    borderColor: colors.gray200, 
-    textAlign: 'center', 
-    minWidth: COL_DATA_MIN_WIDTH, 
-    height: '48px' 
-  },
-  totalCell: { 
-    padding: spacing.sm, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray200, 
-    textAlign: 'center', 
-    backgroundColor: colors.gray50, 
-    fontWeight: typography.weights.semibold, 
-    position: 'sticky', 
-    right: 0, 
-    width: COL_TOTAL_WIDTH, 
-    minWidth: COL_TOTAL_WIDTH, 
-    maxWidth: COL_TOTAL_WIDTH, 
-    zIndex: 15, 
-    height: '48px', 
-    boxSizing: 'border-box' 
-  },
-  areaContent: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    alignItems: 'center', 
-    gap: spacing.xs 
-  },
-  areaText: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.gray700, 
-    fontWeight: typography.weights.semibold, 
-    textTransform: 'uppercase' 
-  },
-  activePulse: { 
-    width: '5px', 
-    height: '5px', 
-    backgroundColor: colors.primary, 
-    borderRadius: '50%', 
-    animation: 'pulse 1.5s infinite' 
-  },
-  machineText: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.gray800, 
-    fontWeight: typography.weights.semibold 
-  },
-  activeColumn: { 
-    backgroundColor: colors.primaryLight + '20' 
-  },
-  inputWrapper: { 
-    position: 'relative', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  inputCell: { 
-    width: '85px', 
-    padding: `0 ${spacing.sm}`, 
-    height: '30px', 
-    borderRadius: radius.sm, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray300, 
-    fontSize: typography.sizes.sm, 
-    fontFamily: typography.fontMono, 
-    backgroundColor: colors.surface, 
-    transition: 'all 0.2s ease', 
-    outline: 'none', 
-    boxSizing: 'border-box', 
-    textAlign: 'right', 
-    lineHeight: '30px', 
-    ':focus': { 
-      borderColor: colors.primary, 
-      boxShadow: `0 0 0 2px ${colors.primaryLight}` 
-    } 
-  },
-  frozenInput: { 
-    backgroundColor: colors.info + '20', 
-    borderColor: colors.info, 
-    color: colors.gray800, 
-    fontWeight: 'bold' 
-  },
-  hasData: { 
-    backgroundColor: colors.secondaryLight, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.secondary, 
-    color: colors.gray800, 
-    fontWeight: typography.weights.bold 
-  },
-  activeInput: { 
-    borderColor: colors.primary, 
-    boxShadow: `0 0 0 2px ${colors.primaryLight}`, 
-    backgroundColor: colors.primaryLight 
-  },
-  disabledInput: { 
-    backgroundColor: colors.gray100, 
-    color: colors.gray500, 
-    cursor: 'not-allowed' 
-  },
-  totalValue: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.gray800 
-  },
-  totalsRow: { 
-    backgroundColor: colors.gray800, 
-    color: colors.surface, 
-    position: 'sticky', 
-    bottom: 0, 
-    zIndex: 20, 
-    height: '40px' 
-  },
-  fixedTotalArea: { 
-    padding: `${spacing.xs} ${spacing.md}`, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray700, 
-    textAlign: 'center', 
-    position: 'sticky', 
-    left: 0, 
-    width: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, 
-    minWidth: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, 
-    maxWidth: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, 
-    zIndex: 25, 
-    backgroundColor: colors.gray800 
-  },
-  fixedTotalValue: { 
-    padding: `${spacing.xs} ${spacing.md}`, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray700, 
-    textAlign: 'center', 
-    backgroundColor: colors.primary, 
-    position: 'sticky', 
-    right: 0, 
-    width: COL_TOTAL_WIDTH, 
-    minWidth: COL_TOTAL_WIDTH, 
-    maxWidth: COL_TOTAL_WIDTH, 
-    zIndex: 25 
-  },
-  columnTotalCell: { 
-    padding: spacing.xs, 
-    borderWidth: '1px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray700, 
-    textAlign: 'center', 
-    minWidth: COL_DATA_MIN_WIDTH 
-  },
-  columnTotalValue: { 
-    fontSize: typography.sizes.sm, 
-    fontWeight: typography.weights.bold 
-  },
-  grandTotalValue: { 
-    fontSize: typography.sizes.sm, 
-    fontWeight: typography.weights.bold 
-  },
-  actions: { 
-    ...baseComponents.card, 
-    padding: spacing.lg, 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    gap: spacing.lg, 
-    backgroundColor: colors.gray50, 
-    borderWidth: '2px', 
-    borderStyle: 'solid', 
-    borderColor: colors.gray200 
-  },
-  summary: { 
-    flex: 1 
-  },
-  summaryCount: { 
-    fontSize: typography.sizes.xl, 
-    fontWeight: typography.weights.bold, 
-    color: colors.gray900, 
-    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, 
-    WebkitBackgroundClip: 'text', 
-    WebkitTextFillColor: 'transparent', 
-    backgroundClip: 'text' 
-  },
-  actionButtons: { 
-    display: 'flex', 
-    gap: spacing.md, 
-    alignItems: 'center', 
-    flexShrink: 0 
-  },
-  btnCancel: { 
-    height: '52px', 
-    padding: `0 ${spacing.lg}`, 
-    minWidth: '140px', 
-    justifyContent: 'center', 
-    borderWidth: '2px', 
-    borderRadius: radius.lg, 
-    fontSize: typography.sizes.base 
-  },    
-  btnSave: { 
-    height: '52px', 
-    padding: `0 ${spacing.lg}`, 
-    minWidth: '200px', 
-    justifyContent: 'center', 
-    borderRadius: radius.lg, 
-    fontSize: typography.sizes.base, 
-    backgroundColor: colors.success, 
-    color: '#fff', ':hover': 
-    { 
-      backgroundColor: colors.secondaryHover 
-    } 
-  },
-  btnDisabled: { 
-    backgroundColor: '#E5E7EB', 
-    color: '#6B7280', 
-    border: `1px solid ${colors.gray300}`, 
-    cursor: 'not-allowed', 
-    boxShadow: 'none', 
-    opacity: 1, 
-    ':hover': { 
-      backgroundColor: '#E5E7EB', 
-      transform: 'none', 
-      boxShadow: 'none' 
-    } 
-  },
-  fixedMachineDisplay: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: spacing.xs, 
-    padding: spacing.sm, 
-    backgroundColor: colors.primaryLight, 
-    borderRadius: radius.md, 
-    borderWidth: '2px', 
-    borderStyle: 'solid', 
-    borderColor: colors.primary, 
-    minHeight: '42px' 
-  },
-  fixedMachineName: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.primary, 
-    fontWeight: typography.weights.bold, 
-    flex: 1 
-  },
-  fixedMachineArea: { 
-    fontSize: typography.sizes.xs, 
-    color: colors.gray600, 
-    backgroundColor: colors.gray100, 
-    padding: `${spacing.xs} ${spacing.sm}`, 
-    borderRadius: radius.sm 
-  },
-  unfixButton: { 
-    background: 'none', 
-    border: 'none', 
-    color: colors.error, 
-    cursor: 'pointer', 
-    fontSize: '0.8rem', 
-    fontWeight: 'bold', 
-    padding: spacing.xs, 
-    borderRadius: '50%', 
-    width: '24px', 
-    height: '24px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    ':hover': { 
-      backgroundColor: colors.error + '20' 
-    } 
-  },
-  noFixedMachine: { 
-    fontSize: typography.sizes.sm, 
-    color: colors.gray500,
-    fontStyle: 'italic', 
-    width: '100%', 
-    textAlign: 'center' 
-  },
-  loading: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    padding: spacing.xl, 
-    textAlign: 'center', 
-    color: colors.gray500, 
-    minHeight: '100%', 
-    flex: 1 
-  }
+  container: { padding: spacing.lg, backgroundColor: colors.background, minHeight: '100vh', fontFamily: typography.fontFamily },
+  form: { display: 'flex', flexDirection: 'column', gap: spacing.xl },
+  controls: { display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: spacing.lg, alignItems: 'start' },
+  section: { ...baseComponents.card, padding: spacing.lg },
+  sectionTitle: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.gray700, margin: `0 0 ${spacing.md} 0` },
+  configGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, alignItems: 'start' },
+  inputGroup: { display: 'flex', flexDirection: 'column', gap: spacing.xs, minHeight: '80px' },
+  label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.gray700, marginBottom: spacing.xs, height: '20px' },
+  input: { ...baseComponents.input, height: '42px' },
+  select: { ...baseComponents.select, height: '42px', paddingRight: '40px' },
+  selectPrimary: { ...baseComponents.select, height: '42px', borderWidth: '2px', borderColor: colors.primary, backgroundColor: colors.primaryLight, paddingRight: '40px' },
+  btnLocked: { height: '42px', width: '100%', justifyContent: 'center' },
+  btnUnlocked: { height: '42px', width: '100%', justifyContent: 'center' },
+  dataSection: { ...baseComponents.card, padding: spacing.lg },
+  tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md, flexWrap: 'wrap', gap: spacing.md },
+  tableTitleSection: { flex: 1 },
+  tableSubtitle: { fontSize: typography.sizes.sm, color: colors.gray600, marginTop: spacing.xs },
+  stats: { display: 'flex', gap: spacing.md },
+  statItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: spacing.sm, backgroundColor: colors.gray50, borderRadius: radius.md, minWidth: '70px' },
+  statLabel: { fontSize: typography.sizes.xs, color: colors.gray600, fontWeight: typography.weights.semibold, textTransform: 'uppercase' },
+  statValue: { fontSize: typography.sizes.base, fontWeight: typography.weights.bold },
+  tableContainer: { overflow: 'auto', maxHeight: '600px', borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, borderRadius: radius.md, boxShadow: shadows.sm },
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1200px', backgroundColor: colors.surface },
+  fixedHeaderArea: { ...baseHeaderStyle, left: 0, width: COL_AREA_WIDTH, minWidth: COL_AREA_WIDTH, maxWidth: COL_AREA_WIDTH, zIndex: 20 },
+  fixedHeaderMachine: { ...baseHeaderStyle, left: COL_AREA_WIDTH, width: COL_MACHINE_WIDTH, minWidth: COL_MACHINE_WIDTH, maxWidth: COL_MACHINE_WIDTH, zIndex: 20 },
+  tableHeaderCell: { ...baseHeaderStyle, minWidth: COL_DATA_MIN_WIDTH },
+  fixedHeaderTotal: { ...baseHeaderStyle, right: 0, width: COL_TOTAL_WIDTH, minWidth: COL_TOTAL_WIDTH, maxWidth: COL_TOTAL_WIDTH, backgroundColor: colors.primary, borderColor: colors.primary, zIndex: 20 },
+  activeColumnHeader: { backgroundColor: colors.primary, borderColor: colors.primary },
+  columnHeader: { display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', justifyContent: 'center', height: '100%' },
+  columnName: { fontSize: typography.sizes.xs, fontWeight: typography.weights.bold, lineHeight: 1.2 },
+  activeColumnIndicator: { width: '3px', height: '3px', backgroundColor: colors.surface, borderRadius: '50%', marginTop: '1px' },
+  tableRow: { borderBottom: `1px solid ${colors.gray200}`, transition: 'all 0.2s ease', ':hover': { backgroundColor: colors.gray50 } },
+  activeRow: { backgroundColor: colors.primaryLight, borderLeft: `3px solid ${colors.primary}` },
+  dataRow: { backgroundColor: colors.secondaryLight + '15' },
+  areaCell: { padding: spacing.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', backgroundColor: colors.gray50, position: 'sticky', left: 0, width: COL_AREA_WIDTH, minWidth: COL_AREA_WIDTH, maxWidth: COL_AREA_WIDTH, zIndex: 15, height: '48px', boxSizing: 'border-box' },
+  machineCell: { padding: spacing.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', backgroundColor: colors.gray50, position: 'sticky', left: COL_AREA_WIDTH, width: COL_MACHINE_WIDTH, minWidth: COL_MACHINE_WIDTH, maxWidth: COL_MACHINE_WIDTH, zIndex: 15, height: '48px', boxSizing: 'border-box' },
+  dataCell: { padding: spacing.xs, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', minWidth: COL_DATA_MIN_WIDTH, height: '48px' },
+  totalCell: { padding: spacing.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', backgroundColor: colors.gray50, fontWeight: typography.weights.semibold, position: 'sticky', right: 0, width: COL_TOTAL_WIDTH, minWidth: COL_TOTAL_WIDTH, maxWidth: COL_TOTAL_WIDTH, zIndex: 15, height: '48px', boxSizing: 'border-box' },
+  areaContent: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: spacing.xs },
+  areaText: { fontSize: typography.sizes.sm, color: colors.gray700, fontWeight: typography.weights.semibold, textTransform: 'uppercase' },
+  activePulse: { width: '5px', height: '5px', backgroundColor: colors.primary, borderRadius: '50%', animation: 'pulse 1.5s infinite' },
+  machineText: { fontSize: typography.sizes.sm, color: colors.gray800, fontWeight: typography.weights.semibold },
+  activeColumn: { backgroundColor: colors.primaryLight + '20' },
+  inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  inputCell: { width: '85px', padding: `0 ${spacing.sm}`, height: '30px', borderRadius: radius.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray300, fontSize: typography.sizes.sm, fontFamily: typography.fontMono, backgroundColor: colors.surface, transition: 'all 0.2s ease', outline: 'none', boxSizing: 'border-box', textAlign: 'right', lineHeight: '30px', ':focus': { borderColor: colors.primary, boxShadow: `0 0 0 2px ${colors.primaryLight}` } },
+  frozenInput: { backgroundColor: colors.info + '20', borderColor: colors.info, color: colors.gray800, fontWeight: 'bold' },
+  hasData: { backgroundColor: colors.secondaryLight, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.secondary, color: colors.gray800, fontWeight: typography.weights.bold },
+  activeInput: { borderColor: colors.primary, boxShadow: `0 0 0 2px ${colors.primaryLight}`, backgroundColor: colors.primaryLight },
+  disabledInput: { backgroundColor: colors.gray100, color: colors.gray500, cursor: 'not-allowed' },
+  totalValue: { fontSize: typography.sizes.sm, color: colors.gray800 },
+  totalsRow: { backgroundColor: colors.gray800, color: colors.surface, position: 'sticky', bottom: 0, zIndex: 20, height: '40px' },
+  fixedTotalArea: { padding: `${spacing.xs} ${spacing.md}`, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray700, textAlign: 'center', position: 'sticky', left: 0, width: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, minWidth: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, maxWidth: `calc(${COL_AREA_WIDTH} + ${COL_MACHINE_WIDTH})`, zIndex: 25, backgroundColor: colors.gray800 },
+  fixedTotalValue: { padding: `${spacing.xs} ${spacing.md}`, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray700, textAlign: 'center', backgroundColor: colors.primary, position: 'sticky', right: 0, width: COL_TOTAL_WIDTH, minWidth: COL_TOTAL_WIDTH, maxWidth: COL_TOTAL_WIDTH, zIndex: 25 },
+  columnTotalCell: { padding: spacing.xs, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray700, textAlign: 'center', minWidth: COL_DATA_MIN_WIDTH },
+  columnTotalValue: { fontSize: typography.sizes.sm, fontWeight: typography.weights.bold },
+  grandTotalValue: { fontSize: typography.sizes.sm, fontWeight: typography.weights.bold },
+  actions: { ...baseComponents.card, padding: spacing.lg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: spacing.lg, backgroundColor: colors.gray50, borderWidth: '2px', borderStyle: 'solid', borderColor: colors.gray200 },
+  summary: { flex: 1 },
+  summaryCount: { fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, color: colors.gray900, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' },
+  actionButtons: { display: 'flex', gap: spacing.md, alignItems: 'center', flexShrink: 0 },
+  btnCancel: { height: '52px', padding: `0 ${spacing.lg}`, minWidth: '140px', justifyContent: 'center', borderWidth: '2px', borderRadius: radius.lg, fontSize: typography.sizes.base },
+  btnSave: { height: '52px', padding: `0 ${spacing.lg}`, minWidth: '200px', justifyContent: 'center', borderRadius: radius.lg, fontSize: typography.sizes.base, backgroundColor: colors.success, color: '#fff', ':hover': { backgroundColor: colors.secondaryHover } },
+  btnDisabled: { backgroundColor: '#E5E7EB', color: '#6B7280', border: `1px solid ${colors.gray300}`, cursor: 'not-allowed', boxShadow: 'none', opacity: 1, ':hover': { backgroundColor: '#E5E7EB', transform: 'none', boxShadow: 'none' } },
+  fixedMachineDisplay: { display: 'flex', alignItems: 'center', gap: spacing.xs, padding: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, borderWidth: '2px', borderStyle: 'solid', borderColor: colors.primary, minHeight: '42px' },
+  fixedMachineName: { fontSize: typography.sizes.sm, color: colors.primary, fontWeight: typography.weights.bold, flex: 1 },
+  fixedMachineArea: { fontSize: typography.sizes.xs, color: colors.gray600, backgroundColor: colors.gray100, padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radius.sm },
+  unfixButton: { background: 'none', border: 'none', color: colors.error, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', padding: spacing.xs, borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', ':hover': { backgroundColor: colors.error + '20' } },
+  noFixedMachine: { fontSize: typography.sizes.sm, color: colors.gray500, fontStyle: 'italic', width: '100%', textAlign: 'center' },
+  loading: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: spacing.xl, textAlign: 'center', color: colors.gray500, minHeight: '100%', flex: 1 }
 };
 
 export default RegistroScrapCompleto;

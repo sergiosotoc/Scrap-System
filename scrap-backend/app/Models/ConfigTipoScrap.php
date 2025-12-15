@@ -2,31 +2,29 @@
 // app/Models/ConfigTipoScrap.php
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ConfigTipoScrap extends Model
 {
+    use HasFactory;
+
     protected $table = 'config_tipos_scrap';
-    
+
     protected $fillable = [
-        'categoria', 'tipo_nombre', 'columna_db', 'orden', 'activo'
+        'tipo_nombre',
+        'uso',        // 'operador', 'receptor', 'ambos'
+        'columna_db', // Legacy
+        'orden',
     ];
 
-    public function scopeActivos($query)
+    public function scopeOperador($query)
     {
-        return $query->where('activo', true);
+        return $query->whereIn('uso', ['operador', 'ambos'])->orderBy('orden');
     }
 
-    public function scopePorCategoria($query, $categoria)
+    public function scopeReceptor($query)
     {
-        return $query->where('categoria', $categoria);
-    }
-
-    public static function getTiposPorCategoria($categoria)
-    {
-        return self::where('categoria', $categoria)
-                  ->where('activo', true)
-                  ->orderBy('orden')
-                  ->get();
+        return $query->whereIn('uso', ['receptor', 'ambos'])->orderBy('orden');
     }
 }

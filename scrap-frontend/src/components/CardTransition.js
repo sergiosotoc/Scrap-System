@@ -17,7 +17,7 @@ const CardTransition = ({ children, delay = 0, style, className, ...props }) => 
         willChange: "opacity, transform",
         ...style,
       }}
-      {...props} // CORRECCIÓN: Pasamos todas las propiedades extra al div
+      {...props}
     >
       {children}
     </div>

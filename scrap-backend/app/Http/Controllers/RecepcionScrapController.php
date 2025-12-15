@@ -1,22 +1,21 @@
 <?php
 /* app/Http/Controllers/RecepcionScrapController.php */
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\RecepcionesScrap;
+use App\Models\RecepcionScrap;
+use App\Models\ConfigTipoScrap;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class RecepcionScrapController extends Controller
 {
     public function index(Request $request)
     {
         $user = Auth::user();
-        $query = RecepcionesScrap::with(['receptor']); 
+        $query = RecepcionScrap::with(['receptor', 'tipoScrap']);
 
-        // Filtros
         if ($request->has('origen_tipo') && $request->origen_tipo != '') {
             $query->where('origen_tipo', $request->origen_tipo);
         }
@@ -35,7 +34,6 @@ class RecepcionScrapController extends Controller
             ]);
         }
 
-        // Control de acceso por rol
         if ($user->role !== 'admin') {
             $query->where('receptor_id', $user->id);
         }
@@ -61,22 +59,44 @@ class RecepcionScrapController extends Controller
 
         DB::beginTransaction();
         try {
-            // --- GENERACIÓN DE HU EXACTA (AAMMDD + 4 dígitos) ---
-            // Ejemplo: 2512059844 (Año 25, Mes 12, Día 05, Random 9844)
-            $fecha = date('ymd'); // 6 dígitos
-            $random = rand(1000, 9999); // 4 dígitos
-            $numeroHU = $fecha . $random;
-
-            // Verificamos colisión para garantizar unicidad
-            while(RecepcionesScrap::where('numero_hu', $numeroHU)->exists()){
-                $random = rand(1000, 9999);
-                $numeroHU = $fecha . $random;
+            // Intentar encontrar el ID del catálogo basado en el nombre
+            $tipoScrap = ConfigTipoScrap::where('tipo_nombre', $validated['tipo_material'])->first();
+            
+            // Si no se encuentra el tipo, usar el ID de un tipo predeterminado o null
+            $tipoScrapId = null;
+            if ($tipoScrap) {
+                $tipoScrapId = $tipoScrap->id;
+            } else {
+                // Opcional: buscar un tipo predeterminado o crear uno
+                $tipoPredeterminado = ConfigTipoScrap::where('es_predeterminado', true)->first();
+                if ($tipoPredeterminado) {
+                    $tipoScrapId = $tipoPredeterminado->id;
+                }
             }
+            
+            $fechaPrefix = date('ymd');
+            
+            $numerosExistentes = RecepcionScrap::where('numero_hu', 'like', $fechaPrefix . '%')
+                ->lockForUpdate()
+                ->pluck('numero_hu')
+                ->map(function($hu) use ($fechaPrefix) {
+                    return intval(substr($hu, strlen($fechaPrefix)));
+                })
+                ->toArray();
+
+            $nuevaSecuencia = 1;
+            while (in_array($nuevaSecuencia, $numerosExistentes)) {
+                $nuevaSecuencia++;
+            }
+
+            $secuenciaStr = str_pad($nuevaSecuencia, 3, '0', STR_PAD_LEFT);
+            $numeroHU = $fechaPrefix . $secuenciaStr;
 
             $dataToInsert = [
                 'numero_hu' => $numeroHU,
                 'peso_kg' => $validated['peso_kg'],
                 'tipo_material' => $validated['tipo_material'],
+                'tipo_scrap_id' => $tipoScrapId,
                 'origen_tipo' => $validated['origen_tipo'],
                 'origen_especifico' => $validated['origen_especifico'] ?? null,
                 'receptor_id' => Auth::id(),
@@ -84,14 +104,13 @@ class RecepcionScrapController extends Controller
                 'lugar_almacenamiento' => $validated['lugar_almacenamiento'] ?? null,
                 'observaciones' => $validated['observaciones'] ?? null,
                 'fecha_entrada' => now(),
-                'fecha_registro' => now(), 
             ];
 
-            $recepcion = RecepcionesScrap::create($dataToInsert);
+            $recepcion = RecepcionScrap::create($dataToInsert);
 
             DB::commit();
 
-            $recepcion->load('receptor');
+            $recepcion->load(['receptor', 'tipoScrap']);
 
             return response()->json([
                 'message' => 'Recepción de scrap creada correctamente',
@@ -100,85 +119,43 @@ class RecepcionScrapController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
+            \Log::error('Error en RecepcionScrapController@store: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Error interno del servidor: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    public function reporteRecepcion(Request $request)
+    public function update(Request $request, $id)
     {
-        $user = Auth::user();
-
-        $query = RecepcionesScrap::with(['receptor']); 
-
-        if ($user->role !== 'admin') {
-            $query->where('receptor_id', $user->id);
-        }
-
-        if ($request->has('fecha_inicio') && $request->has('fecha_fin')) {
-            $query->whereBetween('fecha_entrada', [
-                $request->fecha_inicio,
-                $request->fecha_fin
-            ]);
-        }
-
-        if ($request->has('tipo_material')) {
-            $query->where('tipo_material', $request->tipo_material);
-        }
-
-        if ($request->has('origen_tipo')) {
-            $query->where('origen_tipo', $request->origen_tipo);
-        }
-
-        if ($request->has('destino')) {
-            $query->where('destino', $request->destino);
-        }
-
-        $recepciones = $query->orderBy('fecha_entrada', 'desc')->get();
-
-        $totales = [
-            'total_recepciones' => $recepciones->count(),
-            'total_peso' => $recepciones->sum('peso_kg'),
-            'por_destino' => $recepciones->groupBy('destino')->map(function ($group) {
-                return [
-                    'count' => $group->count(),
-                    'peso_total' => $group->sum('peso_kg')
-                ];
-            }),
-            'por_material' => $recepciones->groupBy('tipo_material')->map(function ($group) {
-                return [
-                    'count' => $group->count(),
-                    'peso_total' => $group->sum('peso_kg')
-                ];
-            }),
-            'por_origen' => $recepciones->groupBy('origen_tipo')->map(function ($group) {
-                return [
-                    'count' => $group->count(),
-                    'peso_total' => $group->sum('peso_kg')
-                ];
-            })
-        ];
-
-        return response()->json([
-            'recepciones' => $recepciones,
-            'totales' => $totales,
-            'filtros' => $request->all()
+        $validated = $request->validate([
+            'destino' => 'required|in:reciclaje,venta,almacenamiento',
         ]);
-    }
 
-    public function show($id)
-    {
-        $recepcion = RecepcionesScrap::with(['receptor'])->findOrFail($id);
+        try {
+            $recepcion = RecepcionScrap::findOrFail($id);
 
-        $user = Auth::user();
-        if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {
+            $user = Auth::user();
+            if ($user->role !== 'admin' && $recepcion->receptor_id !== $user->id) {
+                return response()->json([
+                    'message' => 'No tienes permiso para modificar este registro'
+                ], 403);
+            }
+
+            $recepcion->destino = $validated['destino'];
+            $recepcion->save();
+
+            $recepcion->load(['receptor', 'tipoScrap']); 
+
             return response()->json([
-                'message' => 'No tienes permiso para ver esta recepcion'
-            ], 403);
-        }
+                'message' => 'Destino actualizado correctamente',
+                'data' => $recepcion
+            ], 200);
 
-        return response()->json($recepcion);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['message' => 'Recepción no encontrada'], 404);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al actualizar: ' . $e->getMessage()], 500);
+        }
     }
 }

@@ -17,17 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
         
-        // Middleware para web (con CSRF)
         $middleware->web(append: [
             \App\Http\Middleware\VerifyCsrfToken::class,
         ]);
 
-        // Middleware para API (SIN CSRF)
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
-        // Excluir rutas API de CSRF
         $middleware->validateCsrfTokens(except: [
             'api/*',
             'sanctum/*',

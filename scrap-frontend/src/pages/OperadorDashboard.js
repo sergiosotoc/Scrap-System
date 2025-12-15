@@ -1,20 +1,17 @@
 /* src/pages/OperadorDashboard.js */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import RegistroScrapCompleto from '../components/RegistroScrapCompleto';
 import ExcelExportButtons from '../components/ExcelExportButtons';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
-
-// Componentes Smooth Integrados
 import SmoothButton from '../components/SmoothButton';
 import SmoothInput from '../components/SmoothInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CardTransition from '../components/CardTransition';
 import PageWrapper from '../components/PageWrapper';
 
-// --- CONTADOR ANIMADO ---
 const AnimatedCounter = ({ value, duration = 1000, decimals = 2 }) => {
   const [count, setCount] = useState(0);
 
@@ -56,15 +53,12 @@ const OperadorDashboard = () => {
   const { addToast } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [registros, setRegistros] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   
-  // Estado para disparar animaciones de entrada
-  const [triggerAnimation, setTriggerAnimation] = useState(false);
+  const [config, setConfig] = useState(null);
 
-  // Modificado: Bloquear scroll del body al abrir modal Y cerrar con tecla ESC
   useEffect(() => {
     const handleEscKey = (event) => {
       if (event.keyCode === 27 || event.key === 'Escape') {
@@ -93,11 +87,18 @@ const OperadorDashboard = () => {
     return `${year}-${month}-${day}`;
   };
 
+  const getTurnoActual = () => {
+    const hora = new Date().getHours();
+    if (hora >= 7 && hora < 15) return '1';
+    else if (hora >= 15 && hora < 23) return '2';
+    else return '3';
+  };
+
   const today = getTodayLocal();
   const [fechaInput, setFechaInput] = useState(today);
   const [filtros, setFiltros] = useState({
     area: '',
-    turno: '',
+    turno: getTurnoActual(),
     fecha: today
   });
 
@@ -116,14 +117,12 @@ const OperadorDashboard = () => {
     setIsFetching(true);
     
     try {
-      const [registrosData, statsData] = await Promise.all([
+      const [registrosData, configData] = await Promise.all([
         apiClient.getRegistrosScrap(filtros),
-        apiClient.getRegistroScrapStats()
+        apiClient.getRegistrosConfig()
       ]);
       setRegistros(Array.isArray(registrosData) ? registrosData : []);
-      setStats(statsData);
-      
-      setTimeout(() => setTriggerAnimation(true), 100);
+      setConfig(configData);
       
     } catch (error) {
       addToast('Error cargando datos: ' + (error.message || 'Error desconocido'), 'error');
@@ -135,7 +134,60 @@ const OperadorDashboard = () => {
 
   useEffect(() => {
     loadOperadorData();
-  }, [JSON.stringify(filtros)]);
+  }, [loadOperadorData]);
+
+  // Aplanar materiales para las columnas de la tabla - VERSIÓN MEJORADA
+  const materialesColumns = useMemo(() => {
+    if (!config || !config.tipos_scrap) return [];
+    
+    // Si la API devuelve array directo (NUEVO COMPORTAMIENTO)
+    if (Array.isArray(config.tipos_scrap)) {
+        return config.tipos_scrap.sort((a, b) => a.orden - b.orden);
+    } 
+    
+    // Fallback por si la API aún devuelve objeto (comportamiento antiguo)
+    let flat = [];
+    Object.values(config.tipos_scrap).forEach(grupo => {
+        if (Array.isArray(grupo)) {
+            flat = [...flat, ...grupo];
+        }
+    });
+    return flat.sort((a, b) => a.orden - b.orden);
+  }, [config]);
+
+  // Función auxiliar para extraer pesos de un registro
+  const extraerPesoDeRegistro = useCallback((registro, material) => {
+    // Método 1: Buscar en materiales_resumen (array de objetos)
+    if (registro.materiales_resumen && Array.isArray(registro.materiales_resumen)) {
+      const detalle = registro.materiales_resumen.find(d => {
+        // Buscar por nombre o por ID si está disponible
+        return d.nombre === material.tipo_nombre || 
+               (material.id && d.id === material.id) ||
+               (material.id && d.tipo_scrap_id === material.id);
+      });
+      if (detalle) {
+        return parseFloat(detalle.peso) || 0;
+      }
+    }
+    
+    // Método 2: Buscar en pesos_detalle (objeto con claves)
+    if (registro.pesos_detalle && typeof registro.pesos_detalle === 'object') {
+      // Intentar con diferentes formatos de clave
+      const posiblesClaves = [
+        `material_${material.id}`,
+        material.columna_db,
+        material.tipo_nombre.toLowerCase().replace(/ /g, '_')
+      ];
+      
+      for (const clave of posiblesClaves) {
+        if (registro.pesos_detalle[clave] !== undefined) {
+          return parseFloat(registro.pesos_detalle[clave]) || 0;
+        }
+      }
+    }
+    
+    return 0;
+  }, []);
 
   const handleSelectChange = (e) => {
     const { name, value } = e.target;
@@ -161,17 +213,13 @@ const OperadorDashboard = () => {
     setTimeout(() => setModalLoading(false), 100);
   };
 
-  // --- ESTILOS LIMPIOS Y AJUSTADOS ---
   const styles = {
     container: {
-      // CORRECCIÓN: Eliminamos padding para que el Layout controle los márgenes y no se sumen.
-      // padding: spacing.lg, 
       backgroundColor: colors.background,
       fontFamily: typography.fontFamily,
       animation: 'fadeIn 0.5s ease-out',
       boxSizing: 'border-box',
       width: '100%',
-      // Aseguramos que no fuerce altura extra
       height: 'auto' 
     },
     header: {
@@ -203,18 +251,15 @@ const OperadorDashboard = () => {
       margin: `${spacing.xs} 0 0 0`,
       fontWeight: typography.weights.medium
     },
-    // Estilo de página de carga
     loadingPage: {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      // CORRECCIÓN: Usamos 100% para llenar el contenedor padre (Layout) sin desbordar la ventana
       height: '100%', 
-      minHeight: '50vh', // Mínimo razonable
+      minHeight: '50vh', 
       backgroundColor: colors.background,
       flexDirection: 'column'
     },
-    // Modal Styles
     modalLoading: {
       position: 'absolute',
       top: 0,
@@ -312,7 +357,6 @@ const OperadorDashboard = () => {
         color: colors.gray700
       }
     },
-    // Card Styles
     card: {
       ...baseComponents.card,
       overflow: 'hidden',
@@ -415,7 +459,7 @@ const OperadorDashboard = () => {
     table: {
       width: '100%',
       borderCollapse: 'collapse',
-      minWidth: '1400px'
+      minWidth: '1000px'
     },
     th: {
       padding: spacing.md,
@@ -485,14 +529,6 @@ const OperadorDashboard = () => {
       color: colors.warning,
       gap: spacing.xs
     },
-    loteCode: {
-      fontFamily: typography.fontMono,
-      fontSize: typography.sizes.xs,
-      backgroundColor: colors.gray100,
-      padding: `${spacing.xs} ${spacing.sm}`,
-      borderRadius: radius.sm,
-      color: colors.gray600
-    },
     resumenContainer: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -536,11 +572,26 @@ const OperadorDashboard = () => {
       opacity: 0.7,
       marginBottom: spacing.lg
     },
-    fadeInUp: (delay = 0) => ({
-        opacity: triggerAnimation ? 1 : 0,
-        transform: triggerAnimation ? 'translateY(0)' : 'translateY(20px)',
-        transition: `all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) ${delay}s`
-    })
+    // Estilo especial para cuando hay muchas columnas dinámicas
+    dynamicHeader: {
+        minWidth: '90px',
+        textAlign: 'center',
+        padding: '8px',
+        fontSize: '0.7rem'
+    },
+    materialHeaderName: {
+        display: 'block',
+        fontSize: '0.65rem',
+        fontWeight: typography.weights.bold,
+        lineHeight: 1.1,
+        marginBottom: '2px'
+    },
+    materialHeaderUnit: {
+        display: 'block',
+        fontSize: '0.55rem',
+        color: colors.gray500,
+        fontStyle: 'italic'
+    }
   };
 
   if (loading) {
@@ -553,9 +604,6 @@ const OperadorDashboard = () => {
 
   return (
     <div style={styles.container}>
-      {/* Override del PageWrapper para que no fuerce height: 100%.
-        Esto permite que el contenido dicte la altura y evita scroll si no hay datos.
-      */}
       <PageWrapper style={{ height: 'auto' }}>
         {/* Header */}
         <CardTransition delay={0} style={styles.header}>
@@ -577,7 +625,6 @@ const OperadorDashboard = () => {
             </div>
         </CardTransition>
 
-        {/* Card Principal */}
         <CardTransition delay={100} style={styles.card}>
             <div style={styles.cardHeader}>
             <h3 style={styles.cardTitle}>
@@ -592,21 +639,13 @@ const OperadorDashboard = () => {
                 {isFetching && <span style={styles.miniLoader}>Actualizando...</span>}
             </h3>
             <div style={styles.filters}>
-                {/* Filtros */}
                 <div style={styles.filterGroup}>
                 <label style={styles.filterLabel}>Área:</label>
                 <select name="area" value={filtros.area} onChange={handleSelectChange} style={styles.select}>
                     <option value="">Todas</option>
-                    <option value="TREFILADO">Trefilado</option>
-                    <option value="BUNCHER">Buncher</option>
-                    <option value="EXTRUSION">Extrusión</option>
-                    <option value="XLPE">XLPE</option>
-                    <option value="EBEAM">E-Beam</option>
-                    <option value="RWD">RWD</option>
-                    <option value="BATERIA">Batería</option>
-                    <option value="CABALLE">Caballe</option>
-                    <option value="OTHERS">Otros</option>
-                    <option value="FPS">FPS</option>
+                    {config?.areas_maquinas ? Object.keys(config.areas_maquinas).map(area => (
+                        <option key={area} value={area}>{area}</option>
+                    )) : null}
                 </select>
                 </div>
                 <div style={styles.filterGroup}>
@@ -637,47 +676,60 @@ const OperadorDashboard = () => {
                     <th style={styles.th}>Turno</th>
                     <th style={styles.th}>Área</th>
                     <th style={styles.th}>Máquina</th>
-                    <th style={styles.th}>Cobre (kg)</th>
-                    <th style={styles.th}>Cobre Est. (kg)</th>
-                    <th style={styles.th}>Purga PVC (kg)</th>
-                    <th style={styles.th}>Purga PE (kg)</th>
-                    <th style={styles.th}>Purga PUR (kg)</th>
-                    <th style={styles.th}>Purga PP (kg)</th>
-                    <th style={styles.th}>Cable PVC (kg)</th>
-                    <th style={styles.th}>Cable PE (kg)</th>
-                    <th style={styles.th}>Cable PUR (kg)</th>
-                    <th style={styles.th}>Cable PP (kg)</th>
-                    <th style={styles.th}>Cable Alum (kg)</th>
-                    <th style={styles.th}>Cable Est. PVC (kg)</th>
-                    <th style={styles.th}>Cable Est. PE (kg)</th>
+                    {/* Renderizado dinámico de encabezados basado en materiales activos */}
+                    {materialesColumns.map(mat => (
+                        <th key={mat.id} style={{...styles.th, ...styles.dynamicHeader}}>
+                            <span style={styles.materialHeaderName}>
+                                {mat.tipo_nombre.length > 10 
+                                    ? mat.tipo_nombre.substring(0, 8) + '...'
+                                    : mat.tipo_nombre}
+                            </span>
+                            <span style={styles.materialHeaderUnit}>(kg)</span>
+                        </th>
+                    ))}
                     <th style={styles.th}>Total (kg)</th>
                     <th style={styles.th}>Método</th>
                     </tr>
                 </thead>
                 <tbody>
                     {registros.map((r, index) => (
-                    <tr key={r.id} style={{ ...styles.tr, ...(r.conexion_bascula ? styles.basculaRow : styles.manualRow), animationDelay: `${index * 0.03}s` }} className="table-row-anim" onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.98)'} onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}>
-                        <td style={styles.td}>{new Date(r.fecha_registro).toLocaleDateString('es-ES')}</td>
-                        <td style={styles.td}>{new Date(r.fecha_registro).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td style={styles.td}><span style={styles.turnoBadge}>T{r.turno}</span></td>
-                        <td style={styles.td}><span style={styles.areaTag}>{r.area_real}</span></td>
-                        <td style={styles.td}><strong>{r.maquina_real}</strong></td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cobre || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cobre_estanado || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_purga_pvc || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_purga_pe || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_purga_pur || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_purga_pp || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_pvc || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_pe || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_pur || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_pp || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_aluminio || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_estanado_pvc || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.numericCell }}>{parseFloat(r.peso_cable_estanado_pe || 0).toFixed(2)}</td>
-                        <td style={{ ...styles.td, ...styles.totalCell }}><strong><AnimatedCounter value={r.peso_total} duration={500} decimals={2} /></strong></td>
-                        <td style={styles.td}>{r.conexion_bascula ? <span style={styles.badgeSuccess}>BÁSCULA</span> : <span style={styles.badgeWarn}>MANUAL</span>}</td>
-                    </tr>
+                        <tr key={r.id} style={{ ...styles.tr, ...(r.conexion_bascula ? styles.basculaRow : styles.manualRow), animationDelay: `${index * 0.03}s` }} className="table-row-anim" onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.98)'} onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}>
+                            <td style={styles.td}>{new Date(r.fecha_registro).toLocaleDateString('es-ES')}</td>
+                            <td style={styles.td}>{new Date(r.fecha_registro).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td style={styles.td}><span style={styles.turnoBadge}>T{r.turno}</span></td>
+                            <td style={styles.td}><span style={styles.areaTag}>{r.area_real}</span></td>
+                            <td style={styles.td}><strong>{r.maquina_real}</strong></td>
+                            
+                            {/* Celdas dinámicas de materiales */}
+                            {materialesColumns.map(mat => {
+                                const peso = extraerPesoDeRegistro(r, mat);
+                                const tienePeso = peso > 0;
+                                
+                                return (
+                                    <td key={mat.id} style={{
+                                        ...styles.td, 
+                                        ...styles.numericCell,
+                                        color: tienePeso ? colors.gray900 : colors.gray400,
+                                        backgroundColor: tienePeso ? colors.secondaryLight + '10' : 'transparent',
+                                        fontWeight: tienePeso ? typography.weights.medium : typography.weights.normal
+                                    }}
+                                    title={tienePeso ? `${mat.tipo_nombre}: ${peso.toFixed(2)} kg` : `${mat.tipo_nombre}: Sin datos`}
+                                    >
+                                        {tienePeso ? peso.toFixed(2) : '-'}
+                                    </td>
+                                );
+                            })}
+
+                            <td style={{ ...styles.td, ...styles.totalCell }}>
+                                <strong><AnimatedCounter value={r.peso_total} duration={500} decimals={2} /></strong>
+                            </td>
+                            <td style={styles.td}>
+                                {r.conexion_bascula ? 
+                                    <span style={styles.badgeSuccess}>BÁSCULA</span> : 
+                                    <span style={styles.badgeWarn}>MANUAL</span>
+                                }
+                            </td>
+                        </tr>
                     ))}
                 </tbody>
                 </table>
@@ -692,13 +744,32 @@ const OperadorDashboard = () => {
             )}
             </div>
 
-            {/* Resumen */}
             {registros.length > 0 && (
             <CardTransition delay={200} style={styles.resumenContainer}>
-                <div style={styles.resumenItem}><span style={styles.resumenLabel}>Total de registros:</span><span style={styles.resumenValue}><AnimatedCounter value={registros.length} decimals={0} /></span></div>
-                <div style={styles.resumenItem}><span style={styles.resumenLabel}>Peso total filtrado:</span><span style={styles.resumenValue}><AnimatedCounter value={registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0)} /> kg</span></div>
-                <div style={styles.resumenItem}><span style={styles.resumenLabel}>Registros con báscula:</span><span style={styles.resumenValue}><AnimatedCounter value={registros.filter(r => r.conexion_bascula).length} decimals={0} /></span></div>
-                <div style={styles.resumenItem}><span style={styles.resumenLabel}>Promedio por registro:</span><span style={styles.resumenValue}><AnimatedCounter value={registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0) / (registros.length || 1)} /> kg</span></div>
+                <div style={styles.resumenItem}>
+                    <span style={styles.resumenLabel}>Total de registros:</span>
+                    <span style={styles.resumenValue}>
+                        <AnimatedCounter value={registros.length} decimals={0} />
+                    </span>
+                </div>
+                <div style={styles.resumenItem}>
+                    <span style={styles.resumenLabel}>Peso total filtrado:</span>
+                    <span style={styles.resumenValue}>
+                        <AnimatedCounter value={registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0)} /> kg
+                    </span>
+                </div>
+                <div style={styles.resumenItem}>
+                    <span style={styles.resumenLabel}>Registros con báscula:</span>
+                    <span style={styles.resumenValue}>
+                        <AnimatedCounter value={registros.filter(r => r.conexion_bascula).length} decimals={0} />
+                    </span>
+                </div>
+                <div style={styles.resumenItem}>
+                    <span style={styles.resumenLabel}>Registros Manuales:</span>
+                    <span style={styles.resumenValue}>
+                        <AnimatedCounter value={registros.filter(r => !r.conexion_bascula).length} decimals={0} />
+                    </span>
+                </div>
             </CardTransition>
             )}
         </CardTransition>

@@ -1,4 +1,4 @@
-/* src/hooks/useHoverEffect.ts */
+/* src/hooks/useHoverEffect.js */
 import { useState, useRef } from "react";
 
 export const useHoverEffect = (options = {}) => {

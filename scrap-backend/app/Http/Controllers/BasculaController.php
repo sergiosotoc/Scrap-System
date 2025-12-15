@@ -112,8 +112,7 @@ class BasculaController extends Controller
             $puerto = $request->input('puerto', $currentConfig['puerto']);
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
-            // ✅ CORREGIDO: Validar y limitar timeout
-            $timeout = min(max($timeout, 1), 30); // Entre 1 y 30 segundos
+            $timeout = min(max($timeout, 1), 30);
 
             Log::info("🔌 Iniciando conexión en: $puerto con timeout: {$timeout}s");
 
@@ -124,7 +123,6 @@ class BasculaController extends Controller
 
             $pythonPath = $this->getPythonPath();
 
-            // ✅ CORREGIDO: Pasar timeout correctamente al script
             $process = new Process([
                 $pythonPath,
                 $scriptPath,
@@ -202,7 +200,6 @@ class BasculaController extends Controller
             $puerto = $request->input('puerto', $currentConfig['puerto']);
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
-            // Validar timeout
             $timeout = min(max($timeout, 1), 10);
 
             Log::info("⚖️ Leyendo peso desde: {$puerto} con timeout: {$timeout}s");
@@ -384,8 +381,6 @@ class BasculaController extends Controller
 
         return response()->json($diagnostico);
     }
-
-    // ========== MÉTODOS PRIVADOS ==========
 
     private function getPythonPath()
     {

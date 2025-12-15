@@ -14,13 +14,10 @@ return new class extends Migration
             $table->string('name');
             $table->string('password');
             $table->enum('role', ['admin', 'operador', 'receptor'])->default('operador');
-            $table->boolean('activo')->default(true);
             $table->rememberToken();
             $table->timestamps();
         });
 
-        // NO eliminar las tablas de sessions - mantener compatibilidad
-        // Solo eliminar password_reset_tokens si no se usa
         Schema::dropIfExists('password_reset_tokens');
     }
 
@@ -28,7 +25,6 @@ return new class extends Migration
     {
         Schema::dropIfExists('users');
         
-        // Recrear password_reset_tokens si es necesario
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
             $table->string('token');

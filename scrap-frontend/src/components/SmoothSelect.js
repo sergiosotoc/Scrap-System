@@ -39,11 +39,11 @@ const SmoothSelect = ({
           required={required}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className="smooth-select-reset" /* Aplica el fix de CSS global */
+          className="smooth-select-reset"
           style={{
             width: "100%",
             height: "42px",
-            padding: "0 40px 0 16px", // Espacio para la flecha
+            padding: "0 40px 0 16px", 
             border: `1.5px solid ${isFocused ? colors.primary : colors.gray300}`,
             borderRadius: radius.md,
             fontSize: typography.sizes.sm,
@@ -55,12 +55,10 @@ const SmoothSelect = ({
             boxShadow: isFocused ? `0 0 0 4px ${colors.primary}15` : "none",
             cursor: disabled ? "not-allowed" : "pointer",
             
-            // --- PROPIEDADES CRÍTICAS PARA EDGE/CHROME/FIREFOX ---
             appearance: "none",
             WebkitAppearance: "none",
             MozAppearance: "none",
             
-            // --- FLECHA SVG PERSONALIZADA (Base64) ---
             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
             backgroundRepeat: "no-repeat",
             backgroundPosition: "right 14px center",

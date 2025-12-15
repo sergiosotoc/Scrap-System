@@ -12,11 +12,10 @@ class UserSeeder extends Seeder
     {
         DB::table('users')->insert([
             [
-                'username' => 'admin.scrap',
+                'username' => 'admin',
                 'name' => 'Administrador del Sistema',
                 'password' => Hash::make('scrap2025'),
                 'role' => 'admin',
-                'activo' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
@@ -25,7 +24,6 @@ class UserSeeder extends Seeder
                 'name' => 'Operador de Logística 1',
                 'password' => Hash::make('operador123'),
                 'role' => 'operador',
-                'activo' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
@@ -34,7 +32,6 @@ class UserSeeder extends Seeder
                 'name' => 'Receptor de Scrap 1',
                 'password' => Hash::make('receptor123'),
                 'role' => 'receptor',
-                'activo' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],

@@ -14,15 +14,13 @@ class User extends Authenticatable
         'username',
         'name', 
         'password',
-        'role',
-        'activo'
+        'role'
     ];
 
     protected $hidden = [
         'password',
     ];
 
-    // Relaciones
     public function registrosScrap()
     {
         return $this->hasMany(RegistrosScrap::class, 'operador_id');
@@ -33,10 +31,9 @@ class User extends Authenticatable
         return $this->hasMany(RecepcionesScrap::class, 'receptor_id');
     }
 
-    // Scopes para roles
     public function scopeActivos($query)
     {
-        return $query->where('activo', true);
+        return $query;
     }
 
     public function scopePorRol($query, $rol)

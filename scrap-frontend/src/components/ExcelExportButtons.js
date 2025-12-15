@@ -13,12 +13,23 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         setExportando(true);
         try {
             let resultado;
+            
+            // Lógica según el tipo de reporte
             if (tipo === 'formato-empresa') {
                 resultado = await excelService.exportFormatoEmpresa(filters.fecha, filters.turno);
-            } else {
+            } 
+            // ✅ NUEVO CASO
+            else if (tipo === 'recepciones') {
+                if (!filters.fechaInicio || !filters.fechaFin) {
+                    throw new Error('Debes seleccionar un rango de fechas');
+                }
+                resultado = await excelService.exportRecepciones(filters.fechaInicio, filters.fechaFin, filters.destino);
+            } 
+            else {
                 throw new Error('Tipo de exportación no válido');
             }
 
+            // Descarga del archivo
             const url = window.URL.createObjectURL(new Blob([resultado.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -28,7 +39,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
 
-            addToast(`Reporte generado exitosamente: ${resultado.fileName}`, 'success');
+            addToast(`Reporte generado exitosamente`, 'success');
             
         } catch (error) {
             console.error('Error exportando Excel:', error);
@@ -37,7 +48,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
             } else if (error.message.includes('500')) {
                 addToast('Error del servidor al generar el reporte', 'error');
             } else {
-                addToast(`Error al exportar: ${error.message}`, 'error');
+                addToast(error.message, 'error');
             }
         } finally {
             setExportando(false);
@@ -48,11 +59,10 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         <SmoothButton 
             onClick={handleExport}
             disabled={exportando}
-            variant="primary" // Esto ya carga baseComponents.buttonPrimary
+            variant="primary"
             title="Generar Reporte en Excel"
             style={{
                 height: '36px',
-                // Solo sobreescribimos lo necesario (color de éxito o gris)
                 backgroundColor: exportando ? colors.gray400 : colors.success,
                 opacity: exportando ? 0.7 : 1,
                 ...buttonStyle
@@ -61,14 +71,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
             {exportando ? (
                 <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation: 'spin 1s linear infinite'}}>
-                        <line x1="12" y1="2" x2="12" y2="6"></line>
-                        <line x1="12" y1="18" x2="12" y2="22"></line>
-                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-                        <line x1="2" y1="12" x2="6" y2="12"></line>
-                        <line x1="18" y1="12" x2="22" y2="12"></line>
-                        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-                        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                        <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
                     </svg>
                     <span>Generando...</span>
                 </>
@@ -83,13 +86,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
                     <span>{buttonText}</span>
                 </>
             )}
-            
-            <style>{`
-                @keyframes spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-            `}</style>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </SmoothButton>
     );
 };

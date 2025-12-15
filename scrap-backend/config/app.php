@@ -6,7 +6,6 @@ return [
     'env' => env('APP_ENV', 'production'),
     'debug' => (bool) env('APP_DEBUG', false),
     
-    // ✅ MODIFICADO: URL dinámica basada en APP_HOST
     'url' => env('APP_URL', 'http://localhost:8000'),
 
     'timezone' => 'UTC',

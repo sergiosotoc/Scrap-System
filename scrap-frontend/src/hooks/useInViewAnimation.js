@@ -12,7 +12,6 @@ export const useInViewAnimation = (threshold = 0.1) => {
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsInView(true);
-          // Una vez que se ve, dejamos de observar para que no parpadee al salir/entrar
           if (element) observer.unobserve(element);
         }
       },

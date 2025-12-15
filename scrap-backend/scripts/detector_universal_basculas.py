@@ -1,4 +1,4 @@
-""" script/detector_universal_basculas.py """
+""" scripts/detector_universal_basculas.py """
 #!/usr/bin/env python3
 import serial
 import time
@@ -26,7 +26,6 @@ class DetectorUniversalBasculas:
         """Detectar báscula y mantener conexión activa"""
         print(f"🔍 Conectando a {puerto} con timeout {timeout}s", file=sys.stderr)
 
-        # ✅ CORREGIDO: Cerrar conexión previa si existe
         if self.conexion_activa and self.conexion_activa.is_open:
             try:
                 self.conexion_activa.close()
@@ -54,10 +53,8 @@ class DetectorUniversalBasculas:
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
 
-                # Intentar leer peso inicial
                 peso_inicial = self._leer_peso_conexion(ser, config_actual)
 
-                # Guardar conexión activa
                 self.conexion_activa = ser
                 self.config_activa = config_actual
                 self.puerto_activo = puerto
@@ -93,14 +90,12 @@ class DetectorUniversalBasculas:
     def _leer_peso_conexion(self, ser, config):
         """Leer peso durante la conexión inicial"""
         try:
-            # 1. Leer buffer directo
             if ser.in_waiting > 0:
                 data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                 peso, _ = self._extraer_peso_universal(data)
                 if peso is not None:
                     return peso
 
-            # 2. Probar comandos comunes
             for cmd in self.comandos_solicitud:
                 try:
                     ser.reset_input_buffer()
@@ -134,7 +129,6 @@ class DetectorUniversalBasculas:
         try:
             ser = self.conexion_activa
 
-            # ✅ VERIFICAR: Si el puerto sigue disponible
             try:
                 ser.in_waiting
             except Exception as e:
@@ -146,7 +140,6 @@ class DetectorUniversalBasculas:
                     "requiere_conexion": True
                 }
 
-            # Estrategia 1: Leer datos disponibles inmediatamente
             if ser.in_waiting > 0:
                 data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                 if data.strip():
@@ -160,14 +153,12 @@ class DetectorUniversalBasculas:
                             "metodo": "buffer_directo"
                         }
 
-            # Estrategia 2: Enviar comandos de solicitud
             for cmd in self.comandos_solicitud:
                 try:
                     ser.reset_input_buffer()
                     ser.write(cmd)
                     time.sleep(0.2)
                     
-                    # Leer con timeout corto
                     start_time = time.time()
                     while time.time() - start_time < 0.5:
                         if ser.in_waiting > 0:
@@ -187,7 +178,6 @@ class DetectorUniversalBasculas:
                     print(f"Error con comando {cmd}: {e}", file=sys.stderr)
                     continue
 
-            # Estrategia 3: Si no hay datos, devolver éxito con peso 0
             return {
                 "success": True,
                 "peso": 0.0,
@@ -233,7 +223,6 @@ class DetectorUniversalBasculas:
                 time.sleep(0.3)
                 ser.reset_input_buffer()
                 
-                # Intentar leer inmediatamente
                 if ser.in_waiting > 0:
                     data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                     peso, formato = self._extraer_peso_universal(data)
@@ -246,7 +235,6 @@ class DetectorUniversalBasculas:
                             "metodo": "buffer_inmediato"
                         }
                 
-                # Probar comandos
                 for cmd in self.comandos_solicitud:
                     try:
                         ser.reset_input_buffer()
@@ -290,7 +278,6 @@ class DetectorUniversalBasculas:
 
         datos_limpios = datos.replace('\r\n', ' ').replace('\n', ' ').strip()
 
-        # 1️⃣ TORREY EQB / L-EQ: "ST,GS,   1.500kg" o "ST,GS,001.500,kg"
         if 'ST,GS' in datos:
             match = re.search(r'ST,GS[, ]*([0-9]+\.[0-9]+)\s*(kg|g)?', datos)
             if match:
@@ -301,7 +288,6 @@ class DetectorUniversalBasculas:
                 except:
                     pass
 
-        # 2️⃣ CAS: "N001.50" o "T001.50"
         match = re.search(r'[NT](\d+\.?\d*)', datos)
         if match:
             try:
@@ -311,7 +297,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # 3️⃣ Con signo: "+001.50" o "-000.75"
         match = re.search(r'[+-]?(\d+\.?\d*)', datos)
         if match:
             try:
@@ -321,7 +306,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # 4️⃣ Decimal simple: "12.34"
         match = re.search(r'(\d+\.\d+)', datos)
         if match:
             try:
@@ -331,7 +315,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # 5️⃣ Entero largo (gramos)
         match = re.search(r'(\d{3,})', datos)
         if match:
             try:
@@ -349,7 +332,6 @@ class DetectorUniversalBasculas:
         """Cerrar conexión de forma segura"""
         if self.conexion_activa:
             try:
-                # Limpiar buffers antes de cerrar
                 if self.conexion_activa.is_open:
                     self.conexion_activa.reset_input_buffer()
                     self.conexion_activa.reset_output_buffer()
@@ -379,7 +361,6 @@ def listar_puertos():
         return {"error": str(e)}
 
 
-# Instancia global persistente
 detector_global = None
 
 def obtener_detector():
@@ -422,12 +403,10 @@ def main():
         elif comando == 'leer':
             detector = obtener_detector()
             
-            # Si tenemos conexión activa, usarla para lectura en tiempo real
             if detector.conexion_activa and detector.conexion_activa.is_open:
                 resultado = detector.leer_peso_conexion_activa()
                 print(json.dumps(resultado))
             else:
-                # Fallback: modo una sola vez
                 if len(sys.argv) >= 3:
                     puerto = sys.argv[2]
                     baudios = int(sys.argv[3]) if len(sys.argv) >= 4 else None
@@ -452,7 +431,6 @@ def main():
             print(json.dumps({"success": True, "mensaje": "Conexión cerrada"}))
 
         else:
-            # Por defecto: intentar conectar al puerto
             puerto = comando
             detector = obtener_detector()
             resultado = detector.detectar_y_conectar(puerto)

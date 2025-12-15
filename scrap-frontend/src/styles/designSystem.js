@@ -49,25 +49,25 @@ export const radius = {
 };
 
 export const spacing = {
-  xs: '0.25rem',  // 4px
-  sm: '0.5rem',   // 8px (Reducido de 12px)
-  base: '1rem',   // 16px
-  md: '1.25rem',  // 20px
-  lg: '1.5rem',   // 24px
-  xl: '2rem'      // 32px
+  xs: '0.25rem',  
+  sm: '0.5rem',   
+  base: '1rem',  
+  md: '1.25rem', 
+  lg: '1.5rem',  
+  xl: '2rem'    
 };
 
 export const typography = {
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   fontMono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
   sizes: {
-    xs: '0.75rem',    // 12px
-    sm: '0.875rem',   // 14px
-    base: '1rem',     // 16px
-    lg: '1.125rem',   // 18px
-    xl: '1.25rem',    // 20px
-    '2xl': '1.5rem',  // 24px
-    '3xl': '1.875rem' // 30px
+    xs: '0.75rem',    
+    sm: '0.875rem',   
+    base: '1rem',     
+    lg: '1.125rem',   
+    xl: '1.25rem',    
+    '2xl': '1.5rem',  
+    '3xl': '1.875rem' 
   },
   weights: {
     normal: '400',
@@ -78,9 +78,8 @@ export const typography = {
   }
 };
 
-// Estilos base comunes para inputs y botones
 const commonInputStyles = {
-  padding: `${spacing.xs} ${spacing.sm}`, // Más compacto
+  padding: `${spacing.xs} ${spacing.sm}`, 
   borderRadius: radius.md,
   border: `1px solid ${colors.gray300}`,
   fontSize: typography.sizes.sm,
@@ -88,7 +87,7 @@ const commonInputStyles = {
   backgroundColor: colors.surface,
   transition: 'all 0.2s ease',
   outline: 'none',
-  height: '38px', // Altura fija estándar
+  height: '38px', 
   boxSizing: 'border-box',
   lineHeight: 1.5
 };
@@ -96,7 +95,7 @@ const commonInputStyles = {
 export const baseComponents = {
   buttonPrimary: {
     ...commonInputStyles,
-    border: 'none', // Reset border
+    border: 'none',
     backgroundColor: colors.primary,
     color: '#FFFFFF',
     fontWeight: typography.weights.semibold,
@@ -105,7 +104,7 @@ export const baseComponents = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    width: 'auto', // Auto width por defecto
+    width: 'auto', 
     ':hover': {
       backgroundColor: colors.primaryHover,
       transform: 'translateY(-1px)',
@@ -155,7 +154,7 @@ export const baseComponents = {
   
   input: {
     ...commonInputStyles,
-    width: '100%', // Inputs suelen ocupar todo el ancho disponible
+    width: '100%',
     ':focus': {
       borderColor: colors.primary,
       boxShadow: `0 0 0 3px ${colors.primaryLight}`
@@ -166,7 +165,7 @@ export const baseComponents = {
     ...commonInputStyles,
     width: '100%',
     cursor: 'pointer',
-    appearance: 'none', // Necesario para custom arrow
+    appearance: 'none',
     paddingRight: spacing.xl,
     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
     backgroundPosition: `right ${spacing.xs} center`,
@@ -192,7 +191,7 @@ export const baseComponents = {
     justifyContent: 'center',
     padding: `2px ${spacing.sm}`,
     borderRadius: radius.full,
-    fontSize: '0.75rem', // xs
+    fontSize: '0.75rem', 
     fontWeight: typography.weights.semibold,
     letterSpacing: '0.025em',
     lineHeight: 1.2,

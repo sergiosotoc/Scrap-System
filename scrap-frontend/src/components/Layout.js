@@ -2,7 +2,6 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing, typography, baseComponents, radius, shadows } from '../styles/designSystem';
-// Implementación correcta: Usamos el componente, no el hook manual
 import SmoothButton from './SmoothButton';
 
 const Layout = ({ children }) => {
@@ -40,7 +39,7 @@ const Layout = ({ children }) => {
       padding: `0 ${spacing.xl}`,
       boxShadow: '0 4px 20px -5px rgba(0, 0, 0, 0.1)',
       display: 'flex',
-      justifyContent: 'space-between',
+      justifyContent: 'space-between', // Mantiene logo a la izq y usuario a la der
       alignItems: 'center',
       borderBottom: `1px solid ${colors.gray200}`,
       position: 'sticky',
@@ -51,15 +50,28 @@ const Layout = ({ children }) => {
       boxSizing: 'border-box',
       transition: 'all 0.3s ease'
     },
+    // Logo a la izquierda
     headerLeft: {
       display: 'flex',
       alignItems: 'center',
-      gap: spacing.md
+      zIndex: 2 // Asegurar que esté por encima si la pantalla es muy chica
     },
     logo: {
       height: '48px',
       width: 'auto',
       display: 'block'
+    },
+    // Contenedor para Centrar el Título Absolutamente
+    titleContainer: {
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 'auto',
+      zIndex: 1
     },
     title: {
       fontSize: typography.sizes.xl,
@@ -70,13 +82,17 @@ const Layout = ({ children }) => {
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
       backgroundClip: 'text',
-      letterSpacing: '-0.02em'
+      letterSpacing: '-0.02em',
+      whiteSpace: 'nowrap',
+      textAlign: 'center'
     },
+    // Usuario a la derecha
     userInfo: {
       display: 'flex',
       alignItems: 'center',
       gap: spacing.lg,
-      height: '100%'
+      height: '100%',
+      zIndex: 2
     },
     userDetails: {
       display: 'flex',
@@ -123,16 +139,21 @@ const Layout = ({ children }) => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
+        {/* Izquierda: Logo */}
         <div style={styles.headerLeft}>
           <img 
             src="/Logo-COFICAB.png" 
             alt="COFICAB" 
             style={styles.logo}
           />
-          <div style={{width: '1px', height: '24px', backgroundColor: colors.gray300, opacity: 0.3, margin: '0 4px'}}></div>
+        </div>
+        
+        {/* Centro: Título Absoluto */}
+        <div style={styles.titleContainer}>
           <h1 style={styles.title}>Control de Scrap</h1>
         </div>
         
+        {/* Derecha: Información de Usuario */}
         <div style={styles.userInfo}>
           <div style={styles.userDetails}>
             <span style={styles.userName}>
@@ -145,18 +166,17 @@ const Layout = ({ children }) => {
 
           <div style={styles.separator}></div>
 
-          {/* IMPLEMENTACIÓN CORRECTA: SmoothButton reemplaza al botón manual */}
           <SmoothButton 
             onClick={handleLogout} 
-            variant="secondary" // Usamos la variante secundaria definida en SmoothButton.js
+            variant="secondary" 
             title="Cerrar sesión"
             style={{
               padding: `0 ${spacing.md}`,
               height: '36px',
               fontSize: typography.sizes.sm,
               gap: '8px',
-              border: `1px solid ${colors.gray300}`, // Borde sutil
-              backgroundColor: 'transparent', // Transparente para que se vea limpio en el header
+              border: `1px solid ${colors.gray300}`,
+              backgroundColor: 'transparent',
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

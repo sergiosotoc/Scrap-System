@@ -10,8 +10,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import { ToastProvider } from './context/ToastContext';
 import { injectGlobalStyles } from './styles/animations';
-
-// IMPORTAR LOS ESTILOS GLOBALES AQUÍ
 import './App.css';
 
 const HomeRedirect = () => {
@@ -41,8 +39,9 @@ const App = () => {
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/login" element={<Login />} />
             
+            {/* ✅ CORRECCIÓN: Usar string en lugar de array */}
             <Route path="/admin/*" element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <AdminDashboard />
                 </Layout>
@@ -50,7 +49,7 @@ const App = () => {
             } />
 
             <Route path="/operador/*" element={
-              <ProtectedRoute allowedRoles={['operador']}>
+              <ProtectedRoute requiredRole="operador">
                 <Layout>
                   <OperadorDashboard />
                 </Layout>
@@ -58,7 +57,7 @@ const App = () => {
             } />
 
             <Route path="/receptor/*" element={
-              <ProtectedRoute allowedRoles={['receptor']}>
+              <ProtectedRoute requiredRole="receptor">
                 <Layout>
                   <ReceptorDashboard />
                 </Layout>

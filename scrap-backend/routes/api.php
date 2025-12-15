@@ -10,6 +10,8 @@ use App\Http\Controllers\RegistrosScrapController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BasculaController;
 use App\Http\Controllers\ExcelReportController;
+use App\Http\Controllers\MaterialesController;
+use App\Http\Controllers\AreasMaquinasController; // Añadir este import
 
 Route::middleware('api')->group(function () {
     // Autenticación
@@ -17,11 +19,27 @@ Route::middleware('api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::get('/user', [AuthController::class, 'user'])->middleware('auth:sanctum');
 
-    // Dashboard
+    // Dashboard 
     Route::middleware('auth:sanctum')->prefix('dashboard')->group(function () {
         Route::get('/stats', [DashboardController::class, 'stats']);
-        Route::get('/recent-activity', [DashboardController::class, 'recentActivity']);
-        Route::get('/admin-stats', [DashboardController::class, 'adminStats']);
+    });
+
+    // Materiales
+    Route::middleware('auth:sanctum')->prefix('materiales')->group(function () {
+        Route::get('/lista/{uso}', [MaterialesController::class, 'getByUso']);
+        // Rutas solo Admin
+        Route::middleware('role:admin')->group(function () {
+            Route::get('/', [MaterialesController::class, 'index']);
+            Route::post('/', [MaterialesController::class, 'store']);
+            Route::delete('/{id}', [MaterialesController::class, 'destroy']);
+        });
+    });
+
+    // GESTIÓN DE ÁREAS Y MÁQUINAS (Solo Admin)
+    Route::middleware(['auth:sanctum', 'role:admin'])->prefix('config-areas')->group(function () {
+        Route::get('/', [AreasMaquinasController::class, 'index']);
+        Route::post('/', [AreasMaquinasController::class, 'store']);
+        Route::delete('/{id}', [AreasMaquinasController::class, 'destroy']);
     });
 
     // Gestión de usuarios (solo admin)
@@ -30,7 +48,6 @@ Route::middleware('api')->group(function () {
         Route::post('/', [UserController::class, 'store']);
         Route::put('/{id}', [UserController::class, 'update']);
         Route::delete('/{id}', [UserController::class, 'destroy']);
-        Route::patch('/{id}/toggle-status', [UserController::class, 'toggleStatus']);
     });
 
     // Báscula
@@ -48,23 +65,19 @@ Route::middleware('api')->group(function () {
         Route::get('/', [RegistrosScrapController::class, 'index']);
         Route::post('/', [RegistrosScrapController::class, 'store']);
         Route::get('/configuracion', [RegistrosScrapController::class, 'getConfiguracion']);
-        Route::post('/conectar-bascula', [RegistrosScrapController::class, 'conectarBascula']);
-        Route::get('/reportes/acumulados', [RegistrosScrapController::class, 'reportesAcumulados']);
         Route::get('/stats', [RegistrosScrapController::class, 'stats']);
-        Route::get('/{id}', [RegistrosScrapController::class, 'show']);
     });
 
     // Recepciones de scrap
     Route::middleware('auth:sanctum')->prefix('recepciones-scrap')->group(function () {
         Route::get('/', [RecepcionScrapController::class, 'index']);
         Route::post('/', [RecepcionScrapController::class, 'store']);
-        Route::get('/reportes/recepcion', [RecepcionScrapController::class, 'reporteRecepcion']);
-        Route::get('/stats', [RecepcionScrapController::class, 'stats']);
-        Route::get('/{id}', [RecepcionScrapController::class, 'show']);
+        Route::put('/{id}', [RecepcionScrapController::class, 'update']);
     });
 
     // Reportes Excel
     Route::middleware('auth:sanctum')->prefix('excel')->group(function () {
         Route::get('/export-formato-empresa', [ExcelReportController::class, 'exportFormatoEmpresa']);
+        Route::get('/export-recepciones', [ExcelReportController::class, 'exportReporteRecepcion']);
     });
 });

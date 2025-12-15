@@ -19,19 +19,29 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
+            // Reglas de validación personalizadas
+            $messages = [
+                'username.required' => 'El usuario es obligatorio.',
+                'username.unique' => 'Este nombre de usuario ya está registrado.',
+                'password.required' => 'La contraseña es obligatoria.',
+                'password.min' => 'La contraseña debe tener al menos 6 caracteres.',
+                'name.required' => 'El nombre completo es obligatorio.',
+                'role.required' => 'Debes seleccionar un rol.',
+                'role.in' => 'El rol seleccionado no es válido.'
+            ];
+
             $validated = $request->validate([
                 'username' => 'required|string|unique:users|max:50',
                 'password' => 'required|string|min:6',
                 'name' => 'required|string|max:50',
                 'role' => 'required|in:admin,operador,receptor',
-            ]);
+            ], $messages);
 
             $user = User::create([
                 'username' => $validated['username'],
                 'password' => Hash::make($validated['password']),
                 'name' => $validated['name'],
                 'role' => $validated['role'],
-                'activo' => true,
             ]);
 
             return response()->json([
@@ -40,25 +50,14 @@ class UserController extends Controller
             ], 201);
 
         } catch (ValidationException $e) {
-            // Capturar errores de validación específicos
-            $errors = $e->errors();
-            
-            if (isset($errors['username']) && in_array('The username has already been taken.', $errors['username'])) {
-                return response()->json([
-                    'message' => 'El nombre de usuario ya está en uso. Por favor elige otro.'
-                ], 422);
-            }
-
-            // Para otros errores de validación
+            // MODIFICACIÓN: Devolver todos los errores, no solo el genérico
             return response()->json([
-                'message' => 'Error de validación: ' . implode(' ', array_flatten($errors))
+                'message' => 'Error de validación',
+                'errors' => $e->errors() // Esto devuelve el detalle: { "password": ["muy corta"], ... }
             ], 422);
-
         } catch (\Exception $e) {
             Log::error('Error al crear usuario: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error interno del servidor al crear el usuario'
-            ], 500);
+            return response()->json(['message' => 'Error interno del servidor: ' . $e->getMessage()], 500);
         }
     }
 
@@ -68,22 +67,27 @@ class UserController extends Controller
             $user = User::findOrFail($id);
             $currentUser = auth()->user();
 
+            $messages = [
+                'username.required' => 'El usuario es obligatorio.',
+                'username.unique' => 'Este nombre de usuario ya está en uso por otro empleado.',
+                'name.required' => 'El nombre completo es obligatorio.',
+                'role.required' => 'El rol es obligatorio.',
+            ];
+
             $validated = $request->validate([
                 'username' => 'required|string|max:50|unique:users,username,' . $user->id,
                 'name' => 'required|string|max:50',
                 'role' => 'required|in:admin,operador,receptor',
-                'activo' => 'required|boolean',
-            ]);
+            ], $messages);
 
-            // Validar que no se puede cambiar el propio rol
             if ($id == $currentUser->id && $validated['role'] != $user->role) {
-                return response()->json([
-                    'message' => 'No puedes cambiar tu propio rol'
-                ], 403);
+                return response()->json(['message' => 'No puedes cambiar tu propio rol'], 403);
             }
 
-            // Solo actualizar password si se proporciona
             if ($request->filled('password')) {
+                if (strlen($request->password) < 6) {
+                    throw ValidationException::withMessages(['password' => 'La nueva contraseña debe tener al menos 6 caracteres.']);
+                }
                 $validated['password'] = Hash::make($request->password);
             }
 
@@ -95,62 +99,27 @@ class UserController extends Controller
             ]);
 
         } catch (ValidationException $e) {
-            // Capturar errores de validación específicos
-            $errors = $e->errors();
-            
-            if (isset($errors['username']) && in_array('The username has already been taken.', $errors['username'])) {
-                return response()->json([
-                    'message' => 'El nombre de usuario ya está en uso. Por favor elige otro.'
-                ], 422);
-            }
-
+            // MODIFICACIÓN: Devolver errores detallados
             return response()->json([
-                'message' => 'Error de validación: ' . implode(' ', array_flatten($errors))
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
             ], 422);
-
         } catch (\Exception $e) {
             Log::error('Error al actualizar usuario: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error interno del servidor al actualizar el usuario'
-            ], 500);
+            return response()->json(['message' => 'Error interno del servidor'], 500);
         }
     }
 
     public function destroy($id)
     {
         $currentUserId = auth()->id();
-
         if ($id == $currentUserId) {
-            return response()->json([
-                'message' => 'No puedes eliminar tu propio usuario'
-            ], 403);
+            return response()->json(['message' => 'No puedes eliminar tu propio usuario'], 403);
         }
 
         $user = User::findOrFail($id);
         $user->delete();
 
-        return response()->json([
-            'message' => 'Usuario eliminado correctamente'
-        ]);
-    }
-
-    public function toggleStatus($id)
-    {
-        if ($id == auth()->id()) {
-            return response()->json([
-                'message' => 'No puedes desactivar tu propio usuario'
-            ], 403);
-        }
-
-        $user = User::findOrFail($id);
-        $user->activo = !$user->activo;
-        $user->save();
-
-        $status = $user->activo ? 'activado' : 'desactivado';
-
-        return response()->json([
-            'message' => "Usuario {$status} correctamente",
-            'user' => $user
-        ]);
+        return response()->json(['message' => 'Usuario eliminado correctamente']);
     }
 }

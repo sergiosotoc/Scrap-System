@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 class TrustProxies extends Middleware
 {
-    protected $proxies = '*'; // ✅ Confiar en todos los proxies en la red local
+    protected $proxies = '*';
     
     protected $headers =
         Request::HEADER_X_FORWARDED_FOR |

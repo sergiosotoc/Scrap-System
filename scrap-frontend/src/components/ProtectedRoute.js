@@ -1,15 +1,12 @@
-/* src/components/ProtectedRoute.js */
+/* src/components/ProtectedRoute.js - VERSIÓN CORREGIDA */
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing, typography, baseComponents } from '../styles/designSystem';
-
-// Componentes Smooth
 import LoadingSpinner from './LoadingSpinner';
 import SmoothButton from './SmoothButton';
-import PageWrapper from './PageWrapper';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -17,10 +14,31 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     }
   }, [user, loading]);
 
+  const handleGoToDashboard = () => {
+    if (user?.role === 'admin') {
+      window.location.href = '/admin';
+    } else if (user?.role === 'operador') {
+      window.location.href = '/operador';
+    } else if (user?.role === 'receptor') {
+      window.location.href = '/receptor';
+    } else {
+      window.location.href = '/login';
+    }
+  };
+
+  const handleLogoutAndGoToLogin = async () => {
+    try {
+      await logout();
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      window.location.href = '/login';
+    }
+  };
+
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        {/* Usamos el componente unificado de carga */}
         <LoadingSpinner 
           size="lg" 
           message={
@@ -38,42 +56,61 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     return null; 
   }
 
-  if (requiredRole && user.role !== requiredRole) {
-    return (
-      <div style={styles.errorContainer}>
-        {/* Animación suave al mostrar el error */}
-        <PageWrapper>
-            <div style={styles.errorContent}>
+  if (requiredRole) {
+    const hasPermission = Array.isArray(requiredRole) 
+      ? requiredRole.includes(user.role)
+      : user.role === requiredRole;
+    
+    if (!hasPermission) {
+      return (
+        <div style={styles.errorContainer}>
+          <div style={styles.errorContent}>
             <div style={styles.errorIconCircle}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
             </div>
             <h2 style={styles.errorTitle}>Permisos insuficientes</h2>
-            <p style={styles.errorMessage}>No tiene los permisos necesarios para acceder a esta página</p>
+            <p style={styles.errorMessage}>
+              No tiene permisos para acceder a esta página.
+              <br />
+              <strong>Su rol actual: {user.role.toUpperCase()}</strong>
+              <br />
+              <span style={{ fontSize: '0.9em', color: colors.gray500 }}>
+                Rol requerido: {Array.isArray(requiredRole) ? requiredRole.join(', ') : requiredRole.toUpperCase()}
+              </span>
+            </p>
             
             <div style={styles.buttonGroup}>
-                <SmoothButton 
-                    onClick={() => window.history.back()}
-                    variant="secondary"
-                    style={styles.secondaryButton}
-                >
-                    Volver Atrás
-                </SmoothButton>
-                
-                <SmoothButton 
-                    onClick={() => window.location.href = '/login'}
-                    style={styles.loginButton}
-                >
-                    Ir al Login
-                </SmoothButton>
+              <SmoothButton 
+                onClick={() => window.history.back()}
+                variant="secondary"
+                style={styles.secondaryButton}
+              >
+                Volver Atrás
+              </SmoothButton>
+              
+              <SmoothButton 
+                onClick={handleGoToDashboard}
+                style={styles.dashboardButton}
+              >
+                Ir a mi Dashboard
+              </SmoothButton>
+              
+              <SmoothButton 
+                onClick={handleLogoutAndGoToLogin}
+                variant="destructive"
+                style={styles.logoutButton}
+              >
+                Cerrar Sesión
+              </SmoothButton>
             </div>
-            </div>
-        </PageWrapper>
-      </div>
-    );
+          </div>
+        </div>
+      );
+    }
   }
 
   return children;
@@ -88,7 +125,6 @@ const styles = {
     backgroundColor: colors.background,
     padding: spacing.xl
   },
-  // Contenedor para el texto personalizado dentro del spinner
   loadingTextContainer: {
     textAlign: 'center',
     marginTop: spacing.xs
@@ -105,15 +141,22 @@ const styles = {
     margin: 0,
     opacity: 0.8
   },
-  // Estilos de error
+  
   errorContainer: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
     backgroundColor: colors.background,
-    padding: spacing.xl
+    padding: spacing.xl,
+    width: '100%',
+    height: '100vh',
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    zIndex: 9999
   },
+  
   errorContent: {
     ...baseComponents.card,
     display: 'flex',
@@ -122,9 +165,11 @@ const styles = {
     gap: spacing.lg,
     textAlign: 'center',
     padding: spacing.xl,
-    maxWidth: '450px',
-    width: '100%'
+    maxWidth: '500px',
+    width: '100%',
+    margin: 'auto'
   },
+  
   errorIconCircle: {
     width: '64px',
     height: '64px',
@@ -135,31 +180,47 @@ const styles = {
     justifyContent: 'center',
     marginBottom: spacing.xs
   },
+  
   errorTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.error,
     margin: 0
   },
+  
   errorMessage: {
     fontSize: typography.sizes.base,
     color: colors.gray600,
     margin: 0,
-    lineHeight: 1.5
+    lineHeight: 1.6
   },
-  loginButton: {
-    // Hereda estilos de SmoothButton, aquí ajustamos layout
-    minWidth: '140px'
-  },
-  secondaryButton: {
-    minWidth: '140px'
-  },
+  
   buttonGroup: {
     display: 'flex',
+    flexDirection: 'column',
     gap: spacing.md,
     width: '100%',
     justifyContent: 'center',
-    flexWrap: 'wrap'
+    alignItems: 'center'
+  },
+  
+  secondaryButton: {
+    width: '100%',
+    maxWidth: '250px'
+  },
+  
+  dashboardButton: {
+    width: '100%',
+    maxWidth: '250px',
+    backgroundColor: colors.primary,
+    color: '#fff'
+  },
+  
+  logoutButton: {
+    width: '100%',
+    maxWidth: '250px',
+    backgroundColor: colors.error,
+    color: '#fff'
   }
 };
 
