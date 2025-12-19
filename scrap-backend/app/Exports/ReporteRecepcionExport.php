@@ -56,7 +56,7 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
 
     public function startCell(): string
     {
-        return 'A7'; // Mismo inicio que FormatoScrapEmpresaExport
+        return 'A8';
     }
 
     public function headings(): array
@@ -85,21 +85,19 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
 
     public function styles(Worksheet $sheet)
     {
-        // Anchos de columna ajustados pero manteniendo proporción
-        $sheet->getColumnDimension('A')->setWidth(30); 
-        $sheet->getColumnDimension('B')->setWidth(15);
-        $sheet->getColumnDimension('C')->setWidth(30);
+        $sheet->getColumnDimension('A')->setWidth(35); 
+        $sheet->getColumnDimension('B')->setWidth(20);
+        $sheet->getColumnDimension('C')->setWidth(35);
         $sheet->getColumnDimension('D')->setWidth(20);
-        $sheet->getColumnDimension('E')->setWidth(25);
+        $sheet->getColumnDimension('E')->setWidth(30);
         $sheet->getColumnDimension('F')->setWidth(20);
 
-        // Estilo de encabezado idéntico al otro reporte
         return [
-            7 => [
-                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E79']], 
-                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]]
+            8 => [ 
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']], // Azul Vibrante
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => 'FFFFFF']]]
             ],
         ];
     }
@@ -109,95 +107,113 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
-                $sheet->setShowGridlines(false); 
+                $sheet->setShowGridlines(false);
 
-                // --- LOGO (Idéntico) ---
+                // --- 1. LOGO (Izquierda) ---
                 try {
                     $logoPath = public_path('Logo-COFICAB.png');
-                    if (!file_exists($logoPath)) {
-                        // Fallback opcional si no está en public
-                        $logoPath = public_path('images/Logo-COFICAB.png'); 
-                    }
-
                     if (file_exists($logoPath)) {
                         $drawing = new Drawing();
                         $drawing->setName('Logo');
                         $drawing->setPath($logoPath);
-                        $drawing->setHeight(80); 
-                        $drawing->setCoordinates('A1'); 
+                        $drawing->setHeight(60);
+                        $drawing->setCoordinates('A1');
                         $drawing->setOffsetX(10);
                         $drawing->setOffsetY(5);
                         $drawing->setWorksheet($sheet->getDelegate());
                     }
                 } catch (\Exception $e) {}
 
-                // --- TÍTULO PRINCIPAL (Ajustado a columnas A-F) ---
-                $sheet->setCellValue('B2', 'REPORTE DE RECEPCIONES SCRAP'); // Usamos B2 para centrar similar al otro
-                $sheet->mergeCells('B2:E2'); // Ajustado al ancho de este reporte (6 columnas vs 16)
-                $sheet->getStyle('B2')->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 20, 'color' => ['rgb' => '000000']],
+                // --- 2. TÍTULO (Centrado) ---
+                $sheet->setCellValue('A2', 'REPORTE DE SCRAP');
+                $sheet->mergeCells('A2:F2'); 
+                $sheet->getStyle('A2')->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 24, 'color' => ['rgb' => '1E3A8A']], 
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
                 ]);
 
-                // --- INFORMACIÓN DE CABECERA (Misma estructura) ---
-                
-                // Fecha
-                $sheet->setCellValue('B4', 'FECHA REPORTE:');
+                // --- 3. INFORMACIÓN ---
+                $sheet->setCellValue('A4', 'FECHA REPORTE:');
                 $fechaTexto = Carbon::parse($this->filtros['fecha_inicio'])->format('d-M-Y');
                 if ($this->filtros['fecha_inicio'] !== $this->filtros['fecha_fin']) {
                     $fechaTexto .= ' AL ' . Carbon::parse($this->filtros['fecha_fin'])->format('d-M-Y');
                 }
-                $sheet->setCellValue('C4', $fechaTexto); 
-                $sheet->getStyle('B4')->getFont()->setBold(true);
-                $sheet->getStyle('C4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle('C4')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
+                $sheet->setCellValue('B4', $fechaTexto);
 
-                // Usuario / Generado Por
-                $sheet->setCellValue('D4', 'GENERADO POR:');
-                $sheet->setCellValue('E4', strtoupper($this->user->name));
-                $sheet->mergeCells('E4:F4');
-                $sheet->getStyle('D4')->getFont()->setBold(true);
-                $sheet->getStyle('E4:F4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-                $sheet->getStyle('E4:F4')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
+                $sheet->setCellValue('A5', 'GENERADO POR:');
+                $sheet->setCellValue('B5', strtoupper($this->user->name));
 
-                // --- CUERPO DE LA TABLA ---
-                $rowCount = $this->collection()->count();
-                $firstDataRow = 8;
-                $lastDataRow = $firstDataRow + $rowCount - 1;
-                $lastCol = 'F'; // Última columna de este reporte
+                $destinoTexto = !empty($this->filtros['destino']) ? strtoupper($this->filtros['destino']) : 'TODOS';
+                $sheet->setCellValue('A6', 'DESTINO FILTRADO:');
+                $sheet->setCellValue('B6', $destinoTexto);
+
+                $sheet->getStyle('A4:A6')->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '374151']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT]
+                ]);
+
+                $sheet->getStyle('B4:B6')->applyFromArray([
+                    'font' => ['bold' => false, 'color' => ['rgb' => '000000']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT]
+                ]);
+
+                // --- 4. CUERPO DE LA TABLA ---
+                $rowCount = $this->collection()->count(); 
+                $headerRow = 8; 
+                $lastDataRow = $headerRow + $rowCount;
+                $lastCol = 'F';
 
                 if ($rowCount > 0) {
-                    $sheet->getStyle("A{$firstDataRow}:{$lastCol}{$lastDataRow}")->applyFromArray([
-                        'borders' => [
-                            'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]
-                        ],
-                        'font' => ['size' => 10],
-                        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER]
-                    ]);
+                    $dataRange = "A" . ($headerRow + 1) . ":{$lastCol}{$lastDataRow}";
+                    $sheet->getStyle($dataRange)->getAlignment()->setWrapText(true);
+                    $sheet->getStyle($dataRange)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
                     
-                    // Centrar columnas específicas (Origen, Destino, Usuario)
-                    $sheet->getStyle("B{$firstDataRow}:E{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("B" . ($headerRow + 1) . ":B{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("D" . ($headerRow + 1) . ":E{$lastDataRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-                    // Formato de número para Peso (Columna F)
-                    $sheet->getStyle("F{$firstDataRow}:F{$lastDataRow}")->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle("F" . ($headerRow + 1) . ":F{$lastDataRow}")->applyFromArray([
+                        'font' => ['bold' => true, 'color' => ['rgb' => '1F2937']],
+                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                        'numberFormat' => ['formatCode' => '#,##0.00 "kg"']
+                    ]);
+
+                    for ($row = $headerRow + 1; $row <= $lastDataRow; $row++) {
+                        $sheet->getRowDimension($row)->setRowHeight(25);
+                        if ($row % 2 != 0) { 
+                            $sheet->getStyle("A{$row}:F{$row}")->getFill()
+                                ->setFillType(Fill::FILL_SOLID)
+                                ->getStartColor()->setARGB('EFF6FF'); // Azul muy pálido (Zebra)
+                        }
+                    }
+
+                    $sheet->getStyle("A{$headerRow}:{$lastCol}{$lastDataRow}")->applyFromArray([
+                        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CBD5E1']]]
+                    ]);
+                    $sheet->getStyle("A8:{$lastCol}{$lastDataRow}")->applyFromArray([
+                        'borders' => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '2563EB']]]
+                    ]);
                 }
 
-                // --- TOTALES ---
+                // --- 5. TOTALES ---
                 $totalRow = $lastDataRow + 1;
-                $sheet->setCellValue("A{$totalRow}", 'TOTAL GENERAL');
-                $sheet->mergeCells("A{$totalRow}:E{$totalRow}"); // Merge hasta antes del total
-
-                // Suma de la columna F (Peso)
-                $sheet->setCellValue("F{$totalRow}", "=SUM(F{$firstDataRow}:F{$lastDataRow})");
+                $sheet->getRowDimension($totalRow)->setRowHeight(35); 
+                
+                $sheet->setCellValue("E{$totalRow}", 'TOTAL GENERAL');
+                $sheet->setCellValue("F{$totalRow}", "=SUM(F" . ($headerRow + 1) . ":F{$lastDataRow})");
 
                 $sheet->getStyle("A{$totalRow}:{$lastCol}{$totalRow}")->applyFromArray([
-                    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E79']],
-                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+                    'font' => ['bold' => true, 'size' => 12],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']], // Azul claro para totales
+                    'borders' => ['top' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '2563EB']]],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER]
                 ]);
-                
-                $sheet->getStyle("F{$totalRow}")->getNumberFormat()->setFormatCode('#,##0.00');
+
+                $sheet->getStyle("E{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle("F{$totalRow}")->applyFromArray([
+                    'numberFormat' => ['formatCode' => '#,##0.00 "kg"'],
+                    'font' => ['color' => ['rgb' => '1E40AF'], 'bold' => true, 'size' => 12],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+                ]);
             },
         ];
     }

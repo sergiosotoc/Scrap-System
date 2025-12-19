@@ -11,7 +11,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\BasculaController;
 use App\Http\Controllers\ExcelReportController;
 use App\Http\Controllers\MaterialesController;
-use App\Http\Controllers\AreasMaquinasController; // Añadir este import
+use App\Http\Controllers\AreasMaquinasController;
 
 Route::middleware('api')->group(function () {
     // Autenticación
@@ -55,6 +55,10 @@ Route::middleware('api')->group(function () {
         Route::get('/puertos', [BasculaController::class, 'listarPuertos']);
         Route::post('/conectar', [BasculaController::class, 'conectar']);
         Route::post('/leer-peso', [BasculaController::class, 'leerPeso']);
+        Route::post('/leer-rapido', [BasculaController::class, 'leerPesoRapido']); 
+        Route::post('/leer-continuo', [BasculaController::class, 'leerPesoContinuo']); 
+        Route::post('/iniciar-continua', [BasculaController::class, 'iniciarLecturaContinua']); 
+        Route::post('/detener-continua', [BasculaController::class, 'detenerLecturaContinua']); 
         Route::post('/desconectar', [BasculaController::class, 'desconectar']);
         Route::post('/configurar', [BasculaController::class, 'configurarBascula']);
         Route::get('/diagnostico', [BasculaController::class, 'diagnostico']);
@@ -75,9 +79,15 @@ Route::middleware('api')->group(function () {
         Route::put('/{id}', [RecepcionScrapController::class, 'update']);
     });
 
-    // Reportes Excel
+    // Reportes Excel y Correos
     Route::middleware('auth:sanctum')->prefix('excel')->group(function () {
         Route::get('/export-formato-empresa', [ExcelReportController::class, 'exportFormatoEmpresa']);
         Route::get('/export-recepciones', [ExcelReportController::class, 'exportReporteRecepcion']);
+        
+        // ✅ RUTA PARA VISTA PREVIA
+        Route::get('/preview-formato-empresa', [ExcelReportController::class, 'previewFormatoEmpresa']);
+        
+        // ✅ RUTA PARA ENVÍO DE CORREO (La que faltaba)
+        Route::post('/enviar-reporte-correo', [ExcelReportController::class, 'enviarReporteCorreo']);
     });
 });

@@ -256,9 +256,9 @@ const ReceptorDashboard = () => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100);
-      doc.text('Handling Unit ID:', startX, lineY);
+      doc.text('HU:', startX, lineY);
 
-      const labelWidth = doc.getTextWidth('Handling Unit ID:');
+      const labelWidth = doc.getTextWidth('HU:');
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0);

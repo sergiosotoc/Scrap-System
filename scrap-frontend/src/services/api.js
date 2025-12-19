@@ -20,10 +20,8 @@ const parseApiError = async (response) => {
     try {
         const errorData = await response.json();
         
-        // Caso especial para errores de validación (422) de Laravel
+        // Manejo de errores de validación de Laravel (422)
         if (status === 422 && errorData.errors) {
-            // Laravel devuelve { errors: { field: ["msg1", "msg2"] } }
-            // Convertimos eso en un solo texto legible
             const mensajes = Object.values(errorData.errors).flat().join('. ');
             return new Error(mensajes || 'Datos inválidos. Verifique el formulario.');
         }
@@ -42,8 +40,29 @@ const parseApiError = async (response) => {
     }
 };
 
+// Helper para lectura rápida con timeout
+const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('Timeout: La solicitud tardó demasiado');
+        }
+        throw error;
+    }
+};
+
 export const apiClient = {
-    async request(endpoint, options = {}) {
+    async request(endpoint, options = {}, timeout = 10000) { 
         const url = `${API_BASE_URL}${endpoint}`;
         const token = getAuthToken();
 
@@ -63,14 +82,12 @@ export const apiClient = {
         }
 
         try {
-            const response = await fetch(url, config);
+            const response = await fetchWithTimeout(url, config, timeout);
 
             if (!response.ok) {
                 const apiError = await parseApiError(response);
                 if (response.status === 401) {
-                    // Opcional: No borrar token inmediatamente si es solo login fallido, 
-                    // pero si es una petición normal, sí.
-                    if (endpoint !== '/login') localStorage.removeItem('authToken');
+                   if (endpoint !== '/login') localStorage.removeItem('authToken');
                 }
                 throw apiError;
             }
@@ -78,7 +95,7 @@ export const apiClient = {
             return await response.json();
         } catch (error) {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                const networkError = new Error('Error de conexión con el servidor. Verifique que el backend esté ejecutándose.');
+                const networkError = new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Verifique que el backend esté corriendo.`);
                 networkError.originalError = error;
                 throw networkError;
             }
@@ -88,8 +105,15 @@ export const apiClient = {
 
     // Auth
     async login(username, password) {
+        try {
+            const csrfUrl = API_BASE_URL.replace('/api', '/sanctum/csrf-cookie');
+            await fetch(csrfUrl, { credentials: 'include' });
+        } catch (e) {
+            console.warn('No se pudo obtener CSRF cookie, intentando login directo...', e);
+        }
         return this.request('/login', { method: 'POST', body: { username, password } });
     },
+    
     async logout() {
         try { await this.request('/logout', { method: 'POST' }); } 
         catch (e) { console.warn(e); } 
@@ -154,4 +178,20 @@ export const apiClient = {
     async deleteAreaMaquina(id) { 
         return this.request(`/config-areas/${id}`, { method: 'DELETE' }); 
     },
+
+    // ============================================
+    // Reportes y Correos (LO QUE FALTABA)
+    // ============================================
+    async enviarReporteCorreo(data) {
+        return this.request('/excel/enviar-reporte-correo', { 
+            method: 'POST', 
+            body: data 
+        });
+    },
+    
+    // Función para obtener los datos de la vista previa en formato JSON
+    async getPreviewReporte(params) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/excel/preview-formato-empresa?${query}`);
+    }
 };

@@ -100,7 +100,7 @@ class DetectorUniversalBasculas:
                 try:
                     ser.reset_input_buffer()
                     ser.write(cmd)
-                    time.sleep(0.3)
+                    time.sleep(0.1)
 
                     if ser.in_waiting > 0:
                         data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
