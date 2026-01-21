@@ -23,9 +23,6 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // CHEQUEO DE ACTIVO ELIMINADO
-        // if (!$user->activo) { ... }
-
         if (!password_verify($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Contraseña incorrecta'

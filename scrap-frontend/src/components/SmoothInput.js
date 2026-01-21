@@ -14,7 +14,7 @@ const SmoothInput = ({
   rightElement,
   required = false,
   name,
-  ...props // Capturamos props adicionales (como list, autoComplete, etc.)
+  ...props 
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 

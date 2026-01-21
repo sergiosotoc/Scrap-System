@@ -1,14 +1,18 @@
 /* src/services/api.js */
 
 // Lógica inteligente para determinar la URL base
+// Detecta la IP actual del navegador y asume que el backend está en la misma IP pero puerto 8002
 const getBaseUrl = () => {
+  // Si existe una variable de entorno forzada, úsala
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8000/api'; 
-  }
-  return `http://${window.location.hostname}:8000/api`;
+
+  const protocol = window.location.protocol; // http: o https:
+  const hostname = window.location.hostname; // localhost, 192.168.x.x, etc.
+  
+  // Apuntamos siempre al puerto 8002 para Laravel
+  return `${protocol}//${hostname}:8002/api`;
 };
 
 const API_BASE_URL = getBaseUrl();
@@ -73,7 +77,7 @@ export const apiClient = {
                 ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers,
             },
-            credentials: 'include',
+            credentials: 'include', // IMPORTANTE para Sanctum/Cookies
             ...options,
         };
 
@@ -87,7 +91,7 @@ export const apiClient = {
             if (!response.ok) {
                 const apiError = await parseApiError(response);
                 if (response.status === 401) {
-                   if (endpoint !== '/login') localStorage.removeItem('authToken');
+                    if (endpoint !== '/login') localStorage.removeItem('authToken');
                 }
                 throw apiError;
             }
@@ -95,7 +99,7 @@ export const apiClient = {
             return await response.json();
         } catch (error) {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                const networkError = new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Verifique que el backend esté corriendo.`);
+                const networkError = new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Asegúrese de ejecutar el backend con: php artisan serve --host=0.0.0.0 --port=8002`);
                 networkError.originalError = error;
                 throw networkError;
             }
@@ -106,6 +110,7 @@ export const apiClient = {
     // Auth
     async login(username, password) {
         try {
+            // Ajuste dinámico para CSRF
             const csrfUrl = API_BASE_URL.replace('/api', '/sanctum/csrf-cookie');
             await fetch(csrfUrl, { credentials: 'include' });
         } catch (e) {
@@ -179,9 +184,7 @@ export const apiClient = {
         return this.request(`/config-areas/${id}`, { method: 'DELETE' }); 
     },
 
-    // ============================================
-    // Reportes y Correos (LO QUE FALTABA)
-    // ============================================
+    // Reportes
     async enviarReporteCorreo(data) {
         return this.request('/excel/enviar-reporte-correo', { 
             method: 'POST', 
@@ -189,7 +192,6 @@ export const apiClient = {
         });
     },
     
-    // Función para obtener los datos de la vista previa en formato JSON
     async getPreviewReporte(params) {
         const query = new URLSearchParams(params).toString();
         return this.request(`/excel/preview-formato-empresa?${query}`);
