@@ -1,17 +1,12 @@
 /* src/services/api.js */
-
-// Lógica inteligente para determinar la URL base
-// Detecta la IP actual del navegador y asume que el backend está en la misma IP pero puerto 8002
 const getBaseUrl = () => {
-  // Si existe una variable de entorno forzada, úsala
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
 
-  const protocol = window.location.protocol; // http: o https:
-  const hostname = window.location.hostname; // localhost, 192.168.x.x, etc.
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
   
-  // Apuntamos siempre al puerto 8002 para Laravel
   return `${protocol}//${hostname}:8002/api`;
 };
 
@@ -24,7 +19,6 @@ const parseApiError = async (response) => {
     try {
         const errorData = await response.json();
         
-        // Manejo de errores de validación de Laravel (422)
         if (status === 422 && errorData.errors) {
             const mensajes = Object.values(errorData.errors).flat().join('. ');
             return new Error(mensajes || 'Datos inválidos. Verifique el formulario.');
@@ -44,8 +38,8 @@ const parseApiError = async (response) => {
     }
 };
 
-// Helper para lectura rápida con timeout
-const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+// Helper para lectura rápida con timeout AUMENTADO
+const fetchWithTimeout = async (url, options = {}, timeout = 120000) => { // Aumentado a 120 segundos
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
@@ -59,14 +53,14 @@ const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
-            throw new Error('Timeout: La solicitud tardó demasiado');
+            throw new Error(`Timeout: La solicitud tardó más de ${timeout/1000} segundos. Verifique la conexión del servidor.`);
         }
         throw error;
     }
 };
 
 export const apiClient = {
-    async request(endpoint, options = {}, timeout = 10000) { 
+    async request(endpoint, options = {}, timeout = 60000) { // Default 60 segundos
         const url = `${API_BASE_URL}${endpoint}`;
         const token = getAuthToken();
 
@@ -77,7 +71,7 @@ export const apiClient = {
                 ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers,
             },
-            credentials: 'include', // IMPORTANTE para Sanctum/Cookies
+            credentials: 'include',
             ...options,
         };
 
@@ -99,7 +93,7 @@ export const apiClient = {
             return await response.json();
         } catch (error) {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                const networkError = new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Asegúrese de ejecutar el backend con: php artisan serve --host=0.0.0.0 --port=8002`);
+                const networkError = new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Asegúrese de que el backend esté ejecutándose.`);
                 networkError.originalError = error;
                 throw networkError;
             }
@@ -107,81 +101,184 @@ export const apiClient = {
         }
     },
 
-    // Auth
+    // 🔥 NUEVO: Método para guardado masivo en batch
+    async createRegistroScrapBatch(dataArray) {
+        return this.request('/registros-scrap/batch', {
+            method: 'POST',
+            body: { registros: dataArray }
+        }, 180000); // 180 segundos para batch
+    },
+
+    // 🔥 NUEVO: Método para optimizar lecturas de báscula
+    async leerPesoBasculaOptimizado(data, timeoutMs = 10000) {
+        return this.request('/bascula/leer-peso', {
+            method: 'POST',
+            body: data
+        }, timeoutMs);
+    },
+
+    // 🔥 NUEVO: Verificar estado del servidor
+    async checkServerHealth() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/health`, {
+                method: 'GET',
+                timeout: 5000
+            });
+            return response.ok;
+        } catch (error) {
+            return false;
+        }
+    },
+
+    // Auth - con timeout más corto
     async login(username, password) {
         try {
-            // Ajuste dinámico para CSRF
             const csrfUrl = API_BASE_URL.replace('/api', '/sanctum/csrf-cookie');
-            await fetch(csrfUrl, { credentials: 'include' });
+            await fetch(csrfUrl, { 
+                credentials: 'include',
+                signal: AbortSignal.timeout(5000) 
+            });
         } catch (e) {
             console.warn('No se pudo obtener CSRF cookie, intentando login directo...', e);
         }
-        return this.request('/login', { method: 'POST', body: { username, password } });
+        return this.request('/login', { method: 'POST', body: { username, password } }, 15000);
     },
     
     async logout() {
-        try { await this.request('/logout', { method: 'POST' }); } 
-        catch (e) { console.warn(e); } 
-        finally { localStorage.removeItem('authToken'); }
+        try { 
+            await this.request('/logout', { method: 'POST' }, 10000); 
+        } catch (e) { 
+            console.warn('Error en logout:', e); 
+        } finally { 
+            localStorage.removeItem('authToken'); 
+        }
     },
-    async getUser() { return this.request('/user'); },
+    
+    async getUser() { 
+        return this.request('/user', {}, 15000); 
+    },
 
-    // Bascula
-    async listarPuertosBascula() { return this.request('/bascula/puertos'); },
-    async conectarBascula(data) { return this.request('/bascula/conectar', { method: 'POST', body: data }); },
-    async leerPesoBascula(data) { return this.request('/bascula/leer-peso', { method: 'POST', body: data }); },
-    async desconectarBascula(data) { return this.request('/bascula/desconectar', { method: 'POST', body: data }); },
+    // Bascula - con timeout específicos
+    async listarPuertosBascula() { 
+        return this.request('/bascula/puertos', {}, 10000); 
+    },
+    
+    async conectarBascula(data) { 
+        return this.request('/bascula/conectar', { method: 'POST', body: data }, 15000); 
+    },
+    
+    async leerPesoBascula(data) { 
+        return this.request('/bascula/leer-peso', { method: 'POST', body: data }, 15000); 
+    },
+    
+    async desconectarBascula(data) { 
+        return this.request('/bascula/desconectar', { method: 'POST', body: data }, 10000); 
+    },
 
-    // Registros
+    // Registros - con timeout optimizados
     async getRegistrosScrap(params = {}) {
         const query = new URLSearchParams(params).toString();
-        return this.request(`/registros-scrap?${query}`);
+        return this.request(`/registros-scrap?${query}`, {}, 30000);
     },
-    async getRegistrosConfig() { return this.request('/registros-scrap/configuracion'); },
-    async createRegistroScrap(data) { return this.request('/registros-scrap', { method: 'POST', body: data }); },
-    async getRegistroScrapStats() { return this.request('/registros-scrap/stats'); },
+    
+    async getRegistrosConfig() { 
+        return this.request('/registros-scrap/configuracion', {}, 30000);
+    },
+    
+    async createRegistroScrap(data) { 
+        return this.request('/registros-scrap', { method: 'POST', body: data }, 30000); 
+    },
+    
+    async getRegistroScrapStats() { 
+        return this.request('/registros-scrap/stats', {}, 15000); 
+    },
 
     // Recepciones
     async getRecepcionesScrap(params = {}) {
         const query = new URLSearchParams(params).toString();
-        return this.request(`/recepciones-scrap?${query}`);
+        return this.request(`/recepciones-scrap?${query}`, {}, 30000);
     },
-    async createRecepcionScrap(data) { return this.request('/recepciones-scrap', { method: 'POST', body: data }); },
-    async updateRecepcionScrap(id, data) { return this.request(`/recepciones-scrap/${id}`, { method: 'PUT', body: data }); },
+    
+    async createRecepcionScrap(data) { 
+        return this.request('/recepciones-scrap', { method: 'POST', body: data }, 30000); 
+    },
+    
+    async updateRecepcionScrap(id, data) { 
+        return this.request(`/recepciones-scrap/${id}`, { method: 'PUT', body: data }, 30000); 
+    },
 
     // Usuarios
-    async getUsers() { return this.request('/users'); },
-    async createUser(data) { return this.request('/users', { method: 'POST', body: data }); },
-    async updateUser(id, data) { return this.request(`/users/${id}`, { method: 'PUT', body: data }); },
-    async deleteUser(id) { return this.request(`/users/${id}`, { method: 'DELETE' }); },
-    async toggleUserStatus(id) { return this.request(`/users/${id}/toggle-status`, { method: 'PATCH' }); },
+    async getUsers() { 
+        return this.request('/users', {}, 15000); 
+    },
+    
+    async createUser(data) { 
+        return this.request('/users', { method: 'POST', body: data }, 30000); 
+    },
+    
+    async updateUser(id, data) { 
+        return this.request(`/users/${id}`, { method: 'PUT', body: data }, 30000); 
+    },
+    
+    async deleteUser(id) { 
+        return this.request(`/users/${id}`, { method: 'DELETE' }, 15000); 
+    },
+    
+    async toggleUserStatus(id) { 
+        return this.request(`/users/${id}/toggle-status`, { method: 'PATCH' }, 15000); 
+    },
 
     // Dashboard
-    async getDashboardStats() { return this.request('/dashboard/stats'); },
+    async getDashboardStats() { 
+        return this.request('/dashboard/stats', {}, 15000); 
+    },
 
-    // MATERIALES (Gestión)
+    // MATERIALES
     async getMaterialesPorUso(uso) { 
-        return this.request(`/materiales/lista/${uso}`); 
+        return this.request(`/materiales/lista/${uso}`, {}, 15000); 
     },
+    
     async getAllMateriales() { 
-        return this.request('/materiales'); 
+        return this.request('/materiales', {}, 30000); 
     },
+    
     async createMaterial(data) { 
-        return this.request('/materiales', { method: 'POST', body: data }); 
+        return this.request('/materiales', { method: 'POST', body: data }, 30000); 
     },
+    
     async deleteMaterial(id) { 
-        return this.request(`/materiales/${id}`, { method: 'DELETE' }); 
+        return this.request(`/materiales/${id}`, { method: 'DELETE' }, 15000); 
     },
 
     // GESTIÓN DE ÁREAS Y MÁQUINAS
     async getAllAreasMaquinas() { 
-        return this.request('/config-areas'); 
+        return this.request('/config-areas', {}, 30000); 
     },
+    
     async createAreaMaquina(data) { 
-        return this.request('/config-areas', { method: 'POST', body: data }); 
+        return this.request('/config-areas', { method: 'POST', body: data }, 30000); 
     },
+    
     async deleteAreaMaquina(id) { 
-        return this.request(`/config-areas/${id}`, { method: 'DELETE' }); 
+        return this.request(`/config-areas/${id}`, { method: 'DELETE' }, 15000); 
+    },
+
+    // GESTIÓN DE DESTINATARIOS DE CORREO
+    async getDestinatarios() { 
+        return this.request('/destinatarios', {}, 15000); 
+    },
+    
+    async createDestinatario(data) { 
+        return this.request('/destinatarios', { 
+            method: 'POST', 
+            body: data 
+        }, 30000); 
+    },
+    
+    async deleteDestinatario(id) { 
+        return this.request(`/destinatarios/${id}`, { 
+            method: 'DELETE' 
+        }, 15000); 
     },
 
     // Reportes
@@ -189,11 +286,11 @@ export const apiClient = {
         return this.request('/excel/enviar-reporte-correo', { 
             method: 'POST', 
             body: data 
-        });
+        }, 60000);
     },
     
     async getPreviewReporte(params) {
         const query = new URLSearchParams(params).toString();
-        return this.request(`/excel/preview-formato-empresa?${query}`);
+        return this.request(`/excel/preview-formato-empresa?${query}`, {}, 30000);
     }
 };

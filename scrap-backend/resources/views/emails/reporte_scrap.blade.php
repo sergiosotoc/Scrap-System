@@ -2,21 +2,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Reporte de Scrap Generado</title>
+    <meta charset="utf-8">
+    <title>{{ $asunto }}</title>
 </head>
-<body style="font-family: Arial, sans-serif; color: #333;">
-    <h2 style="color: #2563EB;">Reporte de Scrap Generado</h2>
-    <p>Hola,</p>
-    <p>Se adjunta el reporte de scrap generado por el operador <strong>{{ $operadorName }}</strong>.</p>
+<body style="font-family: Arial, sans-serif; color: #000000; font-size: 14px; margin: 0; padding: 0;">
     
-    <ul>
-        <li><strong>Fecha del Reporte:</strong> {{ $fecha }}</li>
-        <li><strong>Turno:</strong> {{ $turno }}</li>
-    </ul>
+    {{-- Asunto principal --}}
+    <p style="font-weight: bold; font-size: 16px; margin: 0; padding: 0;">{{ $asunto }}</p>
+    
+    {{-- Espacios en blanco --}}
+    <br><br><br>
+    
+    {{-- Saludo --}}
+    <p style="margin: 0; padding: 0;">Saludos cordiales.</p>
+    <br>
 
-    <p>Este es un correo automático del Sistema de Control de Scrap de COFICAB.</p>
+    {{-- Firma del operador --}}
+    <p style="font-weight: bold; margin-bottom: 0; padding: 0;">{{ $operadorName }}</p>
+    {{-- Solo mostrar puesto si no está vacío --}}
+    @if(!empty($operadorPuesto))
+    <p style="margin-top: 0; padding: 0; color: #444;">{{ $operadorPuesto }}</p>
+    @endif
     
-    <hr>
-    <small style="color: #666;">No respondas a este correo.</small>
+    <br>
+    
+    {{-- Nombre de la empresa --}}
+    <p style="font-weight: bold; color: #1E3A8A; margin: 0; padding: 0;">COFICAB Mx S. de R. L. de C.V.</p>
+
 </body>
 </html>

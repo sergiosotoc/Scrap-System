@@ -13,15 +13,14 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import CardTransition from '../components/CardTransition';
 import PageWrapper from '../components/PageWrapper';
 
-// ✅ COMPONENTE ANIMATED COUNTER MEJORADO (Estilo Receptor)
 const AnimatedCounter = ({ value, duration = 1000, decimals = 2 }) => {
   const [count, setCount] = useState(0);
-  const previousValue = useRef(0); // Guardamos el valor previo para transiciones suaves
+  const previousValue = useRef(0); 
 
   useEffect(() => {
     let startTime;
     let animationFrame;
-    const start = previousValue.current; // Inicia desde el último valor, no desde 0
+    const start = previousValue.current; 
     const end = parseFloat(value) || 0;
     
     if (start === end) {
@@ -32,7 +31,6 @@ const AnimatedCounter = ({ value, duration = 1000, decimals = 2 }) => {
     const step = (timestamp) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
-      // Easing function: easeOutExpo
       const easeOut = 1 - Math.pow(2, -10 * progress);
       
       const current = start + (end - start) * easeOut;
@@ -42,7 +40,7 @@ const AnimatedCounter = ({ value, duration = 1000, decimals = 2 }) => {
         animationFrame = window.requestAnimationFrame(step);
       } else {
         setCount(end);
-        previousValue.current = end; // Actualizamos la referencia al terminar
+        previousValue.current = end; 
       }
     };
     
@@ -57,7 +55,6 @@ const OperadorDashboard = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   
-  // Modales
   const [showModal, setShowModal] = useState(false); 
   const [showEmailModal, setShowEmailModal] = useState(false);
   
@@ -66,17 +63,13 @@ const OperadorDashboard = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   
-  // Estado para animaciones de tabla
   const [triggerTableAnimation, setTriggerTableAnimation] = useState(false);
 
-  // Estado para correo y PREVIEW
-  const [emailDestino, setEmailDestino] = useState('');
   const [enviandoCorreo, setEnviandoCorreo] = useState(false);
   const [vistaPreviaData, setVistaPreviaData] = useState(null); 
   const [cargandoPreview, setCargandoPreview] = useState(false);
   const [vistaPrevia, setVistaPrevia] = useState(false); 
 
-  // Config
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
@@ -140,7 +133,7 @@ const OperadorDashboard = () => {
   const loadOperadorData = useCallback(async () => {
     if (!filtros.fecha) return;
     setIsFetching(true);
-    setTriggerTableAnimation(false); // Reiniciar animación
+    setTriggerTableAnimation(false); 
     
     try {
       const [registrosData, configData] = await Promise.all([
@@ -188,21 +181,14 @@ const OperadorDashboard = () => {
     setTimeout(() => setModalLoading(false), 100);
   };
 
-  // --- LÓGICA DE CORREO Y PREVIEW ---
   const handleOpenEmailModal = () => {
-      setEmailDestino(''); 
       setVistaPreviaData(null);
       setVistaPrevia(false);
       setShowEmailModal(true);
   };
 
   const handlePreviewEmail = async (e) => {
-      e.preventDefault();
-      if (!emailDestino) {
-          addToast('Por favor ingrese un correo destinatario', 'warning');
-          return;
-      }
-      
+      e.preventDefault(); 
       setCargandoPreview(true);
       try {
           const data = await apiClient.getPreviewReporte({
@@ -226,12 +212,11 @@ const OperadorDashboard = () => {
       setEnviandoCorreo(true);
       try {
           await apiClient.enviarReporteCorreo({
-              email_destino: emailDestino,
               fecha: filtros.fecha,
               turno: filtros.turno
           });
           
-          addToast(`Reporte enviado exitosamente a ${emailDestino}`, 'success');
+          addToast(`Reporte enviado exitosamente a la lista de distribución.`, 'success');
           setShowEmailModal(false);
           setVistaPreviaData(null);
           setVistaPrevia(false);
@@ -242,9 +227,7 @@ const OperadorDashboard = () => {
       }
   };
 
-  // ... (Styles) ...
   const styles = {
-    // ... (Estilos previos container, header, etc.) ...
     container: { backgroundColor: colors.background, fontFamily: typography.fontFamily, boxSizing: 'border-box', width: '100%', height: 'auto' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.lg, flexWrap: 'wrap', gap: spacing.md },
     headerActions: { display: 'flex', gap: spacing.md, alignItems: 'center' },
@@ -279,11 +262,9 @@ const OperadorDashboard = () => {
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '1000px' },
     th: { padding: spacing.md, textAlign: 'left', fontSize: typography.sizes.xs, fontWeight: typography.weights.bold, color: colors.gray600, textTransform: 'uppercase', backgroundColor: colors.gray50, borderBottom: `2px solid ${colors.gray200}`, position: 'sticky', top: 0, zIndex: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap' },
     
-    // ESTILO DE FILA CON ANIMACIÓN Y COLORES RESTAURADOS
     tr: (index) => ({ 
         borderBottom: `1px solid ${colors.gray200}`, 
         transition: 'all 0.3s ease',
-        // NO definimos backgroundColor aquí para no sobrescribir basculaRow/manualRow
         opacity: triggerTableAnimation ? 1 : 0,
         transform: triggerTableAnimation ? 'translateY(0)' : 'translateY(10px)',
         transitionDelay: `${index * 0.03}s` 
@@ -300,10 +281,9 @@ const OperadorDashboard = () => {
     badgeSuccess: { ...baseComponents.badge, backgroundColor: colors.secondaryLight, color: colors.secondary, gap: spacing.xs },
     badgeWarn: { ...baseComponents.badge, backgroundColor: colors.warning + '20', color: colors.warning, gap: spacing.xs },
     
-    // ESTILOS MEJORADOS PARA EL RESUMEN (TARJETAS COMPACTAS)
     resumenContainer: { 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', // Más compacto
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: spacing.md, 
         marginTop: 0, 
         marginBottom: spacing.lg 
@@ -312,9 +292,9 @@ const OperadorDashboard = () => {
         display: 'flex', 
         flexDirection: 'column', 
         alignItems: 'center', 
-        gap: '4px', // Gap reducido
+        gap: '4px', 
         textAlign: 'center',
-        padding: spacing.md, // Padding reducido
+        padding: spacing.md,
         backgroundColor: colors.surface,
         borderRadius: radius.md,
         boxShadow: shadows.sm,
@@ -329,7 +309,7 @@ const OperadorDashboard = () => {
         }
     }),
     resumenLabel: { 
-        fontSize: '0.65rem', // Fuente más pequeña
+        fontSize: '0.65rem',
         color: colors.gray500, 
         fontWeight: typography.weights.bold, 
         textTransform: 'uppercase', 
@@ -337,13 +317,13 @@ const OperadorDashboard = () => {
         marginTop: '2px'
     },
     resumenValue: (color) => ({ 
-        fontSize: '1.25rem', // Fuente del número reducida
+        fontSize: '1.25rem',
         color: color, 
         fontWeight: typography.weights.extrabold,
         lineHeight: 1.1
     }),
     iconCircle: (color) => ({
-        width: '32px', // Ícono más pequeño
+        width: '32px',
         height: '32px', 
         borderRadius: '50%', 
         backgroundColor: color + '15', 
@@ -360,7 +340,6 @@ const OperadorDashboard = () => {
     dynamicHeader: { minWidth: '90px', textAlign: 'center', padding: '8px', fontSize: '0.7rem' },
     materialCell: { fontSize: typography.sizes.xs, color: colors.gray600, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
     
-    // ... (Resto de estilos de previewTable, etc.) ...
     previewTableWrapper: { overflowX: 'auto', maxHeight: '400px', border: `1px solid ${colors.gray200}`, borderRadius: radius.md, marginBottom: spacing.lg },
     previewTable: { width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' },
     previewTh: { padding: spacing.sm, backgroundColor: colors.primary, color: '#fff', textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap', border: `1px solid ${colors.primaryHover}` },
@@ -369,8 +348,6 @@ const OperadorDashboard = () => {
     previewTotalRow: { backgroundColor: colors.gray100, fontWeight: 'bold' }
   };
 
-  // ... (Resto de la lógica) ...
-  // Cálculos para stats dinámicos (Animados)
   const totalRegistros = registros.length;
   const numFilasConPeso = registros.filter(r => parseFloat(r.peso_total) > 0).length;
   const totalKg = registros.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0);
@@ -385,13 +362,12 @@ const OperadorDashboard = () => {
     );
   }
 
-  // Modal para correo (CON VISTA PREVIA Y EMOJIS REEMPLAZADOS)
   const emailModal = showEmailModal ? (
       <div style={styles.modalOverlay} onClick={() => !enviandoCorreo && setShowEmailModal(false)}>
           <div style={vistaPrevia ? styles.modalMedium : styles.modalSmall} onClick={(e) => e.stopPropagation()}>
               <div style={styles.modalHeader}>
                 <div>
-                    <h3 style={{...styles.cardTitle, margin: 0, fontSize: '1.25rem'}}>Enviar Reporte</h3>
+                    <h3 style={{...styles.cardTitle, margin: 0, fontSize: '1.25rem'}}>Enviar Reporte Oficial</h3>
                     <p style={{fontSize: typography.sizes.xs, color: colors.gray600, margin: '4px 0 0 0'}}>
                         {filtros.fecha} - Turno {filtros.turno}
                     </p>
@@ -401,39 +377,28 @@ const OperadorDashboard = () => {
               
               <div style={{...styles.modalContent, padding: spacing.lg}}>
                 {!vistaPreviaData ? (
-                    <form onSubmit={handlePreviewEmail} style={{display: 'flex', flexDirection: 'column', gap: spacing.lg}}>
-                        <div style={{textAlign: 'center', padding: spacing.lg, backgroundColor: colors.gray50, borderRadius: radius.md}}>
-                            <div style={{marginBottom: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: colors.gray700}}>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
-                                <span>Se enviará el archivo Excel adjunto a:</span>
+                    <div style={{display: 'flex', flexDirection: 'column', gap: spacing.lg, textAlign: 'center'}}>
+                        <div style={{padding: spacing.lg, backgroundColor: colors.info + '15', borderRadius: radius.md, border: `1px solid ${colors.info}30`}}>
+                            <div style={{marginBottom: spacing.sm, color: colors.info}}>
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                             </div>
-                            <SmoothInput 
-                                label="Correo Destinatario" 
-                                type="email" 
-                                value={emailDestino} 
-                                onChange={(e) => setEmailDestino(e.target.value)} 
-                                placeholder="jefe.planta@coficab.com" 
-                                required
-                                autoFocus
-                                style={{textAlign: 'center'}}
-                            />
+                            <h4 style={{margin: '0 0 8px 0', color: colors.gray800}}>Envío Automático</h4>
+                            <p style={{margin: 0, fontSize: '0.9rem', color: colors.gray600}}>
+                                Se enviará el reporte a la lista de distribución configurada por administración (Calidad, Gerencia, etc.).
+                            </p>
                         </div>
-                        <div style={{display: 'flex', justifyContent: 'flex-end', gap: spacing.md}}>
-                            <SmoothButton type="button" onClick={() => setShowEmailModal(false)} variant="secondary">Cancelar</SmoothButton>
-                            <SmoothButton type="submit" disabled={cargandoPreview}>
-                                {cargandoPreview ? 'Cargando...' : 'Vista Previa'}
+                        
+                        <div style={{display: 'flex', justifyContent: 'center', gap: spacing.md}}>
+                            <SmoothButton onClick={handlePreviewEmail} disabled={cargandoPreview} variant="secondary">
+                                {cargandoPreview ? 'Generando...' : 'Ver Vista Previa'}
+                            </SmoothButton>
+                            <SmoothButton onClick={handleSendEmail} disabled={enviandoCorreo} style={{backgroundColor: colors.success, color: 'white'}}>
+                                {enviandoCorreo ? 'Enviando...' : 'Enviar Ahora'}
                             </SmoothButton>
                         </div>
-                    </form>
+                    </div>
                 ) : (
                     <div style={{animation: 'fadeIn 0.3s ease'}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md}}>
-                            <h4 style={{margin: 0, color: colors.gray800}}>Vista Previa del Contenido</h4>
-                            <div style={{fontSize: '0.8rem', color: colors.gray500}}>
-                                Para: <strong>{emailDestino}</strong>
-                            </div>
-                        </div>
-
                         <div style={styles.previewTableWrapper}>
                             <table style={styles.previewTable}>
                                 <thead>
@@ -453,10 +418,7 @@ const OperadorDashboard = () => {
                                             <td style={styles.previewTdText}>{row.maquina}</td>
                                             {vistaPreviaData.headers.map(h => (
                                                 <td key={h.id} style={styles.previewTd}>
-                                                    {/* ✅ ANIMACIÓN APLICADA A CELDAS INDIVIDUALES */}
-                                                    {row.valores[h.id] > 0 
-                                                        ? <AnimatedCounter value={row.valores[h.id]} duration={500} decimals={2} />
-                                                        : '-'}
+                                                    {row.valores[h.id] > 0 ? row.valores[h.id].toFixed(2) : '-'}
                                                 </td>
                                             ))}
                                             <td style={{...styles.previewTd, fontWeight: 'bold'}}>{row.total.toFixed(2)}</td>
@@ -466,10 +428,7 @@ const OperadorDashboard = () => {
                                         <td colSpan={2} style={{...styles.previewTd, textAlign: 'center'}}>TOTALES</td>
                                         {vistaPreviaData.headers.map(h => (
                                             <td key={h.id} style={styles.previewTd}>
-                                                {/* ✅ ANIMACIÓN APLICADA A TOTALES POR MATERIAL */}
-                                                {vistaPreviaData.totales[h.id] > 0 
-                                                    ? <AnimatedCounter value={vistaPreviaData.totales[h.id]} duration={500} decimals={2} />
-                                                    : '-'}
+                                                {vistaPreviaData.totales[h.id] > 0 ? vistaPreviaData.totales[h.id].toFixed(2) : '-'}
                                             </td>
                                         ))}
                                         <td style={styles.previewTd}>{vistaPreviaData.granTotal.toFixed(2)}</td>
@@ -479,18 +438,9 @@ const OperadorDashboard = () => {
                         </div>
 
                         <div style={{display: 'flex', gap: spacing.md, justifyContent: 'flex-end', borderTop: `1px solid ${colors.gray200}`, paddingTop: spacing.md}}>
-                            <SmoothButton type="button" onClick={() => setVistaPreviaData(null)} variant="secondary" disabled={enviandoCorreo}>Editar Correo</SmoothButton>
+                            <SmoothButton type="button" onClick={() => setVistaPreviaData(null)} variant="secondary" disabled={enviandoCorreo}>Volver</SmoothButton>
                             <SmoothButton onClick={handleSendEmail} disabled={enviandoCorreo} style={{backgroundColor: colors.success, border: 'none', color: '#fff', minWidth: '160px', justifyContent: 'center'}}>
-                                {enviandoCorreo ? (
-                                    <>
-                                        <span style={{animation: 'spin 1s linear infinite', marginRight: '6px', display: 'inline-flex', alignItems: 'center'}}>
-                                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
-                                        </span> 
-                                        Enviando...
-                                    </>
-                                ) : (
-                                    <>Confirmar y Enviar</>
-                                )}
+                                {enviandoCorreo ? 'Enviando...' : 'Confirmar y Enviar'}
                             </SmoothButton>
                         </div>
                     </div>
@@ -523,7 +473,6 @@ const OperadorDashboard = () => {
             </div>
         </CardTransition>
 
-        {/* ✅ RESUMEN CON TARJETAS MÁS PEQUEÑAS ✅ */}
         {registros.length > 0 && (
         <CardTransition delay={100} style={styles.resumenContainer}>
             <div style={styles.resumenItem(colors.primary)}>
@@ -561,7 +510,6 @@ const OperadorDashboard = () => {
         )}
 
         <CardTransition delay={200} style={styles.card}>
-            {/* ... Resto del componente ... */}
             <div style={styles.cardHeader}>
             <h3 style={styles.cardTitle}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
@@ -597,7 +545,6 @@ const OperadorDashboard = () => {
                 <SmoothInput label="Fecha:" type="date" name="fecha" value={fechaInput} onChange={handleFechaChange} style={{...styles.input, paddingRight: spacing.sm}} />
                 </div>
                 
-                {/* Botones de acción */}
                 <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-end', marginBottom: '2px' }}>
                     <div style={{ transition: 'transform 0.2s', ':hover': { transform: 'scale(1.02)' } }}>
                         <ExcelExportButtons tipo="formato-empresa" filters={filtros} buttonText="Descargar" buttonStyle={styles.reportButton} />
@@ -622,7 +569,6 @@ const OperadorDashboard = () => {
                     <th style={styles.th}>Turno</th>
                     <th style={styles.th}>Área</th>
                     <th style={styles.th}>Máquina</th>
-                    {/* Renderizado dinámico de encabezados basado en materiales activos */}
                     {config?.tipos_scrap && Array.isArray(config.tipos_scrap) ? config.tipos_scrap.sort((a,b) => a.orden - b.orden).map(mat => (
                          <th key={mat.id} style={{...styles.th, ...styles.dynamicHeader}}>
                             {mat.tipo_nombre.split(' ').map(w => w.substring(0, 3)).join('.')} 
@@ -641,7 +587,6 @@ const OperadorDashboard = () => {
                             <td style={styles.td}><span style={styles.areaTag}>{r.area_real}</span></td>
                             <td style={styles.td}><strong>{r.maquina_real}</strong></td>
                             
-                            {/* ✅ Celdas dinámicas de materiales con ANIMACIÓN */}
                             {config?.tipos_scrap && Array.isArray(config.tipos_scrap) ? config.tipos_scrap.sort((a,b) => a.orden - b.orden).map(mat => {
                                 const detalle = r.materiales_resumen 
                                     ? r.materiales_resumen.find(d => d.nombre === mat.tipo_nombre) 
@@ -674,7 +619,6 @@ const OperadorDashboard = () => {
         </CardTransition>
       </PageWrapper>
 
-      {/* Modal Registro */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -699,7 +643,6 @@ const OperadorDashboard = () => {
         </div>
       )}
 
-      {/* Modal Correo */}
       {emailModal && createPortal(emailModal, document.body)}
     </div>
   );

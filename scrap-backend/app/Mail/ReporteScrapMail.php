@@ -8,26 +8,26 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Mail\Mailables\Attachment;
+use Illuminate\Mail\Mailables\Address;
 use Illuminate\Queue\SerializesModels;
 
 class ReporteScrapMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $fecha;
-    public $turno;
+    public $asuntoPersonalizado;
     public $operadorName;
     protected $excelFilePath;
     protected $fileName;
 
     /**
      * Create a new message instance.
+     * Constructor actualizado (parámetros simplificados)
      */
-    public function __construct($fecha, $turno, $operadorName, $excelFilePath, $fileName)
+    public function __construct($asunto, $operadorName, $excelFilePath, $fileName)
     {
-        $this->fecha = $fecha;
-        $this->turno = $turno;
-        $this->operadorName = $operadorName;
+        $this->asuntoPersonalizado = $asunto;
+        $this->operadorName = strtoupper($operadorName);
         $this->excelFilePath = $excelFilePath;
         $this->fileName = $fileName;
     }
@@ -38,7 +38,11 @@ class ReporteScrapMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Reporte de Scrap - ' . $this->fecha . ' - Turno ' . $this->turno,
+            from: new Address(
+                env('MAIL_FROM_ADDRESS', 'scrap.cofmx@coficab.com'), 
+                env('MAIL_FROM_NAME', 'Scrap')
+            ),
+            subject: $this->asuntoPersonalizado,
         );
     }
 
@@ -48,7 +52,12 @@ class ReporteScrapMail extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.reporte_scrap', // Crearemos esta vista a continuación
+            view: 'emails.reporte_scrap',
+            with: [
+                'operadorName' => $this->operadorName,
+                'fechaHora' => now()->format('d/m/Y H:i:s'),
+                'asunto' => $this->asuntoPersonalizado,
+            ],
         );
     }
 

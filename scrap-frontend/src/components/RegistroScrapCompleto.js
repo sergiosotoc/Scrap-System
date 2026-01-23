@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { apiClient } from '../services/api';
 import BasculaConnection from './BasculaConnection';
 import { useToast } from '../context/ToastContext';
+import { storageService } from '../services/storageService';
 import { colors, shadows, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 import SmoothButton from './SmoothButton';
 import LoadingSpinner from './LoadingSpinner';
@@ -53,13 +54,32 @@ const ScrapRow = React.memo(({
   campoBasculaActivo,
   celdaActiva,
   pesoBloqueado,
+  editingValues,
   onFocus,
   onChange,
+  onBlur,
+  onKeyPress,
   animate,
   indexDisplay
 }) => {
+  // Calcular total en tiempo real incluyendo valores en edición
+  const totalFila = useMemo(() => {
+    let total = 0;
+    materialesFlat.forEach(m => {
+      const key = `material_${m.id}`;
+      const editKey = `${realIndex}_${key}`;
+      
+      const valor = editingValues[editKey] !== undefined 
+        ? (editingValues[editKey] === '' ? 0 : parseFloat(editingValues[editKey]) || 0)
+        : (parseFloat(fila[key]) || 0);
+      
+      total += valor;
+    });
+    return round3(total);
+  }, [fila, realIndex, materialesFlat, editingValues]);
+
   const estaActiva = celdaActiva?.areaIndex === realIndex;
-  const tieneDatos = fila.peso_total > 0;
+  const tieneDatos = totalFila > 0;
 
   return (
     <tr
@@ -85,21 +105,28 @@ const ScrapRow = React.memo(({
 
       {materialesFlat.map(mat => {
         const inputKey = `material_${mat.id}`;
-        const valor = fila[inputKey];
+        const editKey = `${realIndex}_${inputKey}`;
+        const valor =
+          editingValues?.[editKey] !== undefined
+            ? editingValues[editKey]
+            : (fila[inputKey] === 0 ? '' : fila[inputKey]);
         const celdaEstaActiva = estaActiva && campoBasculaActivo === inputKey;
-        const tieneValor = valor > 0;
+        const tieneValor = valor !== '' && valor !== '0';
 
         return (
           <td key={mat.id} style={{
             ...styles.dataCell,
-            ...(celdaEstaActiva ? styles.activeColumn : {})
+            ...(celdaEstaActiva ? styles.activeColumn : {}),
+            ...(editingValues?.[editKey] !== undefined ? styles.editingCell : {})
           }}>
             <div style={styles.inputWrapper}>
               <input
-                type="number"
-                step="0.001"
-                value={valor === 0 || valor === undefined ? '' : valor}
+                type="text"
+                inputMode="decimal"
+                value={valor}
                 onChange={(e) => onChange(realIndex, inputKey, e.target.value)}
+                onBlur={() => onBlur(realIndex, inputKey)}
+                onKeyPress={(e) => onKeyPress(e, realIndex, inputKey)}
                 onClick={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
                 onFocus={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
                 style={{
@@ -107,7 +134,8 @@ const ScrapRow = React.memo(({
                   ...(tieneValor ? styles.hasData : {}),
                   ...(celdaEstaActiva ? styles.activeInput : {}),
                   ...(pesoBloqueado && celdaEstaActiva ? styles.frozenInput : {}),
-                  ...(pesoBloqueado && !celdaEstaActiva ? styles.disabledInput : {})
+                  ...(pesoBloqueado && !celdaEstaActiva ? styles.disabledInput : {}),
+                  ...(editingValues?.[editKey] !== undefined ? styles.editingInput : {})
                 }}
                 placeholder="-"
                 readOnly={pesoBloqueado}
@@ -118,37 +146,52 @@ const ScrapRow = React.memo(({
       })}
 
       <td style={styles.totalCell}>
-        <strong style={styles.totalValue}>{fila.peso_total.toFixed(3)}</strong>
+        <strong style={styles.totalValue}>{totalFila.toFixed(3)}</strong>
       </td>
     </tr>
   );
 }, (prevProps, nextProps) => {
-  if (prevProps.fila === nextProps.fila &&
-    prevProps.campoBasculaActivo === nextProps.campoBasculaActivo &&
-    prevProps.pesoBloqueado === nextProps.pesoBloqueado &&
-    prevProps.animate === nextProps.animate) {
+  if (prevProps.fila !== nextProps.fila) return false;
+  if (prevProps.campoBasculaActivo !== nextProps.campoBasculaActivo) return false;
+  if (prevProps.pesoBloqueado !== nextProps.pesoBloqueado) return false;
+  if (prevProps.animate !== nextProps.animate) return false;
 
-    const prevActive = prevProps.celdaActiva?.areaIndex === prevProps.realIndex;
-    const nextActive = nextProps.celdaActiva?.areaIndex === nextProps.realIndex;
+  const prevActive = prevProps.celdaActiva?.areaIndex === prevProps.realIndex;
+  const nextActive = nextProps.celdaActiva?.areaIndex === nextProps.realIndex;
+  if (prevActive !== nextActive) return false;
 
-    return prevActive === nextActive;
-  }
-  return false;
+  // 🔑 COMPARAR editingValues DE ESTA FILA
+  const prevEditing = Object.keys(prevProps.editingValues || {})
+    .filter(k => k.startsWith(`${prevProps.realIndex}_`))
+    .map(k => prevProps.editingValues[k])
+    .join('|');
+
+  const nextEditing = Object.keys(nextProps.editingValues || {})
+    .filter(k => k.startsWith(`${nextProps.realIndex}_`))
+    .map(k => nextProps.editingValues[k])
+    .join('|');
+
+  return prevEditing === nextEditing;
 });
 
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete }) => {
   const { addToast } = useToast();
 
   const [config, setConfig] = useState(null);
-  const [materialesFlat, setMaterialesFlat] = useState([]); 
+  const [materialesFlat, setMaterialesFlat] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tablaData, setTablaData] = useState([]);
 
-  const [filtroArea, setFiltroArea] = useState('');
-  const [filtroMaquina, setFiltroMaquina] = useState('');
+  // 🔥 CAMBIO IMPORTANTE: Inicializar con valores del localStorage si existen
+  const savedState = storageService.loadDraftData();
+  const initialFiltroArea = savedState?.filtroArea || '';
+  const initialFiltroMaquina = savedState?.filtroMaquina || '';
+  const initialCampoBascula = savedState?.campoBasculaActivo || '';
   
-  const [campoBasculaActivo, setCampoBasculaActivo] = useState(''); 
-  
+  const [filtroArea, setFiltroArea] = useState(initialFiltroArea);
+  const [filtroMaquina, setFiltroMaquina] = useState(initialFiltroMaquina);
+  const [campoBasculaActivo, setCampoBasculaActivo] = useState(initialCampoBascula);
+
   const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [triggerAnimation, setTriggerAnimation] = useState(false);
@@ -156,21 +199,29 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const [areasDisponibles, setAreasDisponibles] = useState([]);
   const [maquinasDisponibles, setMaquinasDisponibles] = useState([]);
 
-  const [maquinaSeleccionada, setMaquinaSeleccionada] = useState({ area: '', maquina: '', index: null });
-  const [celdaActiva, setCeldaActiva] = useState(null);
+  const initialMaquinaSel = savedState?.maquinaSeleccionada || { area: '', maquina: '', index: null };
+  const initialCeldaActiva = savedState?.celdaActiva || null;
+  
+  const [maquinaSeleccionada, setMaquinaSeleccionada] = useState(initialMaquinaSel);
+  const [celdaActiva, setCeldaActiva] = useState(initialCeldaActiva);
+
+  // Estado para controlar si estamos cargando desde localStorage
+  const [loadingFromStorage, setLoadingFromStorage] = useState(false);
+  const [showSavedNotification, setShowSavedNotification] = useState(false);
+
+  const [editingValues, setEditingValues] = useState({});
 
   // --- LÓGICA DE TURNO AUTOMÁTICO ---
   const getTurnoActual = () => {
-    const hora = new Date().getHours();
-    if (hora >= 7 && hora < 15) return '1';
-    else if (hora >= 15 && hora < 23) return '2';
-    else return '3';
+    return storageService.getCurrentTurno();
   };
 
-  const [formData, setFormData] = useState({
+  const initialFormData = savedState?.formData || {
     turno: getTurnoActual(),
-    fecha: new Date().toISOString().split('T')[0]
-  });
+    fecha: storageService.getCurrentDate()
+  };
+  
+  const [formData, setFormData] = useState(initialFormData);
 
   const maquinaSeleccionadaRef = useRef(maquinaSeleccionada);
   const celdaActivaRef = useRef(celdaActiva);
@@ -178,11 +229,25 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const campoBasculaActivoRef = useRef(campoBasculaActivo);
   const pesoCongeladoRef = useRef(0);
   const lockedTargetRef = useRef(null);
+  const autoSaveTimerRef = useRef(null);
+  const hasShownRecoveryToast = useRef(false);
+  const isInitialMount = useRef(true);
+  const editingTimeoutRef = useRef(null);
+
+  // 🔥 REFS para persistir los valores de los selects
+  const filtroAreaRef = useRef(filtroArea);
+  const filtroMaquinaRef = useRef(filtroMaquina);
+  const campoBasculaActivoRef2 = useRef(campoBasculaActivo);
 
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
   useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
   useEffect(() => { pesoBloqueadoRef.current = pesoBloqueado; }, [pesoBloqueado]);
   useEffect(() => { campoBasculaActivoRef.current = campoBasculaActivo; }, [campoBasculaActivo]);
+  
+  // 🔥 Actualizar refs cuando cambian los estados
+  useEffect(() => { filtroAreaRef.current = filtroArea; }, [filtroArea]);
+  useEffect(() => { filtroMaquinaRef.current = filtroMaquina; }, [filtroMaquina]);
+  useEffect(() => { campoBasculaActivoRef2.current = campoBasculaActivo; }, [campoBasculaActivo]);
 
   useEffect(() => {
     if (pesoBloqueado) {
@@ -195,37 +260,133 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, [pesoBloqueado]);
 
+  // 🔥 FUNCIÓN MODIFICADA: Guardar TODOS los estados importantes
+  const saveToStorageOnDemand = useCallback(() => {
+    if (tablaData.length === 0) return;
+
+    // Filtrar solo filas que tengan datos
+    const filasConDatos = tablaData.filter(fila => fila.peso_total > 0);
+
+    if (filasConDatos.length > 0) {
+      const dataToSave = {
+        tablaData,
+        formData,
+        filtroArea: filtroAreaRef.current,
+        filtroMaquina: filtroMaquinaRef.current,
+        campoBasculaActivo: campoBasculaActivoRef2.current,
+        maquinaSeleccionada,
+        celdaActiva: celdaActivaRef.current
+      };
+
+      const success = storageService.saveDraftDataOnDemand(dataToSave);
+      if (success) {
+        setShowSavedNotification(true);
+        // Ocultar la notificación después de 3 segundos
+        setTimeout(() => setShowSavedNotification(false), 3000);
+      }
+    }
+  }, [tablaData, formData, maquinaSeleccionada]);
+
+  // 🔥 FUNCIÓN MODIFICADA: Autoguardado con estados actuales
+  const autoSaveToStorage = useCallback(() => {
+    if (tablaData.length === 0) return;
+
+    // Filtrar solo filas que tengan datos
+    const filasConDatos = tablaData.filter(fila => fila.peso_total > 0);
+
+    if (filasConDatos.length > 0) {
+      const dataToSave = {
+        tablaData,
+        formData,
+        filtroArea: filtroAreaRef.current,
+        filtroMaquina: filtroMaquinaRef.current,
+        campoBasculaActivo: campoBasculaActivoRef2.current,
+        maquinaSeleccionada,
+        celdaActiva: celdaActivaRef.current
+      };
+
+      storageService.saveDraftDataAuto(dataToSave);
+    }
+  }, [tablaData, formData, maquinaSeleccionada]);
+
+  // 🔥 FUNCIÓN MODIFICADA: Cargar estados persistentes
+  const loadFromStorage = useCallback(() => {
+    const savedData = storageService.loadDraftData();
+    if (savedData) {
+      setLoadingFromStorage(true);
+
+      // 🔥 Restaurar TODOS los estados importantes
+      if (savedData.formData) {
+        setFormData(savedData.formData);
+      }
+
+      if (savedData.filtroArea) {
+        setFiltroArea(savedData.filtroArea);
+        filtroAreaRef.current = savedData.filtroArea;
+      }
+
+      if (savedData.filtroMaquina) {
+        setFiltroMaquina(savedData.filtroMaquina);
+        filtroMaquinaRef.current = savedData.filtroMaquina;
+      }
+
+      if (savedData.campoBasculaActivo) {
+        setCampoBasculaActivo(savedData.campoBasculaActivo);
+        campoBasculaActivoRef2.current = savedData.campoBasculaActivo;
+      }
+
+      if (savedData.maquinaSeleccionada) {
+        setMaquinaSeleccionada(savedData.maquinaSeleccionada);
+      }
+
+      if (savedData.celdaActiva) {
+        setCeldaActiva(savedData.celdaActiva);
+      }
+
+      // Los datos de tabla se cargarán después de inicializar la estructura
+      return savedData.tablaData;
+    }
+    return null;
+  }, []);
+
+  // Cuando el componente se monta (modal se abre)
   useEffect(() => {
+    // Marcar que el modal está abierto
+    storageService.markModalOpened();
+
     let mounted = true;
     const initData = async () => {
       try {
         const configData = await apiClient.getRegistrosConfig();
         if (!mounted) return;
-        
+
         setConfig(configData);
 
         let flatMats = [];
         if (configData.tipos_scrap) {
           if (Array.isArray(configData.tipos_scrap)) {
-             flatMats = configData.tipos_scrap;
+            flatMats = configData.tipos_scrap;
           } else {
-             Object.values(configData.tipos_scrap).forEach(grupo => {
-               flatMats = [...flatMats, ...grupo];
-             });
+            Object.values(configData.tipos_scrap).forEach(grupo => {
+              flatMats = [...flatMats, ...grupo];
+            });
           }
-          
+
           flatMats.sort((a, b) => a.orden - b.orden);
           setMaterialesFlat(flatMats);
-          
-          if (flatMats.length > 0) {
-            setCampoBasculaActivo(`material_${flatMats[0].id}`);
+
+          // 🔥 IMPORTANTE: Si no hay campo activo desde localStorage, usar el primero
+          if (flatMats.length > 0 && !campoBasculaActivoRef2.current) {
+            const primerMaterial = `material_${flatMats[0].id}`;
+            setCampoBasculaActivo(primerMaterial);
+            campoBasculaActivoRef2.current = primerMaterial;
           }
         }
 
         if (configData?.areas_maquinas) {
           const data = [];
           const areas = [];
-          
+
           Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
             areas.push(areaNombre);
             maquinas.forEach(maquina => {
@@ -241,36 +402,105 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               data.push(row);
             });
           });
-          
-          setTablaData(data);
+
+          // Cargar datos guardados después de crear la estructura
+          const savedTablaData = loadFromStorage();
+          if (savedTablaData) {
+            // Combinar datos guardados con la estructura
+            const mergedData = data.map((row, index) => {
+              const savedRow = savedTablaData.find(
+                s => s.area_real === row.area_real && s.maquina_real === row.maquina_real
+              );
+              if (savedRow) {
+                return {
+                  ...row,
+                  ...savedRow,
+                  // Asegurar que todos los campos de materiales existan
+                  ...flatMats.reduce((acc, m) => {
+                    const key = `material_${m.id}`;
+                    acc[key] = savedRow[key] || 0;
+                    return acc;
+                  }, {})
+                };
+              }
+              return row;
+            });
+            setTablaData(mergedData);
+
+            // Mostrar notificación de datos recuperados SOLO la primera vez
+            if (!hasShownRecoveryToast.current) {
+              setTimeout(() => {
+                addToast('Datos recuperados de la sesión anterior', 'info');
+                hasShownRecoveryToast.current = true;
+              }, 1000);
+            }
+          } else {
+            setTablaData(data);
+          }
+
           setAreasDisponibles(areas);
+          
+          // 🔥 IMPORTANTE: Si hay filtro de área cargado, actualizar máquinas disponibles
+          if (initialFiltroArea && configData.areas_maquinas[initialFiltroArea]) {
+            const maquinas = configData.areas_maquinas[initialFiltroArea].map(m => m.maquina_nombre) || [];
+            setMaquinasDisponibles(maquinas);
+          }
         }
       } catch (error) {
         if (mounted) addToast('Error cargando configuración: ' + error.message, 'error');
       } finally {
         if (mounted) {
           setLoading(false);
+          setLoadingFromStorage(false);
           if (onLoadComplete) onLoadComplete();
           setTimeout(() => setTriggerAnimation(true), 150);
+          isInitialMount.current = false;
         }
       }
     };
-    initData();
-    return () => { mounted = false; };
-  }, [addToast, onLoadComplete]);
 
+    // Verificar si ha cambiado el turno al montar el componente
+    if (storageService.hasTurnoChanged()) {
+      storageService.clearDraftData();
+      storageService.updateCurrentSession();
+    }
+
+    initData();
+    return () => {
+      mounted = false;
+    };
+  }, [addToast, onLoadComplete, loadFromStorage, initialFiltroArea]);
+
+  // 🔥 USE EFFECT MODIFICADO: Actualizar máquinas disponibles cuando cambia el área
   useEffect(() => {
-    if (!config?.areas_maquinas || !filtroArea) {
+    if (!config?.areas_maquinas) {
       setMaquinasDisponibles([]);
       return;
     }
+    
     const maquinas = config.areas_maquinas[filtroArea]?.map(m => m.maquina_nombre) || [];
     setMaquinasDisponibles(maquinas);
-    if (maquinas.length !== 1) {
-      setFiltroMaquina('');
+    
+    // 🔥 IMPORTANTE: Si hay solo una máquina en el área, seleccionarla automáticamente
+    if (maquinas.length === 1 && !filtroMaquina) {
+      const maquinaUnica = maquinas[0];
+      setFiltroMaquina(maquinaUnica);
+      filtroMaquinaRef.current = maquinaUnica;
+      
+      // También actualizar la máquina seleccionada
+      const index = tablaData.findIndex(r => r.area_real === filtroArea && r.maquina_real === maquinaUnica);
+      if (index !== -1) {
+        setMaquinaSeleccionada({ area: filtroArea, maquina: maquinaUnica, index });
+        setCeldaActiva({ areaIndex: index, campo: campoBasculaActivoRef2.current });
+      }
+    } else if (filtroArea && !filtroMaquina && maquinaSeleccionada.area === filtroArea) {
+      // 🔥 Si el área coincide con la máquina seleccionada, mantener la máquina
+      setFiltroMaquina(maquinaSeleccionada.maquina);
+      filtroMaquinaRef.current = maquinaSeleccionada.maquina;
     }
-  }, [filtroArea, config]);
+  }, [filtroArea, config, filtroMaquina, maquinaSeleccionada, tablaData]);
 
+  // 🔥 USE EFFECT MODIFICADO: Sincronizar selección de máquina con filtros
   useEffect(() => {
     const filtrosCompletos = filtroArea && filtroMaquina && campoBasculaActivo;
     if (filtrosCompletos && tablaData.length > 0) {
@@ -286,14 +516,100 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
-  const calcularTotalFila = useCallback((fila) => {
-    let total = 0;
-    materialesFlat.forEach(m => {
-      const val = parseFloat(fila[`material_${m.id}`]) || 0;
-      total += val;
+  const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
+    // 🔥 IMPORTANTE: Actualizar TODOS los estados relacionados
+    setCeldaActiva({ areaIndex, campo });
+    setCampoBasculaActivo(campo);
+    campoBasculaActivoRef2.current = campo;
+    
+    setMaquinaSeleccionada({ area, maquina, index: areaIndex });
+    setFiltroArea(area);
+    filtroAreaRef.current = area;
+    setFiltroMaquina(maquina);
+    filtroMaquinaRef.current = maquina;
+  }, []);
+
+  // FUNCIÓN PARA MANEJAR TECLA ENTER
+  const handleKeyPress = useCallback((e, areaIndex, campo) => {
+    if (e.key === 'Enter') {
+      // Cuando se presiona Enter, forzar el blur para guardar el valor
+      e.target.blur();
+    }
+  }, []);
+
+  const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
+    const key = `${areaIndex}_${campo}`;
+    
+    // Validar que sea un número válido
+    if (valor === '' || valor === null || valor === undefined) {
+      setEditingValues(prev => ({
+        ...prev,
+        [key]: ''
+      }));
+      return;
+    }
+
+    // Permitir solo números y punto decimal
+    const regex = /^-?\d*\.?\d*$/;
+    if (regex.test(valor)) {
+      setEditingValues(prev => ({
+        ...prev,
+        [key]: valor
+      }));
+    }
+  }, []);
+
+  const handleInputBlur = useCallback((areaIndex, campo) => {
+    const key = `${areaIndex}_${campo}`;
+    const rawValue = editingValues[key];
+
+    // Si no hay valor editado, no hacer nada
+    if (rawValue === undefined || rawValue === '') return;
+
+    const val = round3(parseFloat(rawValue) || 0);
+
+    setTablaData(prev => {
+      const newData = [...prev];
+      const filaActualizada = { ...newData[areaIndex] };
+
+      // Actualizar el valor en la fila
+      filaActualizada[campo] = val;
+
+      // Recalcular el total de la fila
+      let total = 0;
+      materialesFlat.forEach(m => {
+        const matKey = `material_${m.id}`;
+        const valor = matKey === campo ? val : (filaActualizada[matKey] || 0);
+        total += parseFloat(valor) || 0;
+      });
+
+      filaActualizada.peso_total = round3(total);
+      filaActualizada.conexion_bascula = false;
+
+      newData[areaIndex] = filaActualizada;
+      return newData;
     });
-    return round3(total);
-  }, [materialesFlat]);
+
+    // Limpiar el valor de edición
+    setEditingValues(prev => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+
+    // 🔥 Guardar automáticamente con estados actualizados
+    const dataToSave = {
+      tablaData,
+      formData,
+      filtroArea: filtroAreaRef.current,
+      filtroMaquina: filtroMaquinaRef.current,
+      campoBasculaActivo: campoBasculaActivoRef2.current,
+      maquinaSeleccionada,
+      celdaActiva: celdaActivaRef.current
+    };
+    
+    storageService.saveDraftDataAuto(dataToSave);
+  }, [editingValues, tablaData, formData, maquinaSeleccionada, materialesFlat]);
 
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
@@ -339,16 +655,62 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
         filaActualizada[campoDestino] = nuevoValor;
         filaActualizada.conexion_bascula = esAutomatico;
-        filaActualizada.peso_total = calcularTotalFila(filaActualizada);
+
+        // Recalcular el total de la fila
+        let total = 0;
+        materialesFlat.forEach(m => {
+          const key = `material_${m.id}`;
+          const valor = key === campoDestino ? nuevoValor : (filaActualizada[key] || 0);
+          total += parseFloat(valor) || 0;
+        });
+        
+        filaActualizada.peso_total = round3(total);
 
         newData[targetIndex] = filaActualizada;
         return newData;
       });
+
+      // Limpiar valor de edición para esta celda
+      const editKey = `${targetIndex}_${campoDestino}`;
+      setEditingValues(prev => {
+        const copy = { ...prev };
+        delete copy[editKey];
+        return copy;
+      });
+
+      // 🔥 Guardar automáticamente con estados actuales
+      setTimeout(() => {
+        const dataToSave = {
+          tablaData,
+          formData,
+          filtroArea: filtroAreaRef.current,
+          filtroMaquina: filtroMaquinaRef.current,
+          campoBasculaActivo: campoBasculaActivoRef2.current,
+          maquinaSeleccionada,
+          celdaActiva: celdaActivaRef.current
+        };
+        
+        storageService.saveDraftDataAuto(dataToSave);
+      }, 100);
     }
-  }, [calcularTotalFila]);
+  }, [tablaData, formData, maquinaSeleccionada, materialesFlat]);
+
+  // Función para manejar el botón de CAPTURAR/LEER PESO
+  const handleTogglePesoBloqueado = () => {
+    const newPesoBloqueado = !pesoBloqueado;
+    setPesoBloqueado(newPesoBloqueado);
+
+    // Si se está presionando el botón para CONGELAR (activando la CAPTURAR)
+    if (!newPesoBloqueado) {
+      // Guardar datos cuando se presiona "CAPTURAR"
+      saveToStorageOnDemand();
+    }
+  };
 
   const handleMaterialChange = (newMaterialKey) => {
     setCampoBasculaActivo(newMaterialKey);
+    campoBasculaActivoRef2.current = newMaterialKey;
+    
     if (celdaActiva && celdaActiva.areaIndex !== null) {
       setCeldaActiva(prev => ({ ...prev, campo: newMaterialKey }));
     }
@@ -357,85 +719,210 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const limpiarFiltros = () => {
     setFiltroArea('');
     setFiltroMaquina('');
+    filtroAreaRef.current = '';
+    filtroMaquinaRef.current = '';
+    
     setMaquinaSeleccionada({ area: '', maquina: '', index: null });
     setCeldaActiva(null);
   };
 
-  const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
-    if (celdaActivaRef.current?.areaIndex === areaIndex && campoBasculaActivoRef.current === campo) return;
+  // 🔥 FUNCIÓN MODIFICADA: Cambiar área con manejo de refs
+  const handleAreaChange = (e) => {
+    const nuevaArea = e.target.value;
+    setFiltroArea(nuevaArea);
+    filtroAreaRef.current = nuevaArea;
+    
+    // Si cambia el área, limpiar la máquina seleccionada
+    if (nuevaArea !== maquinaSeleccionada.area) {
+      setFiltroMaquina('');
+      filtroMaquinaRef.current = '';
+    }
+  };
 
-    setCeldaActiva({ areaIndex, campo });
-    setCampoBasculaActivo(campo);
-    setMaquinaSeleccionada({ area, maquina, index: areaIndex });
-    setFiltroArea(area);
-    setFiltroMaquina(maquina);
-  }, []);
+  // 🔥 FUNCIÓN MODIFICADA: Cambiar máquina con manejo de refs
+  const handleMaquinaChange = (e) => {
+    const nuevaMaquina = e.target.value;
+    setFiltroMaquina(nuevaMaquina);
+    filtroMaquinaRef.current = nuevaMaquina;
+  };
 
-  const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
-    setTablaData(prev => {
-      const val = round3(parseFloat(valor) || 0);
-      if (prev[areaIndex][campo] === val) return prev;
+  // 🔥 FUNCIÓN MODIFICADA: Cambiar fecha con manejo de refs
+  const handleFechaChange = (e) => {
+    const newFecha = e.target.value;
+    setFormData(prev => ({ ...prev, fecha: newFecha }));
 
-      const newData = [...prev];
-      const fila = { ...newData[areaIndex] };
-      fila[campo] = val;
-      
-      let total = 0;
-      Object.keys(fila).forEach(k => {
-        if (k.startsWith('material_')) {
-          total += parseFloat(fila[k]) || 0;
-        }
-      });
-      
-      fila.peso_total = round3(total);
-      fila.conexion_bascula = false;
-      newData[areaIndex] = fila;
-      return newData;
-    });
-  }, []);
+    // Verificar si cambió la fecha para limpiar datos antiguos
+    if (newFecha !== storageService.getCurrentDate()) {
+      storageService.clearDraftData();
+      storageService.updateCurrentSession();
+    }
+  };
 
+  // 🔥 FUNCIÓN MODIFICADA: Cambiar turno con manejo de refs
+  const handleTurnoChange = (e) => {
+    const newTurno = e.target.value;
+    setFormData(prev => ({ ...prev, turno: newTurno }));
+
+    // Verificar si cambió el turno para limpiar datos antiguos
+    if (newTurno !== storageService.getCurrentTurno()) {
+      storageService.clearDraftData();
+      storageService.updateCurrentSession();
+    }
+  };
+
+  // 🔥 FUNCIÓN MODIFICADA: Guardado masivo optimizado
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.turno) { addToast('Seleccione el turno', 'warning'); return; }
-    
+    if (!formData.turno) { 
+      addToast('Seleccione el turno', 'warning'); 
+      return; 
+    }
+
     const filasConPeso = tablaData.filter(fila => fila.peso_total > 0);
-    if (filasConPeso.length === 0) { addToast('Ingrese al menos un peso en alguna fila', 'warning'); return; }
+    if (filasConPeso.length === 0) { 
+      addToast('Ingrese al menos un peso en alguna fila', 'warning'); 
+      return; 
+    }
 
     setEnviando(true);
+    
     try {
-      const promises = filasConPeso.map(fila => {
-        const detalles = [];
-        materialesFlat.forEach(mat => {
-          const key = `material_${mat.id}`;
-          const peso = fila[key];
-          if (peso > 0) {
-            detalles.push({
-              id: mat.id,
-              peso: peso
-            });
+      // 🔥 OPTIMIZADO: Usar batch para muchos registros
+      if (filasConPeso.length > 10) {
+        // Para muchos registros, usar batch
+        const datosBatch = filasConPeso.map(fila => {
+          const detalles = [];
+          materialesFlat.forEach(mat => {
+            const key = `material_${mat.id}`;
+            const peso = fila[key];
+            if (peso > 0) {
+              detalles.push({
+                id: mat.id,
+                peso: peso
+              });
+            }
+          });
+
+          return {
+            turno: formData.turno,
+            area_real: fila.area_real,
+            maquina_real: fila.maquina_real,
+            conexion_bascula: fila.conexion_bascula || false,
+            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+            observaciones: 'Registro masivo',
+            detalles: detalles
+          };
+        });
+        
+        // 🔥 USAR BATCH
+        const resultado = await apiClient.createRegistroScrapBatch(datosBatch);
+        
+        if (resultado.success) {
+          // Limpiar localStorage después de enviar exitosamente
+          storageService.clearDraftData();
+          storageService.markModalClosed();
+
+          addToast(`Se guardaron exitosamente ${resultado.count_exitosos} registros${resultado.count_fallidos > 0 ? `, ${resultado.count_fallidos} fallaron` : ''}`, 'success');
+          
+          if (onRegistroCreado) {
+            onRegistroCreado();
           }
+        } else {
+          throw new Error(resultado.message || 'Error en guardado batch');
+        }
+        
+      } else {
+        // Para pocos registros, usar método normal
+        const promises = filasConPeso.map(fila => {
+          const detalles = [];
+          materialesFlat.forEach(mat => {
+            const key = `material_${mat.id}`;
+            const peso = fila[key];
+            if (peso > 0) {
+              detalles.push({
+                id: mat.id,
+                peso: peso
+              });
+            }
+          });
+
+          const datosEnvio = {
+            turno: formData.turno,
+            area_real: fila.area_real,
+            maquina_real: fila.maquina_real,
+            conexion_bascula: fila.conexion_bascula || false,
+            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+            observaciones: 'Registro masivo',
+            detalles: detalles
+          };
+          return apiClient.createRegistroScrap(datosEnvio);
         });
 
-        const datosEnvio = {
-          turno: formData.turno,
-          area_real: fila.area_real,
-          maquina_real: fila.maquina_real,
-          conexion_bascula: fila.conexion_bascula || false,
-          numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-          observaciones: 'Registro masivo',
-          detalles: detalles
-        };
-        return apiClient.createRegistroScrap(datosEnvio);
-      });
+        await Promise.all(promises);
 
-      await Promise.all(promises);
-      if (onRegistroCreado) onRegistroCreado();
+        // Limpiar localStorage después de enviar exitosamente
+        storageService.clearDraftData();
+        storageService.markModalClosed();
+
+        addToast(`Se guardaron exitosamente ${filasConPeso.length} registros`, 'success');
+        
+        if (onRegistroCreado) {
+          onRegistroCreado();
+        }
+      }
     } catch (error) {
-      addToast('Error al guardar: ' + error.message, 'error');
+      console.error('Error en handleSubmit:', error);
+      addToast(`Error al guardar: ${error.message}`, 'error');
     } finally {
       setEnviando(false);
     }
   };
+
+  // Modificar el botón de cancelar
+  const handleCancelar = () => {
+    const tieneDatos = tablaData.some(fila => fila.peso_total > 0);
+
+    if (tieneDatos) {
+      if (window.confirm('¿Desea guardar los datos para continuar después? Los datos se guardarán automáticamente al presionar "CAPTURAR".')) {
+        // Solo marcar como cerrado
+        storageService.markModalClosed();
+        onCancelar();
+      } else {
+        // Limpiar datos si el usuario no quiere guardarlos
+        storageService.clearDraftData();
+        onCancelar();
+      }
+    } else {
+      storageService.markModalClosed();
+      onCancelar();
+    }
+  };
+
+  // Función para limpiar manualmente los datos guardados
+  const handleClearStorage = () => {
+    if (window.confirm('¿Está seguro de que desea eliminar todos los datos guardados temporalmente?')) {
+      storageService.clearDraftData();
+      // Reiniciar la tabla a valores por defecto
+      setTablaData(prev => prev.map(fila => ({
+        ...fila,
+        peso_total: 0,
+        ...materialesFlat.reduce((acc, m) => {
+          acc[`material_${m.id}`] = 0;
+          return acc;
+        }, {})
+      })));
+      addToast('Datos temporales eliminados', 'info');
+    }
+  };
+
+  // Limpiar timeout al desmontar
+  useEffect(() => {
+    return () => {
+      if (editingTimeoutRef.current) {
+        clearTimeout(editingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const datosFiltrados = useMemo(() => {
     return tablaData.filter(fila => {
@@ -449,19 +936,40 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     materialesFlat.forEach(m => acc[`material_${m.id}`] = 0);
     let generalInt = 0;
 
-    tablaData.forEach(fila => {
+    tablaData.forEach((fila, rowIndex) => {
       materialesFlat.forEach(m => {
         const key = `material_${m.id}`;
-        acc[key] = (acc[key] || 0) + Math.round((parseFloat(fila[key]) || 0) * 1000);
+        const editKey = `${rowIndex}_${key}`;
+        
+        // Usar valor en edición si existe, de lo contrario usar valor de la fila
+        const valor = editingValues[editKey] !== undefined 
+          ? (editingValues[editKey] === '' ? 0 : parseFloat(editingValues[editKey]) || 0)
+          : (parseFloat(fila[key]) || 0);
+        
+        acc[key] = (acc[key] || 0) + Math.round(valor * 1000);
       });
-      generalInt += Math.round((parseFloat(fila.peso_total) || 0) * 1000);
+      
+      // Calcular total de fila considerando valores en edición
+      let filaTotal = 0;
+      materialesFlat.forEach(m => {
+        const key = `material_${m.id}`;
+        const editKey = `${rowIndex}_${key}`;
+        
+        const valor = editingValues[editKey] !== undefined 
+          ? (editingValues[editKey] === '' ? 0 : parseFloat(editingValues[editKey]) || 0)
+          : (parseFloat(fila[key]) || 0);
+        
+        filaTotal += valor;
+      });
+      
+      generalInt += Math.round(round3(filaTotal) * 1000);
     });
 
     Object.keys(acc).forEach(key => acc[key] = acc[key] / 1000);
     acc.general = generalInt / 1000;
 
     return acc;
-  }, [tablaData, materialesFlat]);
+  }, [tablaData, materialesFlat, editingValues]);
 
   if (loading) {
     return <div style={styles.loading}><LoadingSpinner message="Cargando configuración..." /></div>;
@@ -469,6 +977,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const numFilasConPeso = tablaData.filter(fila => fila.peso_total > 0).length;
   const isSaveDisabled = enviando || !formData.turno || numFilasConPeso === 0;
+  const hasSavedData = storageService.hasDraftData();
 
   return (
     <div style={styles.container}>
@@ -483,14 +992,113 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
           <CardTransition delay={100} style={styles.section}>
             <h3 style={styles.sectionTitle}>Configuración de Registro</h3>
+
+            {/* Notificación de guardado manual */}
+            {showSavedNotification && (
+              <div style={{
+                backgroundColor: colors.success + '20',
+                border: `1px solid ${colors.success}`,
+                borderRadius: radius.sm,
+                padding: spacing.sm,
+                marginBottom: spacing.md,
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacing.sm,
+                animation: 'fadeIn 0.3s ease'
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.success} strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+                <span style={{ fontSize: typography.sizes.sm, color: colors.success }}>
+                  Datos guardados manualmente
+                </span>
+              </div>
+            )}
+
+            {/* Indicador de datos recuperados */}
+            {loadingFromStorage && (
+              <div style={{
+                backgroundColor: colors.info + '20',
+                border: `1px solid ${colors.info}`,
+                borderRadius: radius.sm,
+                padding: spacing.sm,
+                marginBottom: spacing.md,
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacing.sm
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.info} strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span style={{ fontSize: typography.sizes.sm, color: colors.info }}>
+                  Recuperando datos de la sesión anterior...
+                </span>
+              </div>
+            )}
+
+            {hasSavedData && !loadingFromStorage && (
+              <div style={{
+                backgroundColor: colors.success + '15',
+                border: `1px solid ${colors.success}30`,
+                borderRadius: radius.sm,
+                padding: spacing.sm,
+                marginBottom: spacing.md,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.success} strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  <span style={{ fontSize: typography.sizes.sm, color: colors.success }}>
+                    Hay datos guardados de sesiones anteriores
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearStorage}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: colors.error,
+                    cursor: 'pointer',
+                    fontSize: typography.sizes.xs,
+                    padding: `${spacing.xs} ${spacing.sm}`,
+                    borderRadius: radius.sm,
+                    ':hover': {
+                      backgroundColor: colors.error + '15'
+                    }
+                  }}
+                  title="Eliminar datos guardados"
+                >
+                  Limpiar
+                </button>
+              </div>
+            )}
+
             <div style={styles.configGrid}>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Fecha</label>
-                <input type="date" value={formData.fecha} onChange={(e) => setFormData(prev => ({ ...prev, fecha: e.target.value }))} style={styles.input} />
+                <input
+                  type="date"
+                  value={formData.fecha}
+                  onChange={handleFechaChange}
+                  style={styles.input}
+                />
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Turno *</label>
-                <select value={formData.turno} onChange={(e) => setFormData(prev => ({ ...prev, turno: e.target.value }))} style={styles.select} required>
+                <select
+                  value={formData.turno}
+                  onChange={handleTurnoChange}
+                  style={styles.select}
+                  required
+                >
                   <option value="">Seleccionar...</option>
                   <option value="1">Turno 1</option>
                   <option value="2">Turno 2</option>
@@ -499,7 +1107,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Material Activo</label>
-                <select value={campoBasculaActivo} onChange={(e) => handleMaterialChange(e.target.value)} style={styles.selectPrimary}>
+                <select 
+                  value={campoBasculaActivo} 
+                  onChange={(e) => handleMaterialChange(e.target.value)} 
+                  style={styles.selectPrimary}
+                >
                   {materialesFlat.map(m => (
                     <option key={m.id} value={`material_${m.id}`}>{m.tipo_nombre}</option>
                   ))}
@@ -507,14 +1119,23 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Filtrar por Área</label>
-                <select value={filtroArea} onChange={(e) => setFiltroArea(e.target.value)} style={styles.select}>
+                <select 
+                  value={filtroArea} 
+                  onChange={handleAreaChange}
+                  style={styles.select}
+                >
                   <option value="">Todas las áreas</option>
                   {areasDisponibles.map(area => <option key={area} value={area}>{area}</option>)}
                 </select>
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Seleccionar Máquina</label>
-                <select value={filtroMaquina} onChange={(e) => setFiltroMaquina(e.target.value)} style={styles.select} disabled={!filtroArea}>
+                <select 
+                  value={filtroMaquina} 
+                  onChange={handleMaquinaChange}
+                  style={styles.select} 
+                  disabled={!filtroArea}
+                >
                   <option value="">Seleccionar...</option>
                   {maquinasDisponibles.map(maquina => <option key={maquina} value={maquina}>{maquina}</option>)}
                 </select>
@@ -525,15 +1146,15 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                   <SmoothButton
                     type="button"
-                    onClick={() => setPesoBloqueado(!pesoBloqueado)}
+                    onClick={handleTogglePesoBloqueado}
                     style={{
                       ...(pesoBloqueado ? styles.btnLocked : styles.btnUnlocked),
                       flex: 1, height: '42px', width: 'auto', fontSize: '0.7rem', padding: '0 4px'
                     }}
                     variant={pesoBloqueado ? 'destructive' : 'primary'}
-                    title="Congelar/Descongelar el peso de la báscula"
+                    title={pesoBloqueado ? "Peso CAPTURADO - Presione para descongelar" : "Presione para leer peso y guardar datos"}
                   >
-                    {pesoBloqueado ? 'CONGELADO' : 'LECTURA'}
+                    {pesoBloqueado ? 'LEER PESO' : 'CAPTURAR'}
                   </SmoothButton>
 
                   <SmoothButton
@@ -544,9 +1165,19 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                     style={{ flex: 1, height: '42px', width: 'auto', justifyContent: 'center', fontSize: '0.7rem', padding: '0 4px' }}
                     title="Limpiar filtros de área y máquina"
                   >
-                    LIMPIAR
+                    REINICIAR FILTROS
                   </SmoothButton>
                 </div>
+                {!pesoBloqueado && (
+                  <p style={{
+                    fontSize: typography.sizes.xs,
+                    color: colors.info,
+                    marginTop: '4px',
+                    fontStyle: 'italic'
+                  }}>
+                    Presione CAPTURAR para guardar los datos
+                  </p>
+                )}
               </div>
             </div>
 
@@ -562,17 +1193,23 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                         : '0.000')} kg
                     </span>
                     <span style={styles.fixedMachineArea}>{maquinaSeleccionada.area}</span>
-                    <button 
-                        type="button" 
-                        onClick={() => { setMaquinaSeleccionada({ area: '', maquina: '', index: null }); setCeldaActiva(null); }} 
-                        style={styles.unfixButton} 
-                        title="Liberar máquina"
+                    <button
+                      type="button"
+                      onClick={() => { 
+                        setMaquinaSeleccionada({ area: '', maquina: '', index: null }); 
+                        setCeldaActiva(null);
+                        setFiltroArea('');
+                        setFiltroMaquina('');
+                        filtroAreaRef.current = '';
+                        filtroMaquinaRef.current = '';
+                      }}
+                      style={styles.unfixButton}
+                      title="Liberar máquina"
                     >
-                        {/* Se reemplaza la 'X' con un ícono de papelera estilizado en rojo */}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: colors.error}}>
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: colors.error }}>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
                     </button>
                   </>
                 ) : (
@@ -620,18 +1257,21 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 {datosFiltrados.map((fila, index) => {
                   const realIndex = tablaData.findIndex(item => item.area_real === fila.area_real && item.maquina_real === fila.maquina_real);
                   return (
-                    <ScrapRow 
-                      key={`${fila.area_real}-${fila.maquina_real}`} 
-                      fila={fila} 
-                      realIndex={realIndex} 
-                      materialesFlat={materialesFlat} 
-                      campoBasculaActivo={campoBasculaActivo} 
-                      celdaActiva={celdaActiva} 
-                      pesoBloqueado={pesoBloqueado} 
-                      onFocus={handleCellFocus} 
-                      onChange={handleInputChangeTabla} 
-                      animate={triggerAnimation} 
-                      indexDisplay={index} 
+                    <ScrapRow
+                      key={`${fila.area_real}-${fila.maquina_real}`}
+                      fila={fila}
+                      realIndex={realIndex}
+                      materialesFlat={materialesFlat}
+                      campoBasculaActivo={campoBasculaActivo}
+                      celdaActiva={celdaActiva}
+                      pesoBloqueado={pesoBloqueado}
+                      onFocus={handleCellFocus}
+                      onChange={handleInputChangeTabla}
+                      onBlur={handleInputBlur}
+                      onKeyPress={handleKeyPress}
+                      editingValues={editingValues}
+                      animate={triggerAnimation}
+                      indexDisplay={index}
                     />
                   );
                 })}
@@ -650,10 +1290,40 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         </CardTransition>
 
         <CardTransition delay={300} style={styles.actions}>
-          <div style={styles.summary}><span style={styles.summaryCount}><AnimatedCounter value={numFilasConPeso} duration={500} decimals={0} /> registros listos | Total: <AnimatedCounter value={totales.general} decimals={3} /> kg</span></div>
+          <div style={styles.summary}>
+            <span style={styles.summaryCount}>
+              <AnimatedCounter value={numFilasConPeso} duration={500} decimals={0} /> registros listos |
+              Total: <AnimatedCounter value={totales.general} decimals={3} /> kg
+              {hasSavedData && (
+                <span style={{
+                  marginLeft: spacing.sm,
+                  fontSize: typography.sizes.xs,
+                  color: colors.info,
+                  backgroundColor: colors.info + '15',
+                  padding: `${spacing.xs} ${spacing.sm}`,
+                  borderRadius: radius.sm
+                }}>
+                  ⚡ Datos guardados
+                </span>
+              )}
+            </span>
+          </div>
           <div style={styles.actionButtons}>
-            <SmoothButton type="button" onClick={onCancelar} style={styles.btnCancel} variant="secondary">Cancelar</SmoothButton>
-            <SmoothButton type="submit" disabled={isSaveDisabled} style={{ ...styles.btnSave, ...(isSaveDisabled ? styles.btnDisabled : {}) }}>{enviando ? 'Guardando...' : 'Guardar Todo'}</SmoothButton>
+            <SmoothButton
+              type="button"
+              onClick={handleCancelar}
+              style={styles.btnCancel}
+              variant="secondary"
+            >
+              Cancelar
+            </SmoothButton>
+            <SmoothButton
+              type="submit"
+              disabled={isSaveDisabled}
+              style={{ ...styles.btnSave, ...(isSaveDisabled ? styles.btnDisabled : {}) }}
+            >
+              {enviando ? 'Guardando...' : 'Guardar Todo'}
+            </SmoothButton>
           </div>
         </CardTransition>
       </form>
@@ -661,7 +1331,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   );
 };
 
-// Estilos IDÉNTICOS al original, solo copio para mantener consistencia
+// Estilos IDÉNTICOS al original con algunas mejoras
 const COL_AREA_WIDTH = '100px';
 const COL_MACHINE_WIDTH = '120px';
 const COL_TOTAL_WIDTH = '100px';
@@ -704,6 +1374,7 @@ const styles = {
   tableRow: { borderBottom: `1px solid ${colors.gray200}`, transition: 'all 0.2s ease', ':hover': { backgroundColor: colors.gray50 } },
   activeRow: { backgroundColor: colors.primaryLight, borderLeft: `3px solid ${colors.primary}` },
   dataRow: { backgroundColor: colors.secondaryLight + '15' },
+  editingCell: { backgroundColor: colors.warning + '10' },
   areaCell: { padding: spacing.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', backgroundColor: colors.gray50, position: 'sticky', left: 0, width: COL_AREA_WIDTH, minWidth: COL_AREA_WIDTH, maxWidth: COL_AREA_WIDTH, zIndex: 15, height: '48px', boxSizing: 'border-box' },
   machineCell: { padding: spacing.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', backgroundColor: colors.gray50, position: 'sticky', left: COL_AREA_WIDTH, width: COL_MACHINE_WIDTH, minWidth: COL_MACHINE_WIDTH, maxWidth: COL_MACHINE_WIDTH, zIndex: 15, height: '48px', boxSizing: 'border-box' },
   dataCell: { padding: spacing.xs, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, textAlign: 'center', minWidth: COL_DATA_MIN_WIDTH, height: '48px' },
@@ -714,7 +1385,33 @@ const styles = {
   machineText: { fontSize: typography.sizes.sm, color: colors.gray800, fontWeight: typography.weights.semibold },
   activeColumn: { backgroundColor: colors.primaryLight + '20' },
   inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  inputCell: { width: '85px', padding: `0 ${spacing.sm}`, height: '30px', borderRadius: radius.sm, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray300, fontSize: typography.sizes.sm, fontFamily: typography.fontMono, backgroundColor: colors.surface, transition: 'all 0.2s ease', outline: 'none', boxSizing: 'border-box', textAlign: 'right', lineHeight: '30px', ':focus': { borderColor: colors.primary, boxShadow: `0 0 0 2px ${colors.primaryLight}` } },
+  inputCell: { 
+    width: '85px', 
+    padding: `0 ${spacing.sm}`, 
+    height: '30px', 
+    borderRadius: radius.sm, 
+    borderWidth: '1px', 
+    borderStyle: 'solid', 
+    borderColor: colors.gray300, 
+    fontSize: typography.sizes.sm, 
+    fontFamily: typography.fontMono, 
+    backgroundColor: colors.surface, 
+    transition: 'all 0.2s ease', 
+    outline: 'none', 
+    boxSizing: 'border-box', 
+    textAlign: 'right', 
+    lineHeight: '30px', 
+    ':focus': { 
+      borderColor: colors.primary, 
+      boxShadow: `0 0 0 2px ${colors.primaryLight}`,
+      backgroundColor: colors.primaryLight + '20'
+    }
+  },
+  editingInput: {
+    borderStyle: 'dashed',
+    borderColor: colors.warning,
+    backgroundColor: colors.warning + '10'
+  },
   frozenInput: { backgroundColor: colors.info + '20', borderColor: colors.info, color: colors.gray800, fontWeight: 'bold' },
   hasData: { backgroundColor: colors.secondaryLight, borderWidth: '1px', borderStyle: 'solid', borderColor: colors.secondary, color: colors.gray800, fontWeight: typography.weights.bold },
   activeInput: { borderColor: colors.primary, boxShadow: `0 0 0 2px ${colors.primaryLight}`, backgroundColor: colors.primaryLight },
@@ -730,10 +1427,9 @@ const styles = {
   summary: { flex: 1 },
   summaryCount: { fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, color: colors.gray900, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' },
   actionButtons: { display: 'flex', gap: spacing.md, alignItems: 'center', flexShrink: 0 },
-  // ✅ BOTONES AJUSTADOS (TAMAÑO 42PX)
   btnCancel: { height: '42px', padding: `0 ${spacing.md}`, minWidth: '120px', justifyContent: 'center', borderWidth: '1px', borderRadius: radius.md, fontSize: typography.sizes.sm },
   btnSave: { height: '42px', padding: `0 ${spacing.md}`, minWidth: '160px', justifyContent: 'center', borderRadius: radius.md, fontSize: typography.sizes.sm, backgroundColor: colors.success, color: '#fff', ':hover': { backgroundColor: colors.secondaryHover } },
-  
+
   btnDisabled: { backgroundColor: '#E5E7EB', color: '#6B7280', border: `1px solid ${colors.gray300}`, cursor: 'not-allowed', boxShadow: 'none', opacity: 1, ':hover': { backgroundColor: '#E5E7EB', transform: 'none', boxShadow: 'none' } },
   fixedMachineDisplay: { display: 'flex', alignItems: 'center', gap: spacing.xs, padding: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, borderWidth: '2px', borderStyle: 'solid', borderColor: colors.primary, minHeight: '42px' },
   fixedMachineName: { fontSize: typography.sizes.sm, color: colors.primary, fontWeight: typography.weights.bold, flex: 1 },

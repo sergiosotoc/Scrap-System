@@ -12,6 +12,7 @@ use App\Http\Controllers\BasculaController;
 use App\Http\Controllers\ExcelReportController;
 use App\Http\Controllers\MaterialesController;
 use App\Http\Controllers\AreasMaquinasController;
+use App\Http\Controllers\DestinatariosController;
 
 Route::middleware('api')->group(function () {
     // Autenticación
@@ -42,12 +43,20 @@ Route::middleware('api')->group(function () {
         Route::delete('/{id}', [AreasMaquinasController::class, 'destroy']);
     });
 
+    // GESTIÓN DE DESTINATARIOS DE CORREO (Solo Admin)
+    Route::middleware(['auth:sanctum', 'role:admin'])->prefix('destinatarios')->group(function () {
+        Route::get('/', [DestinatariosController::class, 'index']);
+        Route::post('/', [DestinatariosController::class, 'store']);
+        Route::delete('/{id}', [DestinatariosController::class, 'destroy']);
+    });
+
     // Gestión de usuarios (solo admin)
     Route::middleware(['auth:sanctum', 'role:admin'])->prefix('users')->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);
         Route::put('/{id}', [UserController::class, 'update']);
         Route::delete('/{id}', [UserController::class, 'destroy']);
+        Route::patch('/{id}/toggle-status', [UserController::class, 'toggleStatus']);
     });
 
     // Báscula
@@ -64,12 +73,13 @@ Route::middleware('api')->group(function () {
         Route::get('/diagnostico', [BasculaController::class, 'diagnostico']);
     });
 
-    // Registros de scrap
+    // Registros de scrap -  NUEVA RUTA BATCH AGREGADA
     Route::middleware('auth:sanctum')->prefix('registros-scrap')->group(function () {
         Route::get('/', [RegistrosScrapController::class, 'index']);
         Route::post('/', [RegistrosScrapController::class, 'store']);
+        Route::post('/batch', [RegistrosScrapController::class, 'storeBatch']); // 🔥 NUEVA RUTA
         Route::get('/configuracion', [RegistrosScrapController::class, 'getConfiguracion']);
-        Route::get('/stats', [RegistrosScrapController::class, 'stats']);
+        Route::get('/stats', [RegistrosScrapController::class, 'getRegistroScrapStats']);
     });
 
     // Recepciones de scrap
@@ -84,10 +94,17 @@ Route::middleware('api')->group(function () {
         Route::get('/export-formato-empresa', [ExcelReportController::class, 'exportFormatoEmpresa']);
         Route::get('/export-recepciones', [ExcelReportController::class, 'exportReporteRecepcion']);
         
-        // ✅ RUTA PARA VISTA PREVIA
         Route::get('/preview-formato-empresa', [ExcelReportController::class, 'previewFormatoEmpresa']);
         
-        // ✅ RUTA PARA ENVÍO DE CORREO (La que faltaba)
         Route::post('/enviar-reporte-correo', [ExcelReportController::class, 'enviarReporteCorreo']);
+    });
+    
+    // NUEVO: Endpoint de salud para verificar conexión
+    Route::get('/health', function () {
+        return response()->json([
+            'status' => 'ok',
+            'timestamp' => now(),
+            'service' => 'Scrap Management API'
+        ]);
     });
 });

@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\RegistrosScrap;
 use App\Models\RecepcionScrap;
-use App\Models\ConfigTipoScrap; // Necesario para las columnas
+use App\Models\ConfigTipoScrap;
+use App\Models\DestinatarioCorreo; 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -18,10 +19,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExcelReportController extends Controller
 {
-    // ... (Métodos exportFormatoEmpresa, exportReporteRecepcion se mantienen igual) ...
     public function exportFormatoEmpresa(Request $request): BinaryFileResponse
     {
-        // ... (Tu código existente) ...
         try {
             \Log::info('📊 Iniciando exportación formato empresa');
 
@@ -63,7 +62,7 @@ class ExcelReportController extends Controller
             if ($turno == 2) $turnoTexto = "SEGUNDO TURNO";
             if ($turno == 3) $turnoTexto = "TERCER TURNO";
 
-            $fileName = "FORMATO SCRAP {$fechaTexto} {$turnoTexto}.xlsx";
+            $fileName = "REPORTE SCRAP {$fechaTexto} {$turnoTexto}.xlsx";
 
             return Excel::download(
                 new FormatoScrapEmpresaExport($registros, $fecha, $turno, $user), 
@@ -78,7 +77,6 @@ class ExcelReportController extends Controller
 
     public function exportReporteRecepcion(Request $request): BinaryFileResponse
     {
-        // ... (Tu código existente) ...
         try {
             $validated = $request->validate([
                 'fecha_inicio' => 'required|date',
@@ -120,7 +118,6 @@ class ExcelReportController extends Controller
         }
     }
 
-    // NUEVO MÉTODO: Obtener datos para vista previa JSON
     public function previewFormatoEmpresa(Request $request)
     {
         try {
@@ -161,7 +158,6 @@ class ExcelReportController extends Controller
                 ];
 
                 foreach ($materiales as $mat) {
-                    // Usamos el helper del modelo o buscamos manual en la relacion cargada
                     $detalle = $r->detalles->firstWhere('tipo_scrap_id', $mat->id);
                     $fila['valores'][$mat->id] = $detalle ? (float)$detalle->peso : 0;
                 }
@@ -192,13 +188,12 @@ class ExcelReportController extends Controller
         }
     }
 
-    // ... (El método enviarReporteCorreo se mantiene igual) ...
     public function enviarReporteCorreo(Request $request)
     {
-        // ... tu código existente de enviarReporteCorreo ...
         try {
+            \Log::info('📧 Iniciando envío automático de reporte');
+
             $validated = $request->validate([
-                'email_destino' => 'required|email',
                 'fecha' => 'required|date',
                 'turno' => 'nullable|in:1,2,3'
             ]);
@@ -206,27 +201,30 @@ class ExcelReportController extends Controller
             $user = Auth::user();
             $fecha = $validated['fecha'];
             $turno = $validated['turno'] ?? null;
-            $emailDestino = $validated['email_destino'];
 
-            // 1. Obtener datos
-            $query = RegistrosScrap::with('operador')
-                ->whereDate('fecha_registro', $fecha);
+            // 1. Obtener TODOS los destinatarios de la BD
+            $destinatarios = DestinatarioCorreo::pluck('email')->toArray();
 
-            if ($turno) {
-                $query->where('turno', $turno);
+            if (empty($destinatarios)) {
+                \Log::warning('⚠️ No hay destinatarios configurados en el sistema');
+                return response()->json(['message' => 'No hay destinatarios configurados en el sistema.'], 422);
             }
 
-            if ($user->role !== 'admin') {
-                $query->where('operador_id', $user->id);
-            }
+            \Log::info('📧 Destinatarios encontrados: ' . implode(', ', $destinatarios));
 
+            // 2. Obtener datos para el reporte
+            $query = RegistrosScrap::with('operador')->whereDate('fecha_registro', $fecha);
+            if ($turno) $query->where('turno', $turno);
+            if ($user->role !== 'admin') $query->where('operador_id', $user->id);
+            
             $registros = $query->orderBy('area_real')->orderBy('maquina_real')->get();
 
             if ($registros->count() === 0) {
-                return response()->json(['message' => 'No hay registros para enviar en la fecha seleccionada'], 404);
+                \Log::warning('⚠️ No hay registros para enviar en fecha: ' . $fecha);
+                return response()->json(['message' => 'No hay registros para enviar.'], 404);
             }
 
-            // 2. Generar nombre de archivo
+            // 3. Generar nombre del archivo
             $fechaObj = Carbon::parse($fecha);
             $dia = $fechaObj->format('d');
             $anio = $fechaObj->format('Y');
@@ -238,15 +236,17 @@ class ExcelReportController extends Controller
             if ($turno == 2) $turnoTexto = "T2";
             if ($turno == 3) $turnoTexto = "T3";
 
-            $fileName = "REPORTE_SCRAP_{$dia}{$mes}{$anio}_{$turnoTexto}.xlsx";
-            
-            // 3. Guardar temporalmente
+            $fechaTexto = $fechaObj->format('d') . '-' . $mes . '-' . $fechaObj->format('y');
+            $fileName = "REPORTE SCRAP {$fechaTexto} {$turnoTexto}.xlsx";
             $tempPath = 'temp/' . $fileName;
 
+            // 4. Crear directorio temporal si no existe
             if (!Storage::disk('local')->exists('temp')) {
                 Storage::disk('local')->makeDirectory('temp');
             }
 
+            // 5. Generar Excel y guardarlo temporalmente
+            \Log::info('📊 Generando archivo Excel: ' . $fileName);
             Excel::store(
                 new FormatoScrapEmpresaExport($registros, $fecha, $turno, $user), 
                 $tempPath, 
@@ -259,25 +259,56 @@ class ExcelReportController extends Controller
 
             $fullPath = Storage::disk('local')->path($tempPath);
 
-            // 4. Enviar correo (Usando configuración global del .env)
-            Mail::to($emailDestino)->send(new ReporteScrapMail(
-                $fecha,
-                $turnoTexto,
+            // 6. Preparar asunto del correo
+            $asunto = "REPORTE DE SCRAP DE {$turnoTexto} {$fechaTexto}";
+
+            // 7. Enviar Correo masivo
+            \Log::info('📤 Enviando correo a ' . count($destinatarios) . ' destinatarios');
+            
+            Mail::to($destinatarios)->send(new ReporteScrapMail(
+                $asunto,
                 $user->name,
                 $fullPath,
                 $fileName
             ));
 
-            // 5. Limpieza
+            // 8. Limpieza del archivo temporal
             try {
                 Storage::disk('local')->delete($tempPath);
-            } catch (\Exception $e) {}
+                \Log::info('🗑️ Archivo temporal eliminado: ' . $tempPath);
+            } catch (\Exception $e) {
+                \Log::warning('⚠️ No se pudo eliminar archivo temporal: ' . $e->getMessage());
+            }
 
-            return response()->json(['message' => 'Reporte enviado correctamente a ' . $emailDestino]);
+            $mensaje = '✅ Reporte enviado correctamente a ' . count($destinatarios) . ' destinatarios';
+            \Log::info($mensaje);
+
+            return response()->json([
+                'message' => $mensaje,
+                'destinatarios' => $destinatarios,
+                'count' => count($destinatarios)
+            ]);
 
         } catch (\Exception $e) {
             \Log::error('❌ Error enviando correo: ' . $e->getMessage());
-            return response()->json(['message' => 'Error al enviar correo: ' . $e->getMessage()], 500);
+            \Log::error($e->getTraceAsString());
+            return response()->json([
+                'message' => 'Error al enviar correo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    public function getDestinatariosCorreo()
+    {
+        try {
+            $destinatarios = DestinatarioCorreo::orderBy('email')->get();
+            return response()->json([
+                'destinatarios' => $destinatarios,
+                'count' => $destinatarios->count()
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('❌ Error obteniendo destinatarios: ' . $e->getMessage());
+            return response()->json(['message' => 'Error obteniendo destinatarios'], 500);
         }
     }
 }

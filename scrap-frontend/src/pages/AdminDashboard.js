@@ -1,10 +1,12 @@
 /* src/pages/AdminDashboard.js */
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import UserManagement from '../components/UserManagement';
 import MaterialesManagement from '../components/MaterialesManagement';
 import AreasMaquinasManagement from '../components/AreasMaquinasManagement';
+import CorreosManagement from '../components/CorreosManagement'; // ✅ Importar nuevo componente
 import { colors, spacing, typography, baseComponents, shadows } from '../styles/designSystem';
 import PageWrapper from '../components/PageWrapper';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -250,12 +252,11 @@ const AdminDashboard = () => {
         fontWeight: typography.weights.extrabold, 
         color: colors.gray900, 
         marginBottom: spacing.xs,
-        // ESTILO DE DEGRADADO CORREGIDO Y "MARCADO":
         background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, 
         WebkitBackgroundClip: 'text', 
         WebkitTextFillColor: 'transparent', 
         backgroundClip: 'text',
-        display: 'inline-block', // CRÍTICO: Ajusta el ancho del fondo al texto
+        display: 'inline-block',
         lineHeight: 1.2
     },
     subtitle: { fontSize: typography.sizes.base, color: colors.gray500 },
@@ -406,7 +407,8 @@ const AdminDashboard = () => {
             { id: 'overview', label: 'Resumen General', content: <OverviewContent /> },
             { id: 'users', label: 'Gestión de Usuarios', content: <UserManagement /> },
             { id: 'areas', label: 'Config. Áreas/Máquinas', content: <AreasMaquinasManagement /> },
-            { id: 'materiales', label: 'Catálogo Materiales', content: <MaterialesManagement /> }
+            { id: 'materiales', label: 'Catálogo Materiales', content: <MaterialesManagement /> },
+            { id: 'correos', label: 'Destinatarios Correo', content: <CorreosManagement /> } // ✅ NUEVA PESTAÑA
           ]}
         />
       </PageWrapper>
