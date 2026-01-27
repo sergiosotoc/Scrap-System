@@ -4,12 +4,12 @@ import { apiClient } from '../services/api';
 import { colors, radius, spacing, typography, baseComponents } from '../styles/designSystem';
 import SmoothButton from './SmoothButton';
 import SmoothInput from './SmoothInput';
-import SmoothSelect from './SmoothSelect'; 
+import SmoothSelect from './SmoothSelect';
 
 const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
     const [estado, setEstado] = useState(modoInicial);
-    const [peso, setPeso] = useState(0); 
-    const [tara, setTara] = useState(0); 
+    const [peso, setPeso] = useState(0);
+    const [tara, setTara] = useState(0);
     const [config, setConfig] = useState({ puerto: 'COM3', baudios: 9600, timeout: 1 });
     const [puertos, setPuertos] = useState([]);
     const [modoManual, setModoManual] = useState(false);
@@ -22,7 +22,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     const estadoRef = useRef(estado);
     const montadoRef = useRef(true);
     const lecturaEnProgresoRef = useRef(false);
-    
+
     const campoDestinoRef = useRef(campoDestino);
 
     // Cálculo seguro del Peso Neto
@@ -31,6 +31,8 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
     // Determinar si es lectura automática real
     const esLecturaAutomatica = !modoManual && estado === 'conectado';
+
+    const [tickLectura, setTickLectura] = useState(0);
 
     useEffect(() => {
         campoDestinoRef.current = campoDestino;
@@ -45,10 +47,14 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     // ✅ CORRECCIÓN: Enviar bandera de esAutomatico al padre
     useEffect(() => {
         if (onPesoObtenido) {
-            // Tercer argumento: true si es báscula, false si es manual
-            onPesoObtenido(pesoNeto, campoDestinoRef.current, esLecturaAutomatica);
+            onPesoObtenido(
+                pesoNeto,
+                campoDestinoRef.current,
+                esLecturaAutomatica
+            );
         }
-    }, [pesoNeto, onPesoObtenido, esLecturaAutomatica]);
+    }, [tickLectura]);
+
 
     // Cargar puertos
     useEffect(() => {
@@ -124,8 +130,9 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             if (resultado.success && montadoRef.current) {
                 const pesoString = String(resultado.peso_kg).replace(',', '.');
                 const nuevoPeso = parseFloat(pesoString) || 0;
-                
-                setPeso(nuevoPeso); 
+
+                setPeso(nuevoPeso);
+                setTickLectura(t => t + 1);
                 setUltimaLectura(new Date());
                 setMensaje(nuevoPeso > 0 ? 'Lectura estable' : 'Báscula en cero');
             }
@@ -139,21 +146,21 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             lecturaEnProgresoRef.current = false;
             abortControllerRef.current = null;
         }
-    }, [config, modoManual]); 
+    }, [config, modoManual]);
 
     const iniciarLecturaAutomatica = useCallback(() => {
         detenerLecturaCompleta();
         if (estadoRef.current !== 'conectado' || modoManual) return;
-        
+
         leerPesoConCancelacion();
-        
+
         intervaloRef.current = setInterval(() => {
             if (estadoRef.current !== 'conectado' || modoManual) {
                 detenerLecturaCompleta();
                 return;
             }
             leerPesoConCancelacion();
-        }, 200); 
+        }, 200);
     }, [modoManual, leerPesoConCancelacion, detenerLecturaCompleta]);
 
     const conectarBascula = async () => {
@@ -240,8 +247,8 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                         <small style={styles.headerSubtext}>SERIAL INTERFACE RS232</small>
                     </div>
                 </div>
-                <div style={{...styles.statusIndicator, borderColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray300)}}>
-                    <span style={{...styles.led, backgroundColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray400), boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none'}} />
+                <div style={{ ...styles.statusIndicator, borderColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray300) }}>
+                    <span style={{ ...styles.led, backgroundColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray400), boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none' }} />
                     <span style={styles.statusText}>{estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}</span>
                 </div>
             </div>
@@ -265,7 +272,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                     </div>
                     {/* LCD Principal: Peso Neto Calculado */}
                     <div style={styles.lcdValue}>{pesoNeto.toFixed(3)}</div>
-                    
+
                     <div style={styles.lcdDetailRow}>
                         <span style={styles.lcdDetailItem}>Bruto: {pesoBrutoNum.toFixed(3)}</span>
                         <span style={styles.lcdDetailSeparator}>-</span>
@@ -287,19 +294,19 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
             <div style={styles.controls}>
                 <div style={styles.controlRow}>
                     <div style={styles.controlGroup}>
-                        <SmoothSelect 
-                            label="PUERTO COM" 
-                            value={config.puerto} 
-                            disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos} 
+                        <SmoothSelect
+                            label="PUERTO COM"
+                            value={config.puerto}
+                            disabled={estado === 'conectado' || estado === 'conectando' || cargandoPuertos}
                             onChange={(e) => setConfig(prev => ({ ...prev, puerto: e.target.value }))}
                             style={{ height: '36px' }}
                         >
                             {cargandoPuertos ? <option>Cargando...</option> : puertos.map(p => <option key={p} value={p}>{p}</option>)}
                         </SmoothSelect>
                     </div>
-                    
+
                     <div style={styles.controlGroup}>
-                        <SmoothInput 
+                        <SmoothInput
                             label="PESO CONTENEDOR (TARA)"
                             type="number"
                             step="0.001"
@@ -307,7 +314,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             onChange={handleTaraChange}
                             placeholder="0.000"
                             style={{ height: '36px', textAlign: 'right', fontWeight: '600' }}
-                            rightElement={<span style={{fontSize: '10px', color: colors.gray500, fontWeight: 'bold'}}>KG</span>}
+                            rightElement={<span style={{ fontSize: '10px', color: colors.gray500, fontWeight: 'bold' }}>KG</span>}
                         />
                     </div>
                 </div>
@@ -334,11 +341,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                     )}
                     {modoManual && (
                         <div style={styles.manualInputContainer}>
-                            <SmoothInput 
-                                type="number" 
-                                step="0.001" 
+                            <SmoothInput
+                                type="number"
+                                step="0.001"
                                 value={peso === 0 || peso === '0' ? '' : peso}
-                                onChange={handleManualChange} 
+                                onChange={handleManualChange}
                                 placeholder="INGRESO MANUAL BRUTO"
                                 style={{
                                     textAlign: 'right',
@@ -348,7 +355,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                                     backgroundColor: '#FFFBEB',
                                     color: '#92400E',
                                     height: '36px'
-                                }} 
+                                }}
                             />
                         </div>
                     )}
@@ -382,108 +389,108 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 };
 
 const styles = {
-    panel: { 
-        ...baseComponents.card, 
-        padding: spacing.lg, 
-        marginBottom: spacing.lg 
+    panel: {
+        ...baseComponents.card,
+        padding: spacing.lg,
+        marginBottom: spacing.lg
     },
-    header: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: spacing.md, 
-        paddingBottom: spacing.sm, 
-        borderBottom: `1px solid ${colors.gray200}` 
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+        paddingBottom: spacing.sm,
+        borderBottom: `1px solid ${colors.gray200}`
     },
-    headerTitle: { 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: spacing.sm 
+    headerTitle: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing.sm
     },
-    iconContainer: { 
-        color: colors.gray600, 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center' 
+    iconContainer: {
+        color: colors.gray600,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
-    headerText: { 
-        margin: 0, 
-        fontSize: typography.sizes.base, 
-        fontWeight: typography.weights.bold, 
-        color: colors.gray800 
+    headerText: {
+        margin: 0,
+        fontSize: typography.sizes.base,
+        fontWeight: typography.weights.bold,
+        color: colors.gray800
     },
-    headerSubtext: { 
-        color: colors.gray500, 
-        fontSize: typography.sizes.xs, 
-        letterSpacing: '0.5px' 
+    headerSubtext: {
+        color: colors.gray500,
+        fontSize: typography.sizes.xs,
+        letterSpacing: '0.5px'
     },
-    statusIndicator: { 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: spacing.xs, 
-        backgroundColor: colors.gray50, 
-        padding: `${spacing.xs} ${spacing.sm}`, 
-        borderRadius: radius.full, 
-        border: `1px solid ${colors.gray300}`, 
-        transition: 'all 0.3s ease' 
+    statusIndicator: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing.xs,
+        backgroundColor: colors.gray50,
+        padding: `${spacing.xs} ${spacing.sm}`,
+        borderRadius: radius.full,
+        border: `1px solid ${colors.gray300}`,
+        transition: 'all 0.3s ease'
     },
-    led: { 
-        width: '8px', 
-        height: '8px', 
-        borderRadius: '50%', 
-        transition: 'all 0.3s ease' 
+    led: {
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        transition: 'all 0.3s ease'
     },
-    statusText: { 
-        fontSize: typography.sizes.xs, 
-        fontWeight: typography.weights.bold, 
-        color: colors.gray700, 
-        letterSpacing: '0.5px' 
+    statusText: {
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.gray700,
+        letterSpacing: '0.5px'
     },
-    lcdContainer: { 
-        backgroundColor: colors.lcdBase || '#C4D4C4', 
-        background: colors.lcdGradient || 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)', 
-        padding: spacing.sm, 
-        borderRadius: radius.md, 
-        marginBottom: spacing.md, 
-        boxShadow: `inset 0 2px 4px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.5)`, 
-        border: `1px solid ${colors.gray300}` 
+    lcdContainer: {
+        backgroundColor: colors.lcdBase || '#C4D4C4',
+        background: colors.lcdGradient || 'linear-gradient(180deg, #C4D4C4 0%, #B0C0B0 100%)',
+        padding: spacing.sm,
+        borderRadius: radius.md,
+        marginBottom: spacing.md,
+        boxShadow: `inset 0 2px 4px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.5)`,
+        border: `1px solid ${colors.gray300}`
     },
-    lcdGlass: { 
-        border: `1px solid rgba(0,0,0,0.1)`, 
-        borderRadius: radius.sm, 
-        padding: spacing.md, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        position: 'relative', 
-        backgroundColor: 'rgba(255,255,255,0.1)' 
+    lcdGlass: {
+        border: `1px solid rgba(0,0,0,0.1)`,
+        borderRadius: radius.sm,
+        padding: spacing.md,
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        backgroundColor: 'rgba(255,255,255,0.1)'
     },
-    lcdHeader: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+    lcdHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
         marginBottom: spacing.xs,
         alignItems: 'center'
     },
-    lcdLabel: { 
-        fontSize: typography.sizes.xs, 
-        fontWeight: typography.weights.bold, 
-        color: colors.lcdText || '#1a2e1a', 
-        opacity: 0.8 
+    lcdLabel: {
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText || '#1a2e1a',
+        opacity: 0.8
     },
-    lcdTime: { 
-        fontSize: typography.sizes.xs, 
-        fontFamily: typography.fontMono, 
-        color: colors.lcdText || '#1a2e1a' 
+    lcdTime: {
+        fontSize: typography.sizes.xs,
+        fontFamily: typography.fontMono,
+        color: colors.lcdText || '#1a2e1a'
     },
-    lcdValue: { 
-        fontFamily: typography.fontMono, 
-        fontSize: '3.5rem', 
-        fontWeight: typography.weights.bold, 
-        color: colors.lcdText || '#1a2e1a', 
-        textAlign: 'right', 
-        lineHeight: '1', 
-        letterSpacing: '-2px', 
-        textShadow: '1px 1px 0 rgba(255,255,255,0.2)', 
-        margin: '0' 
+    lcdValue: {
+        fontFamily: typography.fontMono,
+        fontSize: '3.5rem',
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText || '#1a2e1a',
+        textAlign: 'right',
+        lineHeight: '1',
+        letterSpacing: '-2px',
+        textShadow: '1px 1px 0 rgba(255,255,255,0.2)',
+        margin: '0'
     },
     lcdDetailRow: {
         display: 'flex',
@@ -502,75 +509,75 @@ const styles = {
     lcdDetailSeparator: {
         opacity: 0.5
     },
-    lcdFooter: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'flex-end', 
-        marginTop: spacing.sm, 
-        borderTop: `1px solid rgba(0,0,0,0.05)`, 
-        paddingTop: spacing.xs 
+    lcdFooter: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        marginTop: spacing.sm,
+        borderTop: `1px solid rgba(0,0,0,0.05)`,
+        paddingTop: spacing.xs
     },
-    lcdIndicators: { 
-        display: 'flex', 
-        gap: spacing.sm, 
-        fontSize: typography.sizes.xs, 
-        fontWeight: typography.weights.bold, 
-        color: colors.lcdText || '#1a2e1a' 
+    lcdIndicators: {
+        display: 'flex',
+        gap: spacing.sm,
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.bold,
+        color: colors.lcdText || '#1a2e1a'
     },
-    systemMessage: { 
-        fontSize: typography.sizes.xs, 
-        fontFamily: typography.fontMono, 
-        color: colors.lcdText || '#1a2e1a', 
-        fontWeight: typography.weights.semibold 
+    systemMessage: {
+        fontSize: typography.sizes.xs,
+        fontFamily: typography.fontMono,
+        color: colors.lcdText || '#1a2e1a',
+        fontWeight: typography.weights.semibold
     },
-    controls: { 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: spacing.md 
+    controls: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: spacing.md
     },
-    controlRow: { 
-        display: 'flex', 
-        gap: spacing.md, 
-        alignItems: 'flex-end' 
+    controlRow: {
+        display: 'flex',
+        gap: spacing.md,
+        alignItems: 'flex-end'
     },
-    controlGroup: { 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column' 
+    controlGroup: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column'
     },
-    controlLabel: { 
-        display: 'block', 
-        fontSize: typography.sizes.xs, 
-        fontWeight: typography.weights.semibold, 
-        color: colors.gray600, 
-        marginBottom: spacing.xs, 
-        textTransform: 'uppercase', 
-        letterSpacing: '0.05em' 
+    controlLabel: {
+        display: 'block',
+        fontSize: typography.sizes.xs,
+        fontWeight: typography.weights.semibold,
+        color: colors.gray600,
+        marginBottom: spacing.xs,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
     },
-    manualInputContainer: { 
-        height: '36px', 
-        width: '100%' 
+    manualInputContainer: {
+        height: '36px',
+        width: '100%'
     },
-    secondaryActions: { 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        paddingTop: spacing.sm, 
+    secondaryActions: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: spacing.sm,
         borderTop: `1px solid ${colors.gray200}`
-     },
-    linkButton: { 
-        background: 'transparent', 
-        border: 'none', 
-        color: colors.gray600, 
-        fontSize: typography.sizes.sm, 
-        padding: spacing.xs, 
-        display: 'flex', 
-        alignItems: 'center', 
-        boxShadow: 'none' 
     },
-    targetText: { 
-        fontSize: typography.sizes.xs, 
-        color: colors.gray400 
+    linkButton: {
+        background: 'transparent',
+        border: 'none',
+        color: colors.gray600,
+        fontSize: typography.sizes.sm,
+        padding: spacing.xs,
+        display: 'flex',
+        alignItems: 'center',
+        boxShadow: 'none'
+    },
+    targetText: {
+        fontSize: typography.sizes.xs,
+        color: colors.gray400
     }
 };
 

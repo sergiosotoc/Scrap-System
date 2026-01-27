@@ -3,153 +3,145 @@
 const STORAGE_KEY = 'scrap_registro_draft';
 const TURNO_KEY = 'scrap_current_turno';
 const FECHA_KEY = 'scrap_current_fecha';
-const MODAL_STATE_KEY = 'scrap_modal_open'; // Nueva clave para saber si el modal estaba abierto
 
 export const storageService = {
-  // Obtener turno actual según hora
+
+
   getCurrentTurno() {
     const hora = new Date().getHours();
     if (hora >= 7 && hora < 15) return '1';
-    else if (hora >= 15 && hora < 23) return '2';
-    else return '3';
+    if (hora >= 15 && hora < 23) return '2';
+    return '3';
   },
 
-  // Obtener fecha actual en formato YYYY-MM-DD
   getCurrentDate() {
-    return new Date().toISOString().split('T')[0];
+    // Usamos la fecha local para evitar problemas con UTC si es turno de noche tarde
+    const now = new Date();
+
+    return now.toISOString().split('T')[0];
   },
 
-  // Verificar si ha cambiado el turno o fecha
-  hasTurnoChanged() {
-    const storedTurno = localStorage.getItem(TURNO_KEY);
-    const storedDate = localStorage.getItem(FECHA_KEY);
+  /* ================================
+     VALIDACIÓN DE SESIÓN
+  ================================= */
+
+  /**
+   * Verifica si los datos guardados pertenecen al turno y fecha actuales.
+   * Retorna true si los datos son obsoletos.
+   */
+  isSessionExpired(storedTurno, storedFecha) {
     const currentTurno = this.getCurrentTurno();
     const currentDate = this.getCurrentDate();
 
-    return storedTurno !== currentTurno || storedDate !== currentDate;
+    return storedTurno !== currentTurno || storedFecha !== currentDate;
   },
 
-  // Actualizar turno y fecha actuales
-  updateCurrentSession() {
-    localStorage.setItem(TURNO_KEY, this.getCurrentTurno());
-    localStorage.setItem(FECHA_KEY, this.getCurrentDate());
-  },
+  /* ================================
+     GUARDADO DE DATOS
+  ================================= */
 
-  // Marcar que el modal está abierto
-  markModalOpened() {
-    localStorage.setItem(MODAL_STATE_KEY, 'true');
-  },
-
-  // Marcar que el modal está cerrado
-  markModalClosed() {
-    localStorage.removeItem(MODAL_STATE_KEY);
-  },
-
-  // Verificar si el modal estaba abierto anteriormente
-  wasModalOpen() {
-    return localStorage.getItem(MODAL_STATE_KEY) === 'true';
-  },
-
-  // Guardar datos del formulario (solo cuando se presiona lectura)
-  saveDraftDataOnDemand(data) {
+  /**
+   * Guarda los datos en localStorage.
+   * @param {Object} data - El objeto con los datos del formulario
+   * @param {boolean} isManual - Si fue guardado por botón (true) o auto-save (false)
+   */
+  saveDraft(data, isManual = false) {
     try {
+      const currentTurno = this.getCurrentTurno();
+      const currentDate = this.getCurrentDate();
+
       const sessionData = {
         data,
         timestamp: new Date().toISOString(),
-        turno: this.getCurrentTurno(),
-        fecha: this.getCurrentDate(),
-        savedManually: true // Marcar que fue guardado manualmente
+        turno: currentTurno,
+        fecha: currentDate,
+        savedManually: isManual
       };
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionData));
-      this.updateCurrentSession();
+      
+      // Guardamos referencias planas también por si se necesitan leer rápido
+      localStorage.setItem(TURNO_KEY, currentTurno);
+      localStorage.setItem(FECHA_KEY, currentDate);
+      
       return true;
     } catch (error) {
-      console.error('Error guardando datos en localStorage:', error);
+      console.error('Error guardando draft:', error);
       return false;
     }
   },
 
-  // Guardar datos automáticamente (sin notificación)
-  saveDraftDataAuto(data) {
-    try {
-      const sessionData = {
-        data,
-        timestamp: new Date().toISOString(),
-        turno: this.getCurrentTurno(),
-        fecha: this.getCurrentDate(),
-        savedManually: false // Marcar que fue guardado automáticamente
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionData));
-      return true;
-    } catch (error) {
-      console.error('Error guardando datos automáticamente:', error);
-      return false;
-    }
-  },
+  /* ================================
+     CARGA DE DATOS
+  ================================= */
 
-  // Cargar datos guardados (solo si el modal estaba abierto antes)
+  /**
+   * Intenta recuperar los datos. 
+   * Realiza limpieza automática si los datos son de un turno anterior o muy viejos.
+   */
   loadDraftData() {
     try {
-      // Verificar si ha cambiado el turno/fecha
-      if (this.hasTurnoChanged()) {
-        this.clearDraftData();
-        this.updateCurrentSession();
-        return null;
-      }
-
-      // Solo cargar si el modal estaba abierto antes
-      if (!this.wasModalOpen()) {
-        return null;
-      }
-
       const stored = localStorage.getItem(STORAGE_KEY);
+      
+      // 1. Si no hay datos, retornamos null
       if (!stored) return null;
 
       const parsed = JSON.parse(stored);
-      
-      // Verificar que los datos sean del mismo turno y fecha
-      if (parsed.turno !== this.getCurrentTurno() || parsed.fecha !== this.getCurrentDate()) {
+
+      // 2. Validación de Turno y Fecha
+      if (this.isSessionExpired(parsed.turno, parsed.fecha)) {
+        console.warn('Draft encontrado pero pertenece a otro turno/fecha. Limpiando...');
         this.clearDraftData();
         return null;
       }
 
-      // Verificar que no sean datos muy antiguos (más de 8 horas)
-      const storedTime = new Date(parsed.timestamp);
-      const currentTime = new Date();
-      const hoursDiff = Math.abs(currentTime - storedTime) / 36e5; // horas
-      
+      // 3. Validación de Tiempo (Expiración por horas - ej. 8 horas)
+      const storedTime = new Date(parsed.timestamp).getTime();
+      const hoursDiff = (Date.now() - storedTime) / (1000 * 60 * 60);
+
       if (hoursDiff > 8) {
+        console.warn('Draft expirado por tiempo (> 8 horas). Limpiando...');
         this.clearDraftData();
         return null;
       }
 
+      // Si pasa todas las validaciones, retornamos los datos limpios
       return parsed.data;
+
     } catch (error) {
-      console.error('Error cargando datos de localStorage:', error);
+      console.error('Error cargando draft:', error);
+      // Si el JSON está corrupto, mejor limpiar
+      this.clearDraftData(); 
       return null;
     }
   },
 
-  // Limpiar datos guardados
+  /* ================================
+     LIMPIEZA Y ESTADO
+  ================================= */
+
   clearDraftData() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TURNO_KEY);
     localStorage.removeItem(FECHA_KEY);
-    localStorage.removeItem(MODAL_STATE_KEY);
   },
 
-  // Limpiar solo datos pero mantener turno/fecha (para cuando se envía correctamente)
-  clearDraftDataOnly() {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(MODAL_STATE_KEY);
-  },
-
-  // Verificar si hay datos guardados
-  hasDraftData() {
-    if (this.hasTurnoChanged()) {
-      this.clearDraftData();
+  /**
+   * Método ligero para verificar si existe un draft válido sin parsear todo el JSON.
+   * Útil para mostrar botones tipo "Continuar borrador" en la UI.
+   */
+  hasValidDraft() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return false;
+    
+    // Verificación rápida de turno actual contra lo guardado plano
+    const storedTurno = localStorage.getItem(TURNO_KEY);
+    const storedFecha = localStorage.getItem(FECHA_KEY);
+    
+    if (this.isSessionExpired(storedTurno, storedFecha)) {
       return false;
     }
-    return !!localStorage.getItem(STORAGE_KEY);
+
+    return true;
   }
 };
