@@ -44,11 +44,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
         estadoRef.current = estado;
     }, [estado]);
 
-    // ✅ CORRECCIÓN: Enviar bandera de esAutomatico al padre
     useEffect(() => {
         if (onPesoObtenido) {
+            const valorFinal = parseFloat(pesoNeto) || 0;
             onPesoObtenido(
-                pesoNeto,
+                valorFinal,
                 campoDestinoRef.current,
                 esLecturaAutomatica
             );
@@ -224,11 +224,15 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
     const handleManualChange = (e) => {
         let valStr = e.target.value;
+
         setPeso(valStr);
+        setTickLectura(t => t + 1);
     };
 
     const handleTaraChange = (e) => {
         setTara(e.target.value);
+
+        setTickLectura(t => t + 1);
     };
 
     return (

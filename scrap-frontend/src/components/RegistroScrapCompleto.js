@@ -312,22 +312,20 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const autoSaveToStorage = useCallback(() => {
     if (tablaData.length === 0) return;
-    const filasConDatos = tablaData.filter(fila => fila.peso_total > 0);
 
-    if (filasConDatos.length > 0) {
-      const dataToSave = {
-        tablaData,
-        formData,
-        filtroArea: filtroAreaRef.current,
-        filtroMaquina: filtroMaquinaRef.current,
-        campoBasculaActivo: campoBasculaActivoRef2.current,
-        maquinaSeleccionada,
-        celdaActiva: celdaActivaRef.current,
-        celdasSumadas
-      };
-      storageService.saveDraft(dataToSave, false);
-    }
-  }, [tablaData, formData, maquinaSeleccionada, celdasSumadas]);
+    const dataToSave = {
+      tablaData,
+      formData,
+      filtroArea: filtroAreaRef.current,
+      filtroMaquina: filtroMaquinaRef.current,
+      campoBasculaActivo: campoBasculaActivoRef2.current,
+      maquinaSeleccionada,
+      celdaActiva: celdaActivaRef.current,
+      celdasSumadas,
+      pesoBloqueado
+    };
+    storageService.saveDraft(dataToSave, false);
+  }, [tablaData, formData, maquinaSeleccionada, celdasSumadas, pesoBloqueado]);
 
   useEffect(() => {
     let mounted = true;
@@ -384,8 +382,16 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
           if (savedData && savedData.tablaData) {
             setLoadingFromStorage(true);
+
+            // --- RECUPERACIÓN DE ESTADOS ---
             if (savedData.formData) setFormData(savedData.formData);
             if (savedData.celdasSumadas) setCeldasSumadas(savedData.celdasSumadas);
+
+            // 🔥 NUEVO: Recuperar estado del botón de congelado
+            if (savedData.pesoBloqueado !== undefined) {
+              setPesoBloqueado(savedData.pesoBloqueado);
+            }
+
             if (savedData.filtroArea) {
               setFiltroArea(savedData.filtroArea);
               filtroAreaRef.current = savedData.filtroArea;
@@ -501,6 +507,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       if (index !== -1) {
         const filaDiferente = maquinaSeleccionada.index !== index;
         const columnaDiferente = celdaActiva?.campo !== campoBasculaActivo;
+
         if (filaDiferente || columnaDiferente) {
           setMaquinaSeleccionada({ area: filtroArea, maquina: filtroMaquina, index });
           setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
@@ -510,11 +517,17 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
   const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
+    setPesoBloqueado(false);
+    pesoBloqueadoRef.current = false;
+
+    celdaActivaRef.current = { areaIndex, campo };
+    campoBasculaActivoRef.current = campo;
+    maquinaSeleccionadaRef.current = { area, maquina, index: areaIndex };
+
     setCeldaActiva({ areaIndex, campo });
     setCampoBasculaActivo(campo);
-    campoBasculaActivoRef2.current = campo;
-
     setMaquinaSeleccionada({ area, maquina, index: areaIndex });
+
     setFiltroArea(area);
     filtroAreaRef.current = area;
     setFiltroMaquina(maquina);
@@ -525,18 +538,19 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
+
       e.target.blur();
+
+      setPesoBloqueado(true);
+
+      addToast('Valor fijado y peso congelado', 'info');
     }
-  }, []);
+  }, [addToast]);
 
   const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
     const key = `${areaIndex}_${campo}`;
-    if (valor === '' || valor === null || valor === undefined) {
-      setEditingValues(prev => ({ ...prev, [key]: '' }));
-      return;
-    }
     const regex = /^-?\d*\.?\d*$/;
-    if (regex.test(valor)) {
+    if (valor === '' || regex.test(valor)) {
       setEditingValues(prev => ({ ...prev, [key]: valor }));
     }
   }, []);
@@ -545,30 +559,37 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     const key = `${areaIndex}_${campo}`;
     const rawValue = editingValues[key];
 
-    if (rawValue === undefined || rawValue === '') return;
-    const val = round3(parseFloat(rawValue) || 0);
+    if (rawValue === undefined) return;
+
+    const val = rawValue === '' ? 0 : round3(parseFloat(rawValue) || 0);
 
     setTablaData(prev => {
       const newData = [...prev];
       const filaActualizada = { ...newData[areaIndex] };
+
       filaActualizada[campo] = val;
+
       let total = 0;
       materialesFlat.forEach(m => {
         const matKey = `material_${m.id}`;
-        const valor = parseFloat(filaActualizada[matKey]) || 0;
-        total += valor;
+        const valorMat = parseFloat(filaActualizada[matKey]) || 0;
+        total += valorMat;
       });
+
       filaActualizada.peso_total = round3(total);
       filaActualizada.conexion_bascula = false;
       newData[areaIndex] = filaActualizada;
 
-      // 🔥 Guardar después de editar manualmente
-      setTimeout(() => {
-        const filasConDatos = newData.filter(fila => fila.peso_total > 0);
-        if (filasConDatos.length > 0) {
-          autoSaveToStorage();
-        }
-      }, 100);
+      const dataToSave = {
+        tablaData: newData,
+        filtroArea: filtroAreaRef.current,
+        filtroMaquina: filtroMaquinaRef.current,
+        campoBasculaActivo: campoBasculaActivoRef2.current,
+        maquinaSeleccionada: maquinaSeleccionadaRef.current,
+        celdaActiva: celdaActivaRef.current,
+        celdasSumadas: celdasSumadasRef.current
+      };
+      storageService.saveDraft(dataToSave, false);
 
       return newData;
     });
@@ -586,27 +607,26 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         delete newState[celdaKey];
         return newState;
       });
-      addToast('Valor editado manualmente - Estado de suma reiniciado', 'info');
     }
-  }, [editingValues, tablaData, materialesFlat, celdasSumadas, addToast, autoSaveToStorage]);
+  }, [editingValues, materialesFlat, formData, celdasSumadas]);
 
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
+    const campoRealActivo = campoBasculaActivoRef.current;
     const currentMaquinaSel = maquinaSeleccionadaRef.current;
     const currentCelda = celdaActivaRef.current;
-    const campoRealActivo = campoBasculaActivoRef.current;
 
     let nuevoValorRaw = 0;
     if (pesoInput !== undefined && pesoInput !== null) {
       nuevoValorRaw = parseFloat(pesoInput) || 0;
     }
 
-    // 🔥 Guardar siempre el peso en vivo (sin importar bloqueos) para usarlo en SUMAR
     liveWeightRef.current = nuevoValorRaw;
 
     if (campoDestinoEnviado && campoDestinoEnviado !== campoRealActivo) return;
-    const campoDestino = campoRealActivo;
-    if (!campoDestino) return;
+    if (!campoRealActivo) return;
+
+    if (currentBloqueado) return;
 
     let targetIndex = -1;
     if (currentMaquinaSel.index !== null) {
@@ -615,75 +635,99 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       targetIndex = currentCelda.areaIndex;
     }
 
-    // Si está bloqueado y coincide con el target, mantener el valor congelado en LA TABLA (pero liveWeightRef sigue actualizandose)
-    if (currentBloqueado && lockedTargetRef.current) {
-      const locked = lockedTargetRef.current;
-      if (locked.index !== targetIndex || locked.field !== campoDestino) return;
-    }
-
-    let nuevoValor = 0;
-    if (currentBloqueado) {
-      // Si está bloqueado, no actualizamos la tabla con el nuevo valor
-      nuevoValor = pesoCongeladoRef.current || 0;
-    } else {
-      // Si no está bloqueado, actualizamos la tabla y el ref de congelado
+    if (targetIndex !== -1) {
       pesoCongeladoRef.current = nuevoValorRaw;
-      nuevoValor = nuevoValorRaw;
+      const celdaKey = `${targetIndex}_${campoRealActivo}`;
 
-      if (targetIndex !== -1) {
-        // 🔥 PROTECCIÓN: Si la celda ya tiene una suma acumulada manual, NO sobreescribir con el vivo
-        const celdaKey = `${targetIndex}_${campoDestino}`;
-        if (celdasSumadasRef.current[celdaKey]) {
-          return;
-        }
+      if (editingValuesRef.current[celdaKey] !== undefined || celdasSumadasRef.current[celdaKey]) {
+        return;
+      }
 
-        setTablaData(prevData => {
+      if (!esAutomatico) {
+        return;
+      }
+
+      setTablaData(prevData => {
+        const filaActual = prevData[targetIndex];
+        if (!filaActual) return prevData;
+
+        const valorAnterior = filaActual[campoRealActivo];
+
+        if (Math.abs(valorAnterior - nuevoValorRaw) > 0.001) {
           const newData = [...prevData];
-          const filaActualizada = { ...newData[targetIndex] };
-          filaActualizada[campoDestino] = round3(nuevoValor);
+          const filaActualizada = { ...filaActual };
+          filaActualizada[campoRealActivo] = round3(nuevoValorRaw);
           filaActualizada.conexion_bascula = esAutomatico;
+
           let total = 0;
           materialesFlat.forEach(m => {
-            const key = `material_${m.id}`;
-            total += parseFloat(filaActualizada[key]) || 0;
+            total += parseFloat(filaActualizada[`material_${m.id}`]) || 0;
           });
           filaActualizada.peso_total = round3(total);
           newData[targetIndex] = filaActualizada;
           return newData;
-        });
-
-        const editKey = `${targetIndex}_${campoDestino}`;
-        setEditingValues(prev => {
-          if (!(editKey in prev)) return prev;
-          const copy = { ...prev };
-          delete copy[editKey];
-          return copy;
-        });
-      }
+        }
+        return prevData;
+      });
     }
-  }, [tablaData, formData, maquinaSeleccionada, materialesFlat, addToast]);
+  }, [materialesFlat]);
 
   const handleTogglePesoBloqueado = () => {
     const newPesoBloqueado = !pesoBloqueado;
     setPesoBloqueado(newPesoBloqueado);
+    pesoBloqueadoRef.current = newPesoBloqueado;
 
     if (newPesoBloqueado) {
-      setTimeout(() => {
-        saveToStorageOnDemand();
-      }, 100);
+      // Al CONGELAR: Guardamos inmediatamente en caché
+      const dataToSave = {
+        tablaData,
+        formData,
+        filtroArea: filtroAreaRef.current,
+        filtroMaquina: filtroMaquinaRef.current,
+        campoBasculaActivo: campoBasculaActivoRef2.current,
+        maquinaSeleccionada,
+        celdaActiva: celdaActivaRef.current,
+        celdasSumadas,
+        pesoBloqueado: true
+      };
+      storageService.saveDraft(dataToSave, true);
+      addToast('Peso capturado y guardado', 'success');
+    } else {
+      // Al DESCONGELAR: Inyectamos el peso vivo actual para que se vea el cambio al instante
+      const pesoActual = liveWeightRef.current;
+      const target = celdaActivaRef.current;
+
+      if (target && pesoActual > 0) {
+        setTablaData(prev => {
+          const newData = [...prev];
+          const fila = { ...newData[target.areaIndex] };
+          fila[target.campo] = round3(pesoActual);
+
+          let total = 0;
+          materialesFlat.forEach(m => total += parseFloat(fila[`material_${m.id}`]) || 0);
+          fila.peso_total = round3(total);
+
+          newData[target.areaIndex] = fila;
+          return newData;
+        });
+      }
     }
   };
 
-  const handleSumarPeso = () => {
+  const handleSumarPeso = useCallback(() => {
+    if (!pesoBloqueadoRef.current) {
+      addToast('Primero debe CONGELAR EL PESO antes de sumar', 'warning');
+      return;
+    }
+
     if (!celdaActivaRef.current) {
       addToast('Seleccione una celda para sumar el peso', 'warning');
       return;
     }
 
     const pesoASumar = parseFloat(liveWeightRef.current) || 0;
-
     if (pesoASumar <= 0) {
-      addToast('La báscula está en cero o valor inválido', 'warning');
+      addToast('La báscula está en cero o el valor es inválido', 'warning');
       return;
     }
 
@@ -693,69 +737,45 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     setTablaData(prevData => {
       const newData = [...prevData];
       const filaActual = { ...newData[areaIndex] };
+      const valorActual = parseFloat(filaActual[campo]) || 0;
 
-      const editKey = `${areaIndex}_${campo}`;
-      const valorEnEdicion = editingValuesRef.current[editKey];
-
-      const valorActual = valorEnEdicion !== undefined
-        ? parseFloat(valorEnEdicion) || 0
-        : parseFloat(filaActual[campo]) || 0;
-
-      const nuevoValor = round3(valorActual + pesoASumar);
-
-      filaActual[campo] = nuevoValor;
+      filaActual[campo] = round3(valorActual + pesoASumar);
       filaActual.conexion_bascula = true;
 
-      let total = 0;
+      let totalFila = 0;
       materialesFlat.forEach(m => {
-        const key = `material_${m.id}`;
-        total += parseFloat(filaActual[key]) || 0;
+        totalFila += parseFloat(filaActual[`material_${m.id}`]) || 0;
       });
-      filaActual.peso_total = round3(total);
-
+      filaActual.peso_total = round3(totalFila);
       newData[areaIndex] = filaActual;
 
-      // 🔥 GUARDAR INMEDIATAMENTE después de actualizar
-      setTimeout(() => {
-        // Actualizar refs con los nuevos datos
-        editingValuesRef.current = editingValues;
-        celdasSumadasRef.current = { ...celdasSumadasRef.current, [celdaKey]: (celdasSumadasRef.current[celdaKey] || 0) + 1 };
-
-        // Guardar en caché
-        const filasConDatos = newData.filter(fila => fila.peso_total > 0);
-        if (filasConDatos.length > 0) {
-          const dataToSave = {
-            tablaData: newData,
-            formData,
-            filtroArea: filtroAreaRef.current,
-            filtroMaquina: filtroMaquinaRef.current,
-            campoBasculaActivo: campoBasculaActivoRef2.current,
-            maquinaSeleccionada: maquinaSeleccionadaRef.current,
-            celdaActiva: celdaActivaRef.current,
-            celdasSumadas: { ...celdasSumadasRef.current }
-          };
-          storageService.saveDraft(dataToSave, true);
-          // ⚠️ Eliminada notificación aquí para evitar doble toast, ya que abajo se confirma la suma
-        }
-      }, 0);
+      // 🔥 Guardado en caché post-suma
+      const dataToSave = {
+        tablaData: newData,
+        formData,
+        filtroArea: filtroAreaRef.current,
+        filtroMaquina: filtroMaquinaRef.current,
+        campoBasculaActivo: campoBasculaActivoRef2.current,
+        maquinaSeleccionada: maquinaSeleccionadaRef.current,
+        celdaActiva: celdaActivaRef.current,
+        celdasSumadas: {
+          ...celdasSumadasRef.current,
+          [celdaKey]: (celdasSumadasRef.current[celdaKey] || 0) + 1
+        },
+        pesoBloqueado: true
+      };
+      storageService.saveDraft(dataToSave, false);
 
       return newData;
     });
 
-    const editKey = `${celdaActivaRef.current.areaIndex}_${celdaActivaRef.current.campo}`;
-    setEditingValues(prev => {
-      if (!(editKey in prev)) return prev;
-      const copy = { ...prev };
-      delete copy[editKey];
-      return copy;
-    });
+    setCeldasSumadas(prev => ({
+      ...prev,
+      [celdaKey]: (prev[celdaKey] || 0) + 1
+    }));
 
-    setCeldasSumadas(prev => {
-      return { ...prev, [celdaKey]: (prev[celdaKey] || 0) + 1 };
-    });
-
-    addToast(`Peso ${pesoASumar.toFixed(3)} sumado correctamente`, 'success');
-  };
+    addToast(`+ ${pesoASumar.toFixed(3)} kg sumados correctamente`, 'success');
+  }, [materialesFlat, formData, addToast]);
 
   const handleMaterialChange = (newMaterialKey) => {
     setCampoBasculaActivo(newMaterialKey);
@@ -1143,20 +1163,20 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                     type="button"
                     onClick={handleSumarPeso}
                     variant="success"
+                    disabled={!pesoBloqueado}
                     style={{
                       flex: 1,
                       height: '42px',
                       minWidth: '100px',
                       fontSize: '0.7rem',
                       padding: '0 4px',
-                      backgroundColor: colors.success
+                      ...(pesoBloqueado ? { backgroundColor: colors.success } : styles.btnSumarDisabled)
                     }}
-                    title="Agrega el peso actual de la báscula al acumulado de la celda"
+                    title={pesoBloqueado ? "Agrega el peso actual al acumulado" : "Debe congelar el peso para habilitar la suma"}
                   >
                     SUMAR PESO
                   </SmoothButton>
 
-                  {/* 🔥 Máquina Fijada movida aquí para reemplazar "Reiniciar Filtros" */}
                   <div style={{
                     ...styles.fixedMachineDisplay,
                     flex: 1.5,
@@ -1457,6 +1477,15 @@ const styles = {
     ':hover': {
       backgroundColor: colors.gray300
     }
+  },
+
+  btnSumarDisabled: {
+    backgroundColor: colors.gray300,
+    color: colors.gray500,
+    cursor: 'not-allowed',
+    opacity: 0.7,
+    transform: 'none',
+    boxShadow: 'none'
   },
 
   btnDisabled: { backgroundColor: '#E5E7EB', color: '#6B7280', border: `1px solid ${colors.gray300}`, cursor: 'not-allowed', boxShadow: 'none', opacity: 1, ':hover': { backgroundColor: '#E5E7EB', transform: 'none', boxShadow: 'none' } },
