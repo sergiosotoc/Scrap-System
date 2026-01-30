@@ -224,8 +224,15 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
     const handleManualChange = (e) => {
         let valStr = e.target.value;
-
         setPeso(valStr);
+
+        if (onPesoObtenido) {
+            onPesoObtenido(
+                parseFloat(valStr) || 0,
+                campoDestinoRef.current,
+                false
+            );
+        }
         setTickLectura(t => t + 1);
     };
 
@@ -312,10 +319,19 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                     <div style={styles.controlGroup}>
                         <SmoothInput
                             label="PESO CONTENEDOR (TARA)"
-                            type="number"
-                            step="0.001"
+                            // Cambiamos 'number' por 'text' para que desaparezcan las flechas
+                            type="text"
+                            // Usamos inputMode para que en móviles siga saliendo el teclado numérico
+                            inputMode="decimal"
                             value={tara === 0 || tara === '0' ? '' : tara}
-                            onChange={handleTaraChange}
+                            onChange={(e) => {
+                                // Validamos que solo entren números y un punto decimal
+                                const val = e.target.value.replace(/[^0-9.]/g, '');
+                                // Evitamos múltiples puntos decimales
+                                if ((val.match(/\./g) || []).length <= 1) {
+                                    handleTaraChange({ target: { value: val } });
+                                }
+                            }}
                             placeholder="0.000"
                             style={{ height: '36px', textAlign: 'right', fontWeight: '600' }}
                             rightElement={<span style={{ fontSize: '10px', color: colors.gray500, fontWeight: 'bold' }}>KG</span>}

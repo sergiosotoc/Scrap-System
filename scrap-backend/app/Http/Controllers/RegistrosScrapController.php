@@ -97,7 +97,6 @@ class RegistrosScrapController extends Controller
                 'registro' => $registro,
                 'peso_total' => $registro->peso_total,
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('❌ Error creando registro scrap: ' . $e->getMessage());
@@ -108,13 +107,10 @@ class RegistrosScrapController extends Controller
         }
     }
 
-    /**
-     * 🔥 NUEVO: Guardar múltiples registros en lote (batch)
-     */
     public function storeBatch(Request $request)
     {
         Log::info('📥📥 Datos recibidos en storeBatch - Cantidad: ' . count($request->registros ?? []));
-        
+
         // Validar estructura del batch
         $validated = $request->validate([
             'registros' => 'required|array|min:1',
@@ -129,20 +125,20 @@ class RegistrosScrapController extends Controller
         ]);
 
         DB::beginTransaction();
-        
+
         try {
             $registrosCreados = [];
             $totalRegistros = count($validated['registros']);
             $errores = [];
-            
+
             Log::info("🔄 Procesando batch de {$totalRegistros} registros...");
-            
+
             foreach ($validated['registros'] as $index => $registroData) {
                 try {
                     $pesoTotal = 0;
                     $detallesParaGuardar = [];
-                    
-                    // Pre-procesar detalles
+
+                    // Procesar detalles y calcular peso total de este registro específico
                     foreach ($registroData['detalles'] as $detalle) {
                         $peso = round(floatval($detalle['peso']), 3);
                         if ($peso > 0) {
@@ -153,14 +149,13 @@ class RegistrosScrapController extends Controller
                             ];
                         }
                     }
-                    
-                    // Si no hay peso, saltar este registro
+
+                    // Si no hay peso en ninguno de los materiales, saltamos la fila
                     if ($pesoTotal <= 0) {
-                        Log::warning("⚠️ Registro {$index} sin peso, saltando...");
                         continue;
                     }
-                    
-                    // Crear cabecera
+
+                    // Crear la cabecera del registro usando las observaciones enviadas desde React
                     $registro = RegistrosScrap::create([
                         'operador_id' => Auth::id(),
                         'turno' => $registroData['turno'],
@@ -168,67 +163,55 @@ class RegistrosScrapController extends Controller
                         'maquina_real' => strtoupper($registroData['maquina_real']),
                         'peso_total' => $pesoTotal,
                         'conexion_bascula' => $registroData['conexion_bascula'] ?? false,
-                        'observaciones' => $registroData['observaciones'] ?? 'Registro masivo',
+                        // Aquí se guarda la cadena detallada generada en el Frontend
+                        'observaciones' => $registroData['observaciones'] ?? 'Registro masivo automático',
                         'fecha_registro' => now()
                     ]);
-                    
-                    // Crear detalles en lote para mejor rendimiento
-                    $detallesConRegistroId = array_map(function($detalle) use ($registro) {
-                        return array_merge($detalle, ['registro_id' => $registro->id]);
-                    }, $detallesParaGuardar);
-                    
-                    // Insertar todos los detalles de una vez
-                    RegistroScrapDetalle::insert($detallesConRegistroId);
-                    
-                    $registrosCreados[] = $registro;
-                    
-                    // Log progreso cada 10 registros
-                    if (($index + 1) % 10 === 0) {
-                        Log::info("✅ Progreso: " . ($index + 1) . "/{$totalRegistros} registros procesados");
+
+                    // Insertar los detalles vinculados a este registro
+                    foreach ($detallesParaGuardar as $d) {
+                        RegistroScrapDetalle::create([
+                            'registro_id' => $registro->id,
+                            'tipo_scrap_id' => $d['tipo_scrap_id'],
+                            'peso' => $d['peso']
+                        ]);
                     }
-                    
+
+                    $registrosCreados[] = $registro;
                 } catch (\Exception $e) {
                     $errores[] = [
                         'indice' => $index,
                         'error' => $e->getMessage(),
                         'maquina' => $registroData['maquina_real'] ?? 'Desconocida'
                     ];
-                    Log::error("❌ Error en registro {$index}: " . $e->getMessage());
+                    Log::error("❌ Error en registro individual del lote {$index}: " . $e->getMessage());
                 }
             }
-            
-            // Si hay errores pero algunos se guardaron
-            if (!empty($errores) && empty($registrosCreados)) {
+
+            if (empty($registrosCreados) && !empty($errores)) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'Todos los registros fallaron',
+                    'message' => 'No se pudo guardar ningún registro del lote',
                     'errores' => $errores
                 ], 500);
             }
-            
+
             DB::commit();
-            
-            $exitosos = count($registrosCreados);
-            $fallidos = count($errores);
-            
-            Log::info("🎉 Batch completado: {$exitosos} exitosos, {$fallidos} fallidos");
-            
+
             return response()->json([
                 'success' => true,
-                'message' => "{$exitosos} registros guardados exitosamente" . ($fallidos > 0 ? ", {$fallidos} fallaron" : ""),
-                'count_exitosos' => $exitosos,
-                'count_fallidos' => $fallidos,
-                'errores' => $fallidos > 0 ? $errores : null,
-                'data' => $registrosCreados
+                'message' => count($registrosCreados) . " registros procesados correctamente",
+                'count_exitosos' => count($registrosCreados),
+                'count_fallidos' => count($errores),
+                'errores' => count($errores) > 0 ? $errores : null
             ], 201);
-            
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('❌❌ Error crítico en storeBatch: ' . $e->getMessage());
+            Log::error('❌ Error crítico en storeBatch: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Error interno al procesar batch: ' . $e->getMessage()
+                'message' => 'Error de servidor al procesar el lote: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -236,7 +219,7 @@ class RegistrosScrapController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        
+
         // Eager loading de 'detalles' y 'detalles.tipoScrap' para eficiencia
         $query = RegistrosScrap::with(['operador', 'detalles.tipoScrap']);
 
@@ -258,18 +241,18 @@ class RegistrosScrapController extends Controller
 
         $registros = $query->orderBy('fecha_registro', 'desc')
             ->get()
-            ->map(function($registro) {
+            ->map(function ($registro) {
                 // Transformamos la estructura para que sea fácil de leer en el Frontend
                 $data = $registro->toArray();
-                
+
                 // Agregamos un array simple de materiales para mostrar en tabla
-                $data['materiales_resumen'] = $registro->detalles->map(function($d) {
+                $data['materiales_resumen'] = $registro->detalles->map(function ($d) {
                     return [
                         'nombre' => $d->tipoScrap->tipo_nombre ?? 'Desconocido',
                         'peso' => $d->peso
                     ];
                 });
-                
+
                 return $data;
             });
 
@@ -279,7 +262,7 @@ class RegistrosScrapController extends Controller
     public function getRegistros(Request $request)
     {
         $user = Auth::user();
-        
+
         $query = RegistrosScrap::with(['operador', 'detalles.tipoScrap']);
 
         // Filtros básicos
@@ -291,7 +274,7 @@ class RegistrosScrapController extends Controller
             $query->where('turno', $request->turno);
         }
 
-        if ($request->has('fecha') && $request.fecha != '') {
+        if ($request->has('fecha') && $request . fecha != '') {
             $query->whereDate('fecha_registro', $request->fecha);
         }
 
@@ -308,9 +291,9 @@ class RegistrosScrapController extends Controller
 
         $registros = $query->orderBy('fecha_registro', 'desc')
             ->get()
-            ->map(function($registro) {
+            ->map(function ($registro) {
                 $data = $registro->toArray();
-                
+
                 // Crear un objeto pesos_detalle dinámico
                 $pesosDetalle = [];
                 foreach ($registro->detalles as $detalle) {
@@ -319,19 +302,19 @@ class RegistrosScrapController extends Controller
                         $pesosDetalle[$columna] = $detalle->peso;
                     }
                 }
-                
+
                 $data['pesos_detalle'] = $pesosDetalle;
-                
+
                 return $data;
             });
 
         return response()->json($registros);
     }
-    
+
     public function getRegistroScrapStats()
     {
         $user = Auth::user();
-        
+
         $query = RegistrosScrap::query();
 
         if ($user->role !== 'admin') {
@@ -341,16 +324,16 @@ class RegistrosScrapController extends Controller
         // Estadísticas básicas
         $totalRegistros = $query->count();
         $pesoTotal = $query->sum('peso_total');
-        
+
         // Conteo por método
         $basculaCount = RegistrosScrap::where('conexion_bascula', true)->count();
         $manualCount = $totalRegistros - $basculaCount;
-        
+
         // Conteo por turno
         $turno1Count = RegistrosScrap::where('turno', 1)->count();
         $turno2Count = RegistrosScrap::where('turno', 2)->count();
         $turno3Count = RegistrosScrap::where('turno', 3)->count();
-        
+
         // Últimos 7 días
         $ultimos7Dias = RegistrosScrap::where('fecha_registro', '>=', now()->subDays(7))
             ->select(DB::raw('DATE(fecha_registro) as fecha'), DB::raw('COUNT(*) as count'))
@@ -371,7 +354,7 @@ class RegistrosScrapController extends Controller
             'ultimos_7_dias' => $ultimos7Dias
         ]);
     }
-    
+
     public function stats()
     {
         return response()->json(['message' => 'Este método está deprecado. Usa getRegistroScrapStats()']);

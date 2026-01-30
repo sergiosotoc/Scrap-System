@@ -39,8 +39,8 @@ class ReporteScrapMail extends Mailable
     {
         return new Envelope(
             from: new Address(
-                env('MAIL_FROM_ADDRESS', 'scrap.cofmx@coficab.com'), 
-                env('MAIL_FROM_NAME', 'Scrap')
+                env('MAIL_FROM_ADDRESS'), 
+                env('MAIL_FROM_NAME')
             ),
             subject: $this->asuntoPersonalizado,
         );

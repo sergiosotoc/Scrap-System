@@ -40,13 +40,11 @@ const AnimatedCounter = ({ value, duration = 800, decimals = 2 }) => {
 
     animationFrame = window.requestAnimationFrame(step);
     return () => window.cancelAnimationFrame(animationFrame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, duration]);
 
   return <span>{count.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</span>;
 };
 
-// Componente de Fila Optimizado
 const ScrapRow = React.memo(({
   fila,
   realIndex,
@@ -63,7 +61,6 @@ const ScrapRow = React.memo(({
   indexDisplay,
   celdasSumadas
 }) => {
-  // Calcular total en tiempo real incluyendo valores en edición
   const totalFila = useMemo(() => {
     let total = 0;
     materialesFlat.forEach(m => {
@@ -178,7 +175,6 @@ const ScrapRow = React.memo(({
     .map(k => nextProps.editingValues[k])
     .join('|');
 
-  // Comparar cambios en celdasSumadas para esta fila
   const prevSumadas = Object.keys(prevProps.celdasSumadas || {})
     .filter(k => k.startsWith(`${prevProps.realIndex}_`))
     .map(k => prevProps.celdasSumadas[k])
@@ -193,6 +189,8 @@ const ScrapRow = React.memo(({
 
 const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete }) => {
   const { addToast } = useToast();
+
+  const [historialCeldas, setHistorialCeldas] = useState({});
 
   const [config, setConfig] = useState(null);
   const [materialesFlat, setMaterialesFlat] = useState([]);
@@ -232,9 +230,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const pesoBloqueadoRef = useRef(pesoBloqueado);
   const campoBasculaActivoRef = useRef(campoBasculaActivo);
 
-  // Ref para el peso congelado visualmente
   const pesoCongeladoRef = useRef(0);
-  // 🔥 Nuevo Ref para el peso en vivo siempre actualizado
   const liveWeightRef = useRef(0);
 
   const lockedTargetRef = useRef(null);
@@ -244,12 +240,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const editingValuesRef = useRef({});
   const celdasSumadasRef = useRef({});
 
-  // Refs para filtros
   const filtroAreaRef = useRef(filtroArea);
   const filtroMaquinaRef = useRef(filtroMaquina);
   const campoBasculaActivoRef2 = useRef(campoBasculaActivo);
 
-  // Ref para onLoadComplete
   const onLoadCompleteRef = useRef(onLoadComplete);
 
   useEffect(() => { onLoadCompleteRef.current = onLoadComplete; }, [onLoadComplete]);
@@ -304,7 +298,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       };
       const success = storageService.saveDraft(dataToSave, true);
       if (success) {
-        // 🔥 Usamos el contexto de Toast en lugar del estado local
         addToast('Datos guardados en borrador correctamente', 'success');
       }
     }
@@ -383,11 +376,9 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           if (savedData && savedData.tablaData) {
             setLoadingFromStorage(true);
 
-            // --- RECUPERACIÓN DE ESTADOS ---
             if (savedData.formData) setFormData(savedData.formData);
             if (savedData.celdasSumadas) setCeldasSumadas(savedData.celdasSumadas);
 
-            // 🔥 NUEVO: Recuperar estado del botón de congelado
             if (savedData.pesoBloqueado !== undefined) {
               setPesoBloqueado(savedData.pesoBloqueado);
             }
@@ -502,8 +493,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   useEffect(() => {
     const filtrosCompletos = filtroArea && filtroMaquina && campoBasculaActivo;
+
     if (filtrosCompletos && tablaData.length > 0) {
       const index = tablaData.findIndex(r => r.area_real === filtroArea && r.maquina_real === filtroMaquina);
+
       if (index !== -1) {
         const filaDiferente = maquinaSeleccionada.index !== index;
         const columnaDiferente = celdaActiva?.campo !== campoBasculaActivo;
@@ -513,16 +506,18 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           setCeldaActiva({ areaIndex: index, campo: campoBasculaActivo });
         }
       }
+    } else {
+      if (celdaActiva !== null || maquinaSeleccionada.index !== null) {
+        setMaquinaSeleccionada({ area: '', maquina: '', index: null });
+        setCeldaActiva(null);
+        setPesoBloqueado(false);
+      }
     }
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
   const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
     setPesoBloqueado(false);
     pesoBloqueadoRef.current = false;
-
-    celdaActivaRef.current = { areaIndex, campo };
-    campoBasculaActivoRef.current = campo;
-    maquinaSeleccionadaRef.current = { area, maquina, index: areaIndex };
 
     setCeldaActiva({ areaIndex, campo });
     setCampoBasculaActivo(campo);
@@ -532,6 +527,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     filtroAreaRef.current = area;
     setFiltroMaquina(maquina);
     filtroMaquinaRef.current = maquina;
+
+    celdaActivaRef.current = { areaIndex, campo };
+    campoBasculaActivoRef.current = campo;
+    maquinaSeleccionadaRef.current = { area, maquina, index: areaIndex };
   }, []);
 
   const handleKeyPress = useCallback((e, areaIndex, campo) => {
@@ -562,35 +561,36 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     if (rawValue === undefined) return;
 
     const val = rawValue === '' ? 0 : round3(parseFloat(rawValue) || 0);
+    const valorPrevio = parseFloat(tablaData[areaIndex][campo]) || 0;
+
+    // Si el valor cambió manualmente, guardamos el rastro y el valor que tenía antes
+    if (Math.abs(valorPrevio - val) > 0.001) {
+      setHistorialCeldas(prev => ({
+        ...prev,
+        [key]: {
+          ...prev[key],
+          valorAnterior: valorPrevio,
+          modificadoManual: true,
+          fuente: 'Teclado' // Marcamos explícitamente como entrada de teclado
+        }
+      }));
+    }
 
     setTablaData(prev => {
       const newData = [...prev];
       const filaActualizada = { ...newData[areaIndex] };
-
       filaActualizada[campo] = val;
 
       let total = 0;
       materialesFlat.forEach(m => {
         const matKey = `material_${m.id}`;
-        const valorMat = parseFloat(filaActualizada[matKey]) || 0;
-        total += valorMat;
+        total += parseFloat(filaActualizada[matKey]) || 0;
       });
 
       filaActualizada.peso_total = round3(total);
+      // Marcamos la fila como manual si la última acción fue una edición directa
       filaActualizada.conexion_bascula = false;
       newData[areaIndex] = filaActualizada;
-
-      const dataToSave = {
-        tablaData: newData,
-        filtroArea: filtroAreaRef.current,
-        filtroMaquina: filtroMaquinaRef.current,
-        campoBasculaActivo: campoBasculaActivoRef2.current,
-        maquinaSeleccionada: maquinaSeleccionadaRef.current,
-        celdaActiva: celdaActivaRef.current,
-        celdasSumadas: celdasSumadasRef.current
-      };
-      storageService.saveDraft(dataToSave, false);
-
       return newData;
     });
 
@@ -599,16 +599,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       delete copy[key];
       return copy;
     });
-
-    const celdaKey = `${areaIndex}_${campo}`;
-    if (celdasSumadas[celdaKey]) {
-      setCeldasSumadas(prev => {
-        const newState = { ...prev };
-        delete newState[celdaKey];
-        return newState;
-      });
-    }
-  }, [editingValues, materialesFlat, formData, celdasSumadas]);
+  }, [editingValues, tablaData, materialesFlat]);
 
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
@@ -639,11 +630,15 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       pesoCongeladoRef.current = nuevoValorRaw;
       const celdaKey = `${targetIndex}_${campoRealActivo}`;
 
-      if (editingValuesRef.current[celdaKey] !== undefined || celdasSumadasRef.current[celdaKey]) {
-        return;
-      }
+      setHistorialCeldas(prev => ({
+        ...prev,
+        [celdaKey]: {
+          ...prev[celdaKey],
+          fuente: esAutomatico ? 'Báscula-Auto' : 'Báscula-Manual-Input'
+        }
+      }));
 
-      if (!esAutomatico) {
+      if (editingValuesRef.current[celdaKey] !== undefined || celdasSumadasRef.current[celdaKey]) {
         return;
       }
 
@@ -678,7 +673,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     pesoBloqueadoRef.current = newPesoBloqueado;
 
     if (newPesoBloqueado) {
-      // Al CONGELAR: Guardamos inmediatamente en caché
       const dataToSave = {
         tablaData,
         formData,
@@ -693,7 +687,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       storageService.saveDraft(dataToSave, true);
       addToast('Peso capturado y guardado', 'success');
     } else {
-      // Al DESCONGELAR: Inyectamos el peso vivo actual para que se vea el cambio al instante
       const pesoActual = liveWeightRef.current;
       const target = celdaActivaRef.current;
 
@@ -749,7 +742,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       filaActual.peso_total = round3(totalFila);
       newData[areaIndex] = filaActual;
 
-      // 🔥 Guardado en caché post-suma
       const dataToSave = {
         tablaData: newData,
         formData,
@@ -798,10 +790,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     const nuevaArea = e.target.value;
     setFiltroArea(nuevaArea);
     filtroAreaRef.current = nuevaArea;
-    if (nuevaArea !== maquinaSeleccionada.area) {
-      setFiltroMaquina('');
-      filtroMaquinaRef.current = '';
-    }
+    setFiltroMaquina('');
+    filtroMaquinaRef.current = '';
+    setMaquinaSeleccionada({ area: '', maquina: '', index: null });
+    setCeldaActiva(null);
   };
 
   const handleMaquinaChange = (e) => {
@@ -826,12 +818,47 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
   };
 
+  const construirObservacionesFila = (fila, realIndex) => {
+    let notas = [];
+    materialesFlat.forEach(mat => {
+      const key = `material_${mat.id}`;
+      const celdaKey = `${realIndex}_${key}`;
+      const historial = historialCeldas[celdaKey];
+      const vecesSumado = celdasSumadas[celdaKey];
+      const valorActual = parseFloat(fila[key]) || 0;
+
+      // Solo reportamos si hay historial o sumas en materiales con peso > 0
+      if ((historial && valorActual > 0) || vecesSumado) {
+        let detalle = `[${mat.tipo_nombre}]: `;
+
+        if (historial?.modificadoManual) {
+          detalle += `Editado manualmente (Previo: ${historial.valorAnterior}kg). `;
+        }
+
+        if (historial?.fuente) {
+          detalle += `Origen: ${historial.fuente}. `;
+        }
+
+        if (vecesSumado) {
+          detalle += `Peso acumulado (Sumado ${vecesSumado} veces). `;
+        }
+
+        notas.push(detalle.trim());
+      }
+    });
+
+    return notas.length > 0 ? notas.join(' | ') : 'Registro estándar sin modificaciones';
+  };
+
+  // 4. Función handleSubmit optimizada para determinar la fuente real de los datos
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!formData.turno) {
       addToast('Seleccione el turno', 'warning');
       return;
     }
+
     const filasConPeso = tablaData.filter(fila => fila.peso_total > 0);
     if (filasConPeso.length === 0) {
       addToast('Ingrese al menos un peso en alguna fila', 'warning');
@@ -840,52 +867,62 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
     setEnviando(true);
     try {
-      if (filasConPeso.length > 10) {
-        const datosBatch = filasConPeso.map(fila => {
-          const detalles = [];
-          materialesFlat.forEach(mat => {
-            const key = `material_${mat.id}`;
-            const peso = fila[key];
-            if (peso > 0) detalles.push({ id: mat.id, peso: peso });
-          });
-          return {
-            turno: formData.turno,
-            area_real: fila.area_real,
-            maquina_real: fila.maquina_real,
-            conexion_bascula: fila.conexion_bascula || false,
-            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-            observaciones: 'Registro masivo',
-            detalles: detalles
-          };
+      const prepararDatosFila = (fila) => {
+        const realIndex = tablaData.findIndex(item =>
+          item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
+        );
+
+        const detalles = [];
+        let algunMaterialFueBascula = false;
+
+        materialesFlat.forEach(mat => {
+          const key = `material_${mat.id}`;
+          const celdaKey = `${realIndex}_${key}`;
+          const peso = fila[key];
+
+          if (peso > 0) {
+            detalles.push({ id: mat.id, peso: peso });
+
+            // LÓGICA DE VALIDACIÓN DE ORIGEN:
+            // Verificamos si este material específico vino de la báscula automática
+            // o si se usó la función de "Sumar" (que también requiere báscula conectada).
+            const h = historialCeldas[celdaKey];
+            const s = celdasSumadas[celdaKey];
+
+            if (h?.fuente === 'Báscula-Auto' || s > 0 || fila.conexion_bascula) {
+              algunMaterialFueBascula = true;
+            }
+          }
         });
 
+        return {
+          turno: formData.turno,
+          area_real: fila.area_real,
+          maquina_real: fila.maquina_real,
+          // Priorizamos marcar como conectado si detectamos rastro de báscula en el historial
+          conexion_bascula: algunMaterialFueBascula,
+          numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+          observaciones: construirObservacionesFila(fila, realIndex),
+          detalles: detalles
+        };
+      };
+
+      if (filasConPeso.length > 10) {
+        const datosBatch = filasConPeso.map(fila => prepararDatosFila(fila));
         const resultado = await apiClient.createRegistroScrapBatch(datosBatch);
+
         if (resultado.success) {
           storageService.clearDraftData();
-          addToast(`Se guardaron exitosamente ${resultado.count_exitosos} registros`, 'success');
+          addToast(`Guardado exitoso: ${resultado.count_exitosos} máquinas registradas`, 'success');
           if (onRegistroCreado) onRegistroCreado();
         } else {
-          throw new Error(resultado.message || 'Error en guardado batch');
+          throw new Error(resultado.message || 'Error al procesar el lote');
         }
       } else {
-        const promises = filasConPeso.map(fila => {
-          const detalles = [];
-          materialesFlat.forEach(mat => {
-            const key = `material_${mat.id}`;
-            const peso = fila[key];
-            if (peso > 0) detalles.push({ id: mat.id, peso: peso });
-          });
-          const datosEnvio = {
-            turno: formData.turno,
-            area_real: fila.area_real,
-            maquina_real: fila.maquina_real,
-            conexion_bascula: fila.conexion_bascula || false,
-            numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-            observaciones: 'Registro masivo',
-            detalles: detalles
-          };
-          return apiClient.createRegistroScrap(datosEnvio);
-        });
+        const promises = filasConPeso.map(fila =>
+          apiClient.createRegistroScrap(prepararDatosFila(fila))
+        );
+
         await Promise.all(promises);
         storageService.clearDraftData();
         addToast(`Se guardaron exitosamente ${filasConPeso.length} registros`, 'success');
@@ -903,7 +940,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     const tieneDatos = tablaData.some(fila => fila.peso_total > 0);
     if (tieneDatos) {
       if (window.confirm('¿Desea guardar los datos para continuar después?')) {
-        // 🔥 Asegurar que todos los datos estén sincronizados antes de guardar
         setTimeout(() => {
           const dataToSave = {
             tablaData,
@@ -965,10 +1001,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     materialesFlat.forEach(m => acc[`material_${m.id}`] = 0);
     let generalInt = 0;
 
-    tablaData.forEach((fila, rowIndex) => {
+    datosFiltrados.forEach((fila) => {
+      const realIndex = tablaData.findIndex(item =>
+        item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
+      );
+
       materialesFlat.forEach(m => {
         const key = `material_${m.id}`;
-        const editKey = `${rowIndex}_${key}`;
+        const editKey = `${realIndex}_${key}`;
 
         const valor = editingValues[editKey] !== undefined
           ? (editingValues[editKey] === '' ? 0 : parseFloat(editingValues[editKey]) || 0)
@@ -980,7 +1020,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       let filaTotal = 0;
       materialesFlat.forEach(m => {
         const key = `material_${m.id}`;
-        const editKey = `${rowIndex}_${key}`;
+        const editKey = `${realIndex}_${key}`;
 
         const valor = editingValues[editKey] !== undefined
           ? (editingValues[editKey] === '' ? 0 : parseFloat(editingValues[editKey]) || 0)
@@ -994,13 +1034,13 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     Object.keys(acc).forEach(key => acc[key] = acc[key] / 1000);
     acc.general = generalInt / 1000;
     return acc;
-  }, [tablaData, materialesFlat, editingValues]);
+  }, [datosFiltrados, tablaData, materialesFlat, editingValues]);
 
   if (loading) {
     return <div style={styles.loading}><LoadingSpinner message="Cargando configuración..." /></div>;
   }
 
-  const numFilasConPeso = tablaData.filter(fila => fila.peso_total > 0).length;
+  const numFilasConPeso = datosFiltrados.filter(fila => fila.peso_total > 0).length;
   const hasSavedData = storageService.hasValidDraft();
   const isSaveDisabled = enviando || !formData.turno || numFilasConPeso === 0;
 

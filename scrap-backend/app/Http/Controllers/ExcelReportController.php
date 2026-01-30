@@ -21,86 +21,106 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 class ExcelReportController extends Controller
 {
     public function exportFormatoEmpresa(Request $request): BinaryFileResponse
-    {
-        try {
-            $validated = $request->validate([
-                'fecha' => 'required|date',
-                'turno' => 'nullable|in:1,2,3'
-            ]);
+{
+    try {
+        $validated = $request->validate([
+            'fecha' => 'required|date',
+            'turno' => 'nullable|in:1,2,3'
+        ]);
 
-            $user = Auth::user();
-            $fecha = $validated['fecha'];
-            $turno = $validated['turno'] ?? null;
+        $user = Auth::user();
+        $fecha = $validated['fecha'];
+        $turno = $validated['turno'] ?? null;
 
-            // 1. Obtener materiales (Columnas)
-            $materiales = ConfigTipoScrap::whereIn('uso', ['operador', 'ambos'])
-                ->orderBy('orden', 'asc')
-                ->get();
+        // 1. MAPA MAESTRO: Estructura exacta que deseas mantener
+        $mapaEstructura = [
+            ['area' => 'ROD', 'maquinas' => ['ROD']],
+            ['area' => 'TREFILADO', 'maquinas' => ['TREF 1', 'TREF 2', 'TREF 3', 'TREF 4', 'TREF 5', 'TREF 6']],
+            ['area' => 'BUNCHER', 'maquinas' => ['ZONA 1', 'ZONA 2', 'ZONA 3', 'ZONA 4', 'ZONA 5', 'ZONA 6', 'ZONA 7', 'ZONA 8', 'ZONA 9', 'ZONA 10', 'ZONA 11', 'ZONA 12', 'ZONA 13', 'ZONA 14', 'ZONA 15', '800']],
+            ['area' => 'CABALLE', 'maquinas' => ['CABALLE']],
+            ['area' => 'EXTRUSION', 'maquinas' => ['EXT01', 'EXT02', 'EXT03', 'EXT04', 'EXT05', 'EXT06', 'EXT07', 'EXT08', 'EXT09']],
+            ['area' => 'BATERIA', 'maquinas' => ['Bateria PVC', 'Bateria XLPE']],
+            ['area' => 'XLPE', 'maquinas' => ['EXT11', 'EXT12', 'EXT13', 'EXT14', 'EXT15', 'EXT16']],
+            ['area' => 'EBEAM', 'maquinas' => ['Tequila', 'Mezcal', 'Pulque', 'Sotol', 'Tepache', 'WASIK3']],
+            ['area' => 'RWD', 'maquinas' => ['REW PVC', 'REW PE', 'REW Battery']],
+            ['area' => 'OTHERS', 'maquinas' => ['Ingenieria', 'RYD', 'Mtto.', 'Nuevos Negocios', 'Calidad']],
+            ['area' => 'FPS', 'maquinas' => ['FPS Metal', 'FPS STD PVC', 'FPS XLPE', 'FPS Bateria']],
+            ['area' => 'OTHERS', 'maquinas' => ['Retrabajo Metal', 'Retrabajo Extrusion', 'Retrabajo Extrusion XLPE', 'REBOBINADORA DE METAL', 'Logistica', 'Obsoleto', 'RMA', 'Proveedores', 'Otras plantas Coficab', 'Recycling Compound', 'Recycling Compound Battery', 'Cable Area Metal', 'Comission Eng']],
+        ];
 
-            // 2. Obtener registros REALES de la BD con TODA la información
-            $query = RegistrosScrap::with(['detalles.tipoScrap'])
-                ->whereDate('fecha_registro', $fecha);
+        // 2. Obtener datos reales y configuración de la BD
+        $materiales = ConfigTipoScrap::whereIn('uso', ['operador', 'ambos'])->orderBy('orden', 'asc')->get();
+        $registrosBD = RegistrosScrap::with(['detalles.tipoScrap'])
+            ->whereDate('fecha_registro', $fecha)
+            ->when($turno, fn($q) => $q->where('turno', $turno))
+            ->get();
 
-            if ($turno) $query->where('turno', $turno);
+        // Obtener todas las máquinas que existen actualmente en la configuración global
+        $configController = new \App\Http\Controllers\RegistrosScrapController();
+        $configuracionActual = (array) $configController->getConfiguracion()->getData()->areas_maquinas;
 
-            // ¡OJO AQUÍ! Si el admin exporta, ve todo. Si no, solo lo suyo.
-            if ($user->role !== 'admin') {
-                $query->where('operador_id', $user->id);
+        $coleccionFinal = collect();
+        $maquinasProcesadas = []; // Para saber qué máquinas ya pusimos en el Excel
+
+        // 3. Paso 1: Rellenar el Excel con el Mapa Maestro
+        foreach ($mapaEstructura as $bloque) {
+            foreach ($bloque['maquinas'] as $nombreMaq) {
+                $areaKey = strtoupper(trim($bloque['area']));
+                $maqKey = strtoupper(trim($nombreMaq));
+                
+                $registro = $this->buscarRegistro($registrosBD, $areaKey, $maqKey);
+                
+                $coleccionFinal->push($registro ?? new RegistrosScrap([
+                    'area_real' => $bloque['area'],
+                    'maquina_real' => $nombreMaq,
+                    'peso_total' => 0
+                ]));
+
+                $maquinasProcesadas[$areaKey][] = $maqKey;
             }
+        }
 
-            $registrosBD = $query->get();
+        // 4. Paso 2: DINAMISMO - Agregar máquinas nuevas que no estaban en el mapa
+        foreach ($configuracionActual as $areaConfig => $maquinasConfig) {
+            $areaConfigUpper = strtoupper(trim($areaConfig));
+            
+            foreach ($maquinasConfig as $m) {
+                $maqNombre = $m->maquina_nombre;
+                $maqNombreUpper = strtoupper(trim($maqNombre));
 
-            // 3. Obtener el molde completo de Áreas/Máquinas
-            $configController = new \App\Http\Controllers\RegistrosScrapController();
-            $areasMaquinas = $configController->getConfiguracion()->getData()->areas_maquinas;
-
-            $coleccionFinal = collect();
-
-            foreach ($areasMaquinas as $nombreArea => $maquinas) {
-                foreach ($maquinas as $maquina) {
-                    // Buscamos con comparación insensible a mayúsculas y espacios
-                    $registroExistente = $registrosBD->filter(function ($item) use ($nombreArea, $maquina) {
-                        return trim(strtoupper($item->area_real)) === trim(strtoupper($nombreArea)) &&
-                            trim(strtoupper($item->maquina_real)) === trim(strtoupper($maquina->maquina_nombre));
-                    })->first();
-
-                    if ($registroExistente) {
-                        $coleccionFinal->push($registroExistente);
-                    } else {
-                        // Si no hay datos, creamos la fila vacía
-                        $nuevo = new RegistrosScrap([
-                            'area_real' => $nombreArea,
-                            'maquina_real' => $maquina->maquina_nombre,
-                            'peso_total' => 0
-                        ]);
-                        $nuevo->setRelation('detalles', collect());
-                        $coleccionFinal->push($nuevo);
-                    }
+                // Si esta máquina de la configuración NO está en nuestro mapa maestro, la agregamos
+                if (!isset($maquinasProcesadas[$areaConfigUpper]) || !in_array($maqNombreUpper, $maquinasProcesadas[$areaConfigUpper])) {
+                    
+                    $registroNuevo = $this->buscarRegistro($registrosBD, $areaConfigUpper, $maqNombreUpper);
+                    
+                    $coleccionFinal->push($registroNuevo ?? new RegistrosScrap([
+                        'area_real' => $areaConfig,
+                        'maquina_real' => $maqNombre,
+                        'peso_total' => 0
+                    ]));
                 }
             }
-
-            // 4. Verificación de seguridad: 
-            // ¿Hay registros en la BD que NO están en la configuración de Áreas/Máquinas?
-            // Si los hay, los agregamos al final para que NO se pierda información.
-            $idsEnColeccion = $coleccionFinal->pluck('id')->filter()->toArray();
-            $registrosHuerfanos = $registrosBD->whereNotIn('id', $idsEnColeccion);
-
-            foreach ($registrosHuerfanos as $huerfano) {
-                $coleccionFinal->push($huerfano);
-            }
-
-            $fechaTexto = Carbon::parse($fecha)->format('d-M-Y');
-
-            return Excel::download(
-                new FormatoScrapEmpresaExport($coleccionFinal, $fecha, $turno, $user, $materiales),
-                "REPORTE_SCRAP_{$fechaTexto}.xlsx"
-            );
-        } catch (\Exception $e) {
-            \Log::error('Error en exportación: ' . $e->getMessage());
-            throw $e;
         }
-    }
 
+        $fechaTexto = Carbon::parse($fecha)->format('d-M-Y');
+        return Excel::download(
+            new FormatoScrapEmpresaExport($coleccionFinal, $fecha, $turno, $user, $materiales),
+            "REPORTE_SCRAP_{$fechaTexto}.xlsx"
+        );
+
+    } catch (\Exception $e) {
+        \Log::error('Error exportación: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+// Función auxiliar para limpiar la búsqueda
+private function buscarRegistro($coleccion, $area, $maquina) {
+    return $coleccion->filter(function ($item) use ($area, $maquina) {
+        return strtoupper(trim($item->area_real)) === $area &&
+               strtoupper(trim($item->maquina_real)) === $maquina;
+    })->first();
+}
     public function previewFormatoEmpresa(Request $request)
     {
         try {

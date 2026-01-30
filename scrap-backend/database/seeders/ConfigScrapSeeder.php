@@ -68,14 +68,12 @@ class ConfigScrapSeeder extends Seeder
             'Cobre molido'
         ];
 
-        // Reiniciamos orden para receptor o continuamos, depende de cómo quieras visualizarlos.
-        // Continuar el contador ayuda si en algún momento filtras por 'todos'.
         foreach ($materialesReceptor as $nombre) {
             DB::table('config_tipos_scrap')->insert([
                 'tipo_nombre' => $nombre,
-                'uso' => 'receptor', // Solo visible para recepción
+                'uso' => 'receptor',
                 'orden' => $orden++,
-                'columna_db' => null, // Los nuevos no tienen columna legacy
+                'columna_db' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -99,7 +97,7 @@ class ConfigScrapSeeder extends Seeder
             ],
             'BATERIA' => ['Bateria PVC', 'Bateria XLPE'],
             'XLPE' => ['EXT11', 'EXT12', 'EXT13', 'EXT14', 'EXT15', 'EXT16'],
-            'EBEAM' => ['Tequila', 'Pulque', 'Sotol', 'Tepache', 'WASIK3'],
+            'EBEAM' => ['Tequila', 'Mezcal', 'Pulque', 'Sotol', 'Tepache', 'WASIK3'],
             'RWD' => ['REW PVC', 'REW PE', 'REW Battery'],
             'OTHERS' => [
                 'Ingenieria', 
@@ -110,7 +108,7 @@ class ConfigScrapSeeder extends Seeder
                 'Retrabajo Metal', 
                 'Retrabajo Extrusion', 
                 'Retrabajo Extrusion XLPE',
-                'Logistica', 
+                'Logistica',
                 'Obsoleto', 
                 'RMA', 
                 'Proveedores',
