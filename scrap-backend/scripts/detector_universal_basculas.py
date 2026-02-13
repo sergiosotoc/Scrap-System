@@ -22,14 +22,12 @@ class DetectorUniversalBasculas:
         self.config_activa = None
         self.puerto_activo = None
         
-        # Variables para lectura en tiempo real
         self.buffer_activo = ""
         self.ultimo_peso = 0.0
         self.ultimo_raw_data = ""
         self.ultimo_timestamp = time.time()
 
-    def detectar_y_conectar(self, puerto, timeout=0.1):  # Timeout reducido
-        """Detectar báscula y mantener conexión activa - CONFIGURADO PARA TIEMPO REAL"""
+    def detectar_y_conectar(self, puerto, timeout=0.1):
         print(f"🔍 Conectando a {puerto} con timeout {timeout}s", file=sys.stderr)
 
         if self.conexion_activa and self.conexion_activa.is_open:
@@ -52,10 +50,10 @@ class DetectorUniversalBasculas:
                     bytesize=config_actual['bytesize'],
                     parity=config_actual['parity'],
                     stopbits=config_actual['stopbits'],
-                    timeout=config_actual['timeout']  # Timeout corto para respuesta rápida
+                    timeout=config_actual['timeout']  
                 )
 
-                time.sleep(0.1)  # Reducido de 0.5s a 0.1s
+                time.sleep(0.1)
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
 
@@ -65,7 +63,7 @@ class DetectorUniversalBasculas:
                 self.config_activa = config_actual
                 self.puerto_activo = puerto
 
-                print(f"✅ Conectado en {puerto} (MODO TIEMPO REAL)", file=sys.stderr)
+                print(f"Conectado en {puerto} (MODO TIEMPO REAL)", file=sys.stderr)
 
                 return {
                     "success": True,
@@ -79,7 +77,7 @@ class DetectorUniversalBasculas:
                 }
 
             except Exception as e:
-                print(f"  ❌ Error: {e}", file=sys.stderr)
+                print(f" Error: {e}", file=sys.stderr)
                 if 'ser' in locals():
                     try:
                         ser.close()
@@ -94,21 +92,18 @@ class DetectorUniversalBasculas:
         }
 
     def _leer_peso_conexion(self, ser, config):
-        """Leer peso durante la conexión inicial - OPTIMIZADO"""
         try:
-            # Leer inmediatamente lo que haya en buffer
             if ser.in_waiting > 0:
                 data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                 peso, _ = self._extraer_peso_universal(data)
                 if peso is not None:
                     return peso
 
-            # Probar comandos con esperas reducidas
             for cmd in self.comandos_solicitud:
                 try:
                     ser.reset_input_buffer()
                     ser.write(cmd)
-                    time.sleep(0.1)  # Reducido de 0.3s
+                    time.sleep(0.1)
 
                     if ser.in_waiting > 0:
                         data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
@@ -116,17 +111,16 @@ class DetectorUniversalBasculas:
                         if peso is not None:
                             return peso
                 except Exception as e:
-                    print(f"  ⚠️  Error con comando {cmd}: {e}", file=sys.stderr)
+                    print(f"  Error con comando {cmd}: {e}", file=sys.stderr)
                     continue
 
             return 0.0
             
         except Exception as e:
-            print(f"  ❌ Error en lectura inicial: {e}", file=sys.stderr)
+            print(f"  Error en lectura inicial: {e}", file=sys.stderr)
             return 0.0
 
     def leer_peso_conexion_activa(self):
-        """Leer peso de la conexión activa - OPTIMIZADO PARA RAPIDEZ"""
         if not self.conexion_activa or not self.conexion_activa.is_open:
             return {
                 "success": False,
@@ -137,7 +131,6 @@ class DetectorUniversalBasculas:
         try:
             ser = self.conexion_activa
 
-            # Verificar conexión rápidamente
             try:
                 ser.in_waiting
             except Exception as e:
@@ -149,7 +142,6 @@ class DetectorUniversalBasculas:
                     "requiere_conexion": True
                 }
 
-            # 1. Leer buffer inmediatamente (sin esperas)
             if ser.in_waiting > 0:
                 data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                 if data.strip():
@@ -168,8 +160,7 @@ class DetectorUniversalBasculas:
                             "timestamp": self.ultimo_timestamp
                         }
 
-            # 2. Si no hay datos, usar el último conocido (para evitar lag)
-            if time.time() - self.ultimo_timestamp < 1.0:  # Si el dato tiene menos de 1 segundo
+            if time.time() - self.ultimo_timestamp < 1.0:
                 return {
                     "success": True,
                     "peso": round(self.ultimo_peso, 3),
@@ -188,7 +179,7 @@ class DetectorUniversalBasculas:
             }
 
         except Exception as e:
-            print(f"❌ Error leyendo peso: {e}", file=sys.stderr)
+            print(f"Error leyendo peso: {e}", file=sys.stderr)
             try:
                 if self.conexion_activa:
                     self.conexion_activa.close()
@@ -202,7 +193,6 @@ class DetectorUniversalBasculas:
             }
 
     def leer_peso_tiempo_real(self):
-        """MÉTODO NUEVO: Lectura en tiempo real con mínimo lag"""
         if not self.conexion_activa or not self.conexion_activa.is_open:
             return {
                 "success": False,
@@ -214,22 +204,17 @@ class DetectorUniversalBasculas:
             ser = self.conexion_activa
             timestamp_actual = time.time()
             
-            # Guardar timeout original
             timeout_original = ser.timeout
             
-            # Configurar timeout mínimo para lectura instantánea
-            ser.timeout = 0.001  # 1ms máximo de espera
+            ser.timeout = 0.001
             
             try:
-                # Leer TODO lo disponible inmediatamente
                 bytes_disponibles = ser.in_waiting
                 if bytes_disponibles > 0:
-                    # Leer en bloques para máxima velocidad
                     while bytes_disponibles > 0:
                         chunk = ser.read(min(bytes_disponibles, 1024))
                         data = chunk.decode('ascii', errors='ignore')
                         
-                        # Procesar inmediatamente
                         if data.strip():
                             peso, formato = self._extraer_peso_universal(data)
                             if peso is not None:
@@ -237,7 +222,6 @@ class DetectorUniversalBasculas:
                                 self.ultimo_raw_data = data.strip()
                                 self.ultimo_timestamp = timestamp_actual
                                 
-                                # Restaurar timeout
                                 ser.timeout = timeout_original
                                 
                                 return {
@@ -250,14 +234,11 @@ class DetectorUniversalBasculas:
                                     "latencia_ms": 0
                                 }
                         
-                        # Verificar si hay más datos
                         bytes_disponibles = ser.in_waiting
                 
-                # Restaurar timeout
                 ser.timeout = timeout_original
                 
-                # Si tenemos un dato reciente (menos de 100ms), devolverlo
-                if timestamp_actual - self.ultimo_timestamp < 0.1:  # 100ms
+                if timestamp_actual - self.ultimo_timestamp < 0.1:
                     return {
                         "success": True,
                         "peso": round(self.ultimo_peso, 3),
@@ -268,7 +249,6 @@ class DetectorUniversalBasculas:
                         "latencia_ms": int((timestamp_actual - self.ultimo_timestamp) * 1000)
                     }
                 
-                # Si no hay datos nuevos
                 return {
                     "success": True,
                     "peso": round(self.ultimo_peso, 3),
@@ -280,21 +260,19 @@ class DetectorUniversalBasculas:
                 }
                 
             except Exception as e:
-                # Restaurar timeout en caso de error
                 ser.timeout = timeout_original
                 raise e
                 
         except Exception as e:
-            print(f"⚠️  Error en tiempo real: {e}", file=sys.stderr)
+            print(f"Error en tiempo real: {e}", file=sys.stderr)
             return {
                 "success": False,
                 "error": f"Error lectura tiempo real: {str(e)}",
                 "requiere_conexion": True
             }
 
-    def leer_peso_una_vez(self, puerto, baudios=None, timeout=0.1):  # Timeout reducido
-        """Método alternativo: abrir, leer y cerrar - OPTIMIZADO"""
-        print(f"🔍 Lectura rápida desde {puerto} con timeout {timeout}s", file=sys.stderr)
+    def leer_peso_una_vez(self, puerto, baudios=None, timeout=0.1):
+        print(f"Lectura rápida desde {puerto} con timeout {timeout}s", file=sys.stderr)
         
         configs_a_probar = self.configuraciones_comunes
         
@@ -314,10 +292,9 @@ class DetectorUniversalBasculas:
                     timeout=config['timeout']
                 )
 
-                time.sleep(0.1)  # Reducido de 0.3s
+                time.sleep(0.1)
                 ser.reset_input_buffer()
                 
-                # Leer inmediatamente
                 if ser.in_waiting > 0:
                     data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
                     peso, formato = self._extraer_peso_universal(data)
@@ -330,12 +307,11 @@ class DetectorUniversalBasculas:
                             "metodo": "buffer_inmediato"
                         }
                 
-                # Comandos rápidos
                 for cmd in self.comandos_solicitud:
                     try:
                         ser.reset_input_buffer()
                         ser.write(cmd)
-                        time.sleep(0.1)  # Reducido de 0.3s
+                        time.sleep(0.1)
                         
                         if ser.in_waiting > 0:
                             data = ser.read(ser.in_waiting).decode('ascii', errors='ignore')
@@ -368,13 +344,9 @@ class DetectorUniversalBasculas:
         }
 
     def _extraer_peso_universal(self, datos):
-        """Extraer peso en múltiples formatos de básculas - OPTIMIZADO"""
         if not datos or len(datos) < 2:
             return None, "sin_datos"
 
-        # Intentar los formatos más comunes primero para mayor velocidad
-        
-        # Formato Torrey (ST,GS,1.234 kg)
         if 'ST,GS' in datos:
             match = re.search(r'ST,GS[, ]*([0-9]+\.[0-9]+)', datos)
             if match:
@@ -385,7 +357,6 @@ class DetectorUniversalBasculas:
                 except:
                     pass
 
-        # Números con N o T (N1234, T56.78)
         match = re.search(r'[NT](\d+\.?\d*)', datos)
         if match:
             try:
@@ -395,7 +366,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # Números con signo (+1.23, -0.45)
         match = re.search(r'[+-]?(\d+\.?\d*)', datos)
         if match:
             try:
@@ -405,7 +375,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # Números decimales simples
         match = re.search(r'(\d+\.\d+)', datos)
         if match:
             try:
@@ -415,7 +384,6 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
-        # Números enteros grandes (gramos)
         match = re.search(r'(\d{3,})', datos)
         if match:
             try:
@@ -430,7 +398,6 @@ class DetectorUniversalBasculas:
         return None, "desconocido"
 
     def cerrar_conexion(self):
-        """Cerrar conexión de forma segura"""
         if self.conexion_activa:
             try:
                 if self.conexion_activa.is_open:
@@ -438,16 +405,15 @@ class DetectorUniversalBasculas:
                     self.conexion_activa.reset_output_buffer()
                     time.sleep(0.05)  # Reducido
                     self.conexion_activa.close()
-                print(f"🔌 Conexión cerrada correctamente", file=sys.stderr)
+                print(f"Conexión cerrada correctamente", file=sys.stderr)
             except Exception as e:
-                print(f"⚠️ Error cerrando: {e}", file=sys.stderr)
+                print(f"Error cerrando: {e}", file=sys.stderr)
             finally:
                 self.conexion_activa = None
                 self.config_activa = None
 
 
 def listar_puertos():
-    """Listar puertos disponibles"""
     try:
         ports = serial.tools.list_ports.comports()
         result = []
@@ -487,13 +453,13 @@ def main():
             detector = obtener_detector()
             if len(sys.argv) >= 3:
                 puerto = sys.argv[2]
-                timeout = float(sys.argv[3]) if len(sys.argv) >= 4 else 0.1  # Default reducido
+                timeout = float(sys.argv[3]) if len(sys.argv) >= 4 else 0.1
                 resultado = detector.detectar_y_conectar(puerto, timeout)
                 print(json.dumps(resultado))
             else:
                 puertos = listar_puertos()
                 for p in puertos:
-                    print(f"🔍 Probando {p['device']}...", file=sys.stderr)
+                    print(f"Probando {p['device']}...", file=sys.stderr)
                     resultado = detector.detectar_y_conectar(p['device'], timeout=0.1)
                     if resultado.get("success"):
                         print(json.dumps(resultado))
@@ -505,13 +471,13 @@ def main():
             detector = obtener_detector()
             
             if detector.conexion_activa and detector.conexion_activa.is_open:
-                resultado = detector.leer_peso_tiempo_real()  # Usar nuevo método
+                resultado = detector.leer_peso_tiempo_real()
                 print(json.dumps(resultado))
             else:
                 if len(sys.argv) >= 3:
                     puerto = sys.argv[2]
                     baudios = int(sys.argv[3]) if len(sys.argv) >= 4 else None
-                    timeout = float(sys.argv[4]) if len(sys.argv) >= 5 else 0.1  # Default reducido
+                    timeout = float(sys.argv[4]) if len(sys.argv) >= 5 else 0.1
                     resultado = detector.leer_peso_una_vez(puerto, baudios, timeout)
                     print(json.dumps(resultado))
                 else:
@@ -520,12 +486,11 @@ def main():
         elif comando == 'leer_continuo':
             detector = obtener_detector()
             
-            # Configurar para tiempo real
-            intervalo = 0.01  # 10ms entre lecturas (100Hz)
+            intervalo = 0.01
             
-            print("🚀 Iniciando LECTURA TIEMPO REAL (Ctrl+C para salir)...", file=sys.stderr)
-            print("📊 Frecuencia: 100Hz | Intervalo: 10ms", file=sys.stderr)
-            print("⚡ Mínimo lag garantizado", file=sys.stderr)
+            print("Iniciando LECTURA TIEMPO REAL (Ctrl+C para salir)...", file=sys.stderr)
+            print("Frecuencia: 100Hz | Intervalo: 10ms", file=sys.stderr)
+            print("Mínimo lag garantizado", file=sys.stderr)
 
             ultimo_peso_impreso = 0
             contador = 0
@@ -534,42 +499,38 @@ def main():
                 while True:
                     contador += 1
                     
-                    # Usar método de tiempo real
                     resultado = detector.leer_peso_tiempo_real()
                     
-                    # Solo imprimir si cambió el peso significativamente o cada 10 ciclos
                     peso_actual = resultado.get("peso", 0)
                     if (abs(peso_actual - ultimo_peso_impreso) > 0.001) or (contador % 10 == 0):
                         print(json.dumps(resultado), flush=True)
                         ultimo_peso_impreso = peso_actual
                     
-                    # Espera mínima
                     time.sleep(intervalo)
                     
             except KeyboardInterrupt:
-                print("\n🛑 Lectura tiempo real detenida", file=sys.stderr)
-                print(f"📈 Ciclos totales: {contador}", file=sys.stderr)
+                print("\nLectura tiempo real detenida", file=sys.stderr)
+                print(f"Ciclos totales: {contador}", file=sys.stderr)
 
         elif comando == 'leer_rapido':
             detector = obtener_detector()
             
             if len(sys.argv) >= 3:
                 puerto = sys.argv[2]
-                # Conectar primero si no hay conexión
                 if not detector.conexion_activa or not detector.conexion_activa.is_open:
-                    print(f"🔌 Conectando a {puerto}...", file=sys.stderr)
+                    print(f"Conectando a {puerto}...", file=sys.stderr)
                     detector.detectar_y_conectar(puerto, timeout=0.05)
                 
-                print("⚡ Modo RÁPIDO activado (máxima frecuencia)", file=sys.stderr)
-                print("📊 Leyendo a ~500Hz", file=sys.stderr)
+                print("Modo RÁPIDO activado (máxima frecuencia)", file=sys.stderr)
+                print("Leyendo a ~500Hz", file=sys.stderr)
                 
                 try:
                     while True:
                         resultado = detector.leer_peso_tiempo_real()
                         print(json.dumps(resultado), flush=True)
-                        time.sleep(0.002)  # 2ms - casi continuo
+                        time.sleep(0.002)
                 except KeyboardInterrupt:
-                    print("\n🛑 Modo rápido detenido", file=sys.stderr)
+                    print("\nModo rápido detenido", file=sys.stderr)
             else:
                 print(json.dumps({"error": "Uso: detector.py leer_rapido <puerto>"}))
 
@@ -579,24 +540,22 @@ def main():
             print(json.dumps({"success": True, "mensaje": "Conexión cerrada"}))
 
         elif comando == 'test_latencia':
-            """Comando especial para testear latencia"""
             detector = obtener_detector()
             
             if len(sys.argv) >= 3:
                 puerto = sys.argv[2]
-                # Conectar
                 if not detector.conexion_activa or not detector.conexion_activa.is_open:
                     detector.detectar_y_conectar(puerto, timeout=0.05)
                 
-                print("🧪 Test de latencia iniciado", file=sys.stderr)
-                print("⏱️  Midiendo tiempo de respuesta...", file=sys.stderr)
+                print("Test de latencia iniciado", file=sys.stderr)
+                print("Midiendo tiempo de respuesta...", file=sys.stderr)
                 
                 tiempos = []
                 for i in range(50):
                     inicio = time.time()
                     resultado = detector.leer_peso_tiempo_real()
                     fin = time.time()
-                    latencia = (fin - inicio) * 1000  # ms
+                    latencia = (fin - inicio) * 1000
                     tiempos.append(latencia)
                     
                     if resultado.get("success"):
@@ -604,11 +563,10 @@ def main():
                     else:
                         print(f"[{i+1:02d}] Error: {resultado.get('error', 'Desconocido')}")
                     
-                    time.sleep(0.02)  # 20ms entre tests
+                    time.sleep(0.02)
                 
-                # Estadísticas
                 if tiempos:
-                    print(f"\n📊 ESTADÍSTICAS DE LATENCIA:", file=sys.stderr)
+                    print(f"\nESTADÍSTICAS DE LATENCIA:", file=sys.stderr)
                     print(f"   Mínima: {min(tiempos):.2f}ms", file=sys.stderr)
                     print(f"   Máxima: {max(tiempos):.2f}ms", file=sys.stderr)
                     print(f"   Promedio: {sum(tiempos)/len(tiempos):.2f}ms", file=sys.stderr)

@@ -9,13 +9,11 @@ use Illuminate\Support\Facades\Log;
 
 class MaterialesController extends Controller
 {
-    // Obtener lista completa ordenada (para el admin)
     public function index()
     {
         return ConfigTipoScrap::orderBy('orden')->get();
     }
 
-    // Obtener solo para dropdowns (filtrado por uso)
     public function getByUso($uso)
     {
         return ConfigTipoScrap::whereIn('uso', [$uso, 'ambos'])
@@ -26,7 +24,6 @@ class MaterialesController extends Controller
     public function store(Request $request)
     {
         try {
-            // Validamos solo lo necesario
             $validated = $request->validate([
                 'tipo_nombre' => 'required|string|max:100|unique:config_tipos_scrap,tipo_nombre',
                 'uso' => 'required|in:operador,receptor,ambos',
@@ -35,16 +32,12 @@ class MaterialesController extends Controller
                 'tipo_nombre.required' => 'El nombre del material es obligatorio.'
             ]);
 
-            // Calculamos el siguiente orden automáticamente
             $maxOrden = ConfigTipoScrap::max('orden') ?? 0;
 
-            // Generar columna_db solo si es para operador (para mantener consistencia con tu BD actual)
-            // Los materiales de receptor tendrán NULL como en tu excel/dump
             $columnaDb = ($validated['uso'] === 'operador' || $validated['uso'] === 'ambos') 
                 ? Str::slug($validated['tipo_nombre'], '_') 
                 : null;
 
-            // Creamos el material
             $material = ConfigTipoScrap::create([
                 'tipo_nombre' => $validated['tipo_nombre'],
                 'uso' => $validated['uso'],

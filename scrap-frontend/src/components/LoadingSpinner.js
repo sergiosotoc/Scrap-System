@@ -3,7 +3,6 @@ import React from "react";
 import { colors } from "../styles/designSystem";
 
 const LoadingSpinner = ({ size = "md", message }) => {
-  // Configuración de tamaños
   const sizes = {
     sm: { width: 24, height: 24, border: '2px' },
     md: { width: 40, height: 40, border: '3px' },
@@ -39,8 +38,8 @@ const LoadingSpinner = ({ size = "md", message }) => {
         borderRadius: "50%",
         borderWidth: currentSize.border,
         borderStyle: "solid",
-        borderColor: colors.gray200, // Tu gris suave
-        borderTopColor: colors.primary, // Tu azul primario #2563EB
+        borderColor: colors.gray200,
+        borderTopColor: colors.primary,
         backgroundColor: "transparent",
         animation: "spinStandard 0.8s linear infinite",
         boxSizing: "border-box",
@@ -51,7 +50,7 @@ const LoadingSpinner = ({ size = "md", message }) => {
       {message && (
         <div style={{ 
           color: colors.gray600, 
-          fontSize: "0.875rem", // typography.sizes.sm
+          fontSize: "0.875rem",
           fontWeight: 500,
           animation: "fadeInText 0.5s ease-in",
           textAlign: "center"

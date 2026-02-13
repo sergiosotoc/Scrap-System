@@ -1,17 +1,12 @@
 /* src/services/excelService.js - CORREGIDO PARA IP DINÁMICA */
-
-// 1. FUNCIÓN DE DETECCIÓN INTELIGENTE
-// Detecta si estás en localhost, 192.168.x.x o dominio y fuerza el puerto 8002
 const getBaseUrl = () => {
-    // Si existe una variable de entorno forzada, la usamos
     if (process.env.REACT_APP_API_URL) {
         return process.env.REACT_APP_API_URL;
     }
 
-    // Lógica dinámica: Usa la misma IP/Dominio del navegador pero en puerto 8002
-    const protocol = window.location.protocol; // 'http:'
-    const hostname = window.location.hostname; // '192.168.80.191' o 'localhost'
-    
+    const protocol = window.location.protocol; 
+    const hostname = window.location.hostname; 
+
     return `${protocol}//${hostname}:8002/api`;
 };
 
@@ -24,22 +19,20 @@ export const excelService = {
         try {
             const params = new URLSearchParams({ fecha });
             if (turno) params.append('turno', turno);
-            
+
             const token = getAuthToken();
             const url = `${API_BASE_URL}/excel/export-formato-empresa?${params.toString()}`;
 
-            console.log('📤 Solicitando Excel a:', url); // Para depuración
-
+            console.log('📤 Solicitando Excel a:', url);
             const response = await fetch(url, {
                 method: 'GET',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 }
             });
 
             if (!response.ok) {
-                // Intentar leer el error si es JSON, sino lanzar texto genérico
                 const text = await response.text();
                 try {
                     const json = JSON.parse(text);
@@ -50,10 +43,9 @@ export const excelService = {
             }
 
             const blob = await response.blob();
-            
-            // Generación de nombre de archivo legible
+
             const meses = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-            const [year, month, day] = fecha.split('-'); 
+            const [year, month, day] = fecha.split('-');
             const mesTexto = meses[parseInt(month) - 1] || 'MES';
             let turnoTexto = 'TODOS LOS TURNOS';
             if (String(turno) === '1') turnoTexto = 'PRIMER TURNO';
@@ -72,9 +64,9 @@ export const excelService = {
 
     exportRecepciones: async (fechaInicio, fechaFin, destino = '') => {
         try {
-            const params = new URLSearchParams({ 
-                fecha_inicio: fechaInicio, 
-                fecha_fin: fechaFin 
+            const params = new URLSearchParams({
+                fecha_inicio: fechaInicio,
+                fecha_fin: fechaFin
             });
             if (destino) params.append('destino', destino);
 
@@ -85,7 +77,7 @@ export const excelService = {
 
             const response = await fetch(url, {
                 method: 'GET',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 }
@@ -97,7 +89,7 @@ export const excelService = {
             }
 
             const blob = await response.blob();
-            
+
             let sufijoDestino = "GENERAL";
             if (destino) {
                 sufijoDestino = destino.toUpperCase();
@@ -113,5 +105,22 @@ export const excelService = {
             console.error('💥 Error exportando recepciones:', error);
             throw error;
         }
+    },
+
+    exportAuditoria: async (fechaInicio, fechaFin) => {
+        const token = localStorage.getItem('authToken');
+        const url = `${API_BASE_URL}/excel/export-auditoria?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Error al generar Excel');
+
+        const blob = await response.blob();
+        return {
+            data: blob,
+            fileName: `AUDITORIA_${fechaInicio}_AL_${fechaFin}.xlsx`
+        };
     }
 };

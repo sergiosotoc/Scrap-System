@@ -1,10 +1,11 @@
+/* src/components/TabsAnimated.js */
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { colors, spacing, typography, radius } from "../styles/designSystem";
 
 const TabsAnimated = ({ tabs, defaultTab, onChange, containerStyle }) => {
   const [activeTab, setActiveTab] = useState(defaultTab || (tabs.length > 0 ? tabs[0].id : null));
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [hoveredTab, setHoveredTab] = useState(null); // Estado para el hover
+  const [hoveredTab, setHoveredTab] = useState(null);
   const tabsRef = useRef({});
 
   const updateIndicator = useCallback(() => {
@@ -20,7 +21,6 @@ const TabsAnimated = ({ tabs, defaultTab, onChange, containerStyle }) => {
 
   useEffect(() => {
     updateIndicator();
-    // Pequeño timeout para asegurar que el DOM esté listo en la primera carga
     const timer = setTimeout(updateIndicator, 50);
     window.addEventListener('resize', updateIndicator);
     return () => {
@@ -47,7 +47,6 @@ const TabsAnimated = ({ tabs, defaultTab, onChange, containerStyle }) => {
           marginBottom: spacing.lg,
         }}
       >
-        {/* Indicador animado de la pestaña activa */}
         <div
           style={{
             position: "absolute",
@@ -76,12 +75,10 @@ const TabsAnimated = ({ tabs, defaultTab, onChange, containerStyle }) => {
                   padding: `${spacing.sm} ${spacing.md}`,
                   backgroundColor: "transparent",
                   border: "none",
-                  // Color dinámico: Activo (Primario) -> Hover (Gris oscuro/Primario opaco) -> Inactivo (Gris suave)
                   color: isActive 
                     ? colors.primary 
                     : (isHovered ? colors.gray800 : colors.gray500),
                   
-                  // Fondo sutil al hacer hover para resaltar el área clickeable
                   background: isHovered && !isActive 
                     ? colors.gray100 
                     : 'transparent',
@@ -93,8 +90,7 @@ const TabsAnimated = ({ tabs, defaultTab, onChange, containerStyle }) => {
                   outline: "none",
                   position: "relative",
                   zIndex: 1,
-                  borderRadius: `${radius.md} ${radius.md} 0 0`, // Bordes redondeados solo arriba
-                  // Transformación sutil al hacer hover
+                  borderRadius: `${radius.md} ${radius.md} 0 0`,
                   transform: isHovered && !isActive ? 'translateY(-1px)' : 'none'
                 }}
               >

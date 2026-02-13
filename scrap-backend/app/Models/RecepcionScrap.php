@@ -9,7 +9,6 @@ class RecepcionScrap extends Model
 {
     use HasFactory;
 
-    // Apuntamos a la tabla existente 'recepciones_scrap'
     protected $table = 'recepciones_scrap';
 
     protected $fillable = [
@@ -42,7 +41,6 @@ class RecepcionScrap extends Model
         return $this->belongsTo(ConfigTipoScrap::class, 'tipo_scrap_id');
     }
 
-    // Scopes útiles
     public function scopePorReceptor($query, $receptorId)
     {
         return $query->where('receptor_id', $receptorId);

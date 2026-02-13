@@ -33,20 +33,13 @@ class RegistrosScrap extends Model
         return $this->belongsTo(User::class, 'operador_id');
     }
 
-    /**
-     * Relación con los detalles (materiales pesados individualmente)
-     */
     public function detalles()
     {
         return $this->hasMany(RegistroScrapDetalle::class, 'registro_id');
     }
 
-    /**
-     * Helper para obtener peso por nombre de material (para Excel)
-     */
     public function getPesoPorTipo($nombreMaterial)
     {
-        // Busca en la colección de detalles cargada en memoria
         $detalle = $this->detalles->first(function ($detalle) use ($nombreMaterial) {
             return $detalle->tipoScrap && strtoupper($detalle->tipoScrap->tipo_nombre) === strtoupper($nombreMaterial);
         });

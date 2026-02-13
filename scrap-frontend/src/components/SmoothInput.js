@@ -59,7 +59,7 @@ const SmoothInput = ({
           disabled={disabled}
           required={required}
           style={currentInputStyles}
-          {...props} // Pasamos las props adicionales al input nativo
+          {...props}
         />
         
         {rightElement && (

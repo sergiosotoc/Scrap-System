@@ -1,4 +1,5 @@
 <?php
+// database/seeders/DestinatariosSeeder.php
 
 namespace Database\Seeders;
 
@@ -38,9 +39,9 @@ class DestinatariosSeeder extends Seeder
             DB::table('destinatarios_correos')->updateOrInsert(
                 ['email' => $dest['email']],
                 [
-                    'nombre' => $dest['nombre'], 
+                    'nombre' => $dest['nombre'],
                     'created_at' => now(),
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ]
             );
         }

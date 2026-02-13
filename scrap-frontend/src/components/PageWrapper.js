@@ -2,8 +2,6 @@
 import React from "react";
 
 const PageWrapper = ({ children, animationDelay = 0, style }) => {
-  // Ya no inyectamos estilos aquí, se hace en App.js globalmente
-
   return (
     <div
       style={{

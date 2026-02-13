@@ -14,11 +14,9 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         try {
             let resultado;
             
-            // Lógica según el tipo de reporte
             if (tipo === 'formato-empresa') {
                 resultado = await excelService.exportFormatoEmpresa(filters.fecha, filters.turno);
             } 
-            // ✅ NUEVO CASO
             else if (tipo === 'recepciones') {
                 if (!filters.fechaInicio || !filters.fechaFin) {
                     throw new Error('Debes seleccionar un rango de fechas');
@@ -29,7 +27,6 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
                 throw new Error('Tipo de exportación no válido');
             }
 
-            // Descarga del archivo
             const url = window.URL.createObjectURL(new Blob([resultado.data]));
             const link = document.createElement('a');
             link.href = url;

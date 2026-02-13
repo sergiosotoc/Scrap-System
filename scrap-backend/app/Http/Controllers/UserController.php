@@ -19,7 +19,6 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
-            // Reglas de validación personalizadas
             $messages = [
                 'username.required' => 'El usuario es obligatorio.',
                 'username.unique' => 'Este nombre de usuario ya está registrado.',
@@ -34,7 +33,7 @@ class UserController extends Controller
                 'username' => 'required|string|unique:users|max:50',
                 'password' => 'required|string|min:6',
                 'name' => 'required|string|max:50',
-                'role' => 'required|in:admin,operador,receptor',
+                'role' => 'required|in:' . implode(',', array_keys(config('roles'))),
             ], $messages);
 
             $user = User::create([
@@ -50,10 +49,9 @@ class UserController extends Controller
             ], 201);
 
         } catch (ValidationException $e) {
-            // MODIFICACIÓN: Devolver todos los errores, no solo el genérico
             return response()->json([
                 'message' => 'Error de validación',
-                'errors' => $e->errors() // Esto devuelve el detalle: { "password": ["muy corta"], ... }
+                'errors' => $e->errors() 
             ], 422);
         } catch (\Exception $e) {
             Log::error('Error al crear usuario: ' . $e->getMessage());
@@ -77,7 +75,7 @@ class UserController extends Controller
             $validated = $request->validate([
                 'username' => 'required|string|max:50|unique:users,username,' . $user->id,
                 'name' => 'required|string|max:50',
-                'role' => 'required|in:admin,operador,receptor',
+                'role' => 'required|in:' . implode(',', array_keys(config('roles'))),
             ], $messages);
 
             if ($id == $currentUser->id && $validated['role'] != $user->role) {
@@ -99,7 +97,6 @@ class UserController extends Controller
             ]);
 
         } catch (ValidationException $e) {
-            // MODIFICACIÓN: Devolver errores detallados
             return response()->json([
                 'message' => 'Error de validación',
                 'errors' => $e->errors()

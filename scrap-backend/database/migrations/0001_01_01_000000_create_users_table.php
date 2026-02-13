@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('username')->unique();
             $table->string('name');
             $table->string('password');
-            $table->enum('role', ['admin', 'operador', 'receptor'])->default('operador');
+            $table->enum('role', ['admin', 'operador', 'receptor', 'contraloria'])->default('operador');
             $table->rememberToken();
             $table->timestamps();
         });
@@ -24,7 +24,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('users');
-        
+
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
             $table->string('token');

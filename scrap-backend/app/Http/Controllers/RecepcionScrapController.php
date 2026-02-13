@@ -8,6 +8,7 @@ use App\Models\RecepcionScrap;
 use App\Models\ConfigTipoScrap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Services\HistorialService;
 
 class RecepcionScrapController extends Controller
 {
@@ -49,7 +50,8 @@ class RecepcionScrapController extends Controller
     {
         $validated = $request->validate([
             'peso_kg' => 'required|numeric|min:0.1',
-            'tipo_material' => 'required|string|max:50',
+            'tipo_scrap_id' => 'required|exists:config_tipos_scrap,id',
+            'tipo_material' => 'required|string',
             'origen_tipo' => 'required|in:interna,externa',
             'origen_especifico' => 'required_if:origen_tipo,externa|nullable|string|max:150',
             'destino' => 'required|in:reciclaje,venta,almacenamiento',
@@ -59,27 +61,24 @@ class RecepcionScrapController extends Controller
 
         DB::beginTransaction();
         try {
-            // Intentar encontrar el ID del catálogo basado en el nombre
             $tipoScrap = ConfigTipoScrap::where('tipo_nombre', $validated['tipo_material'])->first();
-            
-            // Si no se encuentra el tipo, usar el ID de un tipo predeterminado o null
+
             $tipoScrapId = null;
             if ($tipoScrap) {
                 $tipoScrapId = $tipoScrap->id;
             } else {
-                // Opcional: buscar un tipo predeterminado o crear uno
                 $tipoPredeterminado = ConfigTipoScrap::where('es_predeterminado', true)->first();
                 if ($tipoPredeterminado) {
                     $tipoScrapId = $tipoPredeterminado->id;
                 }
             }
-            
+
             $fechaPrefix = date('ymd');
-            
+
             $numerosExistentes = RecepcionScrap::where('numero_hu', 'like', $fechaPrefix . '%')
                 ->lockForUpdate()
                 ->pluck('numero_hu')
-                ->map(function($hu) use ($fechaPrefix) {
+                ->map(function ($hu) use ($fechaPrefix) {
                     return intval(substr($hu, strlen($fechaPrefix)));
                 })
                 ->toArray();
@@ -96,7 +95,7 @@ class RecepcionScrapController extends Controller
                 'numero_hu' => $numeroHU,
                 'peso_kg' => $validated['peso_kg'],
                 'tipo_material' => $validated['tipo_material'],
-                'tipo_scrap_id' => $tipoScrapId,
+                'tipo_scrap_id' => $validated['tipo_scrap_id'],
                 'origen_tipo' => $validated['origen_tipo'],
                 'origen_especifico' => $validated['origen_especifico'] ?? null,
                 'receptor_id' => Auth::id(),
@@ -107,6 +106,15 @@ class RecepcionScrapController extends Controller
             ];
 
             $recepcion = RecepcionScrap::create($dataToInsert);
+
+            HistorialService::registrarHistorialRecepcion(
+                $recepcion->id,
+                'create',
+                'recepcion_completa',
+                null,
+                'Recepción creada',
+                $validated['observaciones'] ?? 'Recepción estándar'
+            );
 
             DB::commit();
 
@@ -142,16 +150,26 @@ class RecepcionScrapController extends Controller
                 ], 403);
             }
 
+            $valorAnterior = $recepcion->destino;
+            
             $recepcion->destino = $validated['destino'];
             $recepcion->save();
 
-            $recepcion->load(['receptor', 'tipoScrap']); 
+            HistorialService::registrarHistorialRecepcion(
+                $recepcion->id,
+                'update',
+                'destino',
+                $valorAnterior,
+                $validated['destino'],
+                "Destino actualizado de '{$valorAnterior}' a '{$validated['destino']}'"
+            );
+
+            $recepcion->load(['receptor', 'tipoScrap']);
 
             return response()->json([
                 'message' => 'Destino actualizado correctamente',
                 'data' => $recepcion
             ], 200);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['message' => 'Recepción no encontrada'], 404);
         } catch (\Exception $e) {

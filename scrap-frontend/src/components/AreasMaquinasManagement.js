@@ -15,19 +15,15 @@ const AreasMaquinasManagement = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estado para el formulario
     const [nuevaConfig, setNuevaConfig] = useState({ area_nombre: '', maquina_nombre: '' });
     
-    // Estado para eliminación
     const [deleteModal, setDeleteModal] = useState({ show: false, id: null, descripcion: '' });
     const [isDeleting, setIsDeleting] = useState(false);
     const [enviando, setEnviando] = useState(false);
 
-    // Animación de entrada
     const [triggerAnimation, setTriggerAnimation] = useState(false);
     const dataFetchedRef = useRef(false);
 
-    // Bloquear scroll al abrir modal
     useEffect(() => {
         const handleEscKey = (event) => {
             if (event.keyCode === 27 && deleteModal.show) {
@@ -47,7 +43,6 @@ const AreasMaquinasManagement = () => {
         };
     }, [deleteModal.show]);
 
-    // Cargar datos
     const fetchData = async () => {
         try {
             if (data.length === 0) setLoading(true);
@@ -67,13 +62,11 @@ const AreasMaquinasManagement = () => {
         fetchData();
     }, []);
 
-    // 1. Obtener lista única de áreas para el datalist
     const areasUnicas = useMemo(() => {
         const areas = data.map(item => item.area_nombre);
         return [...new Set(areas)].sort();
     }, [data]);
 
-    // 2. Agrupar datos por Área
     const groupedData = useMemo(() => {
         const filtered = data.filter(item => {
             const search = searchTerm.toLowerCase();
@@ -139,7 +132,6 @@ const AreasMaquinasManagement = () => {
     };
 
     const styles = {
-        // Fondo consistente con MaterialesManagement
         container: { 
             ...baseComponents.card, 
             padding: spacing.lg, 
@@ -154,7 +146,6 @@ const AreasMaquinasManagement = () => {
         
         searchContainer: { width: '100%', maxWidth: '320px' },
         
-        // Estilo del Formulario (Coherente con Materiales)
         formCard: { 
             backgroundColor: colors.surface, 
             padding: spacing.lg, 
@@ -182,7 +173,6 @@ const AreasMaquinasManagement = () => {
         },
         formRow: { display: 'flex', gap: spacing.md, alignItems: 'flex-end', flexWrap: 'wrap' },
         
-        // Grid de Áreas
         gridContainer: { 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
@@ -191,7 +181,7 @@ const AreasMaquinasManagement = () => {
         areaCard: (index) => ({
             backgroundColor: colors.surface,
             border: `1px solid ${colors.gray200}`,
-            borderTop: `4px solid ${colors.primary}`, // Acento de color superior
+            borderTop: `4px solid ${colors.primary}`,
             borderRadius: radius.lg,
             overflow: 'hidden',
             display: 'flex',
@@ -244,7 +234,6 @@ const AreasMaquinasManagement = () => {
             flex: 1
         },
         
-        // Estilo Chip/Tag Moderno
         machineTag: {
             display: 'inline-flex',
             alignItems: 'center',
@@ -280,10 +269,8 @@ const AreasMaquinasManagement = () => {
             }
         },
 
-        // Search Bar
         searchContainer: { width: '100%', maxWidth: '320px' },
 
-        // Empty States
         emptyState: { 
             gridColumn: '1 / -1', 
             padding: spacing.xl, 
@@ -298,7 +285,6 @@ const AreasMaquinasManagement = () => {
             gap: spacing.md
         },
 
-        // Modal
         overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100000, animation: 'fadeIn 0.2s ease-out' },
         alertBox: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.xl, width: '90%', maxWidth: '400px', boxShadow: shadows.xl, textAlign: 'center', border: `1px solid ${colors.gray200}`, display: 'flex', flexDirection: 'column', gap: spacing.md },
         alertTitle: { fontSize: typography.sizes.lg, fontWeight: 'bold', color: colors.gray900, margin: 0 },
@@ -347,7 +333,6 @@ const AreasMaquinasManagement = () => {
                 </div>
             </div>
 
-            {/* Formulario de Creación con Diseño Unificado */}
             <form onSubmit={handleCreate} style={styles.formCard}>
                 <div style={styles.formAccent}></div>
                 <div style={styles.formHeader}>
@@ -387,7 +372,6 @@ const AreasMaquinasManagement = () => {
                 </div>
             </form>
 
-            {/* Grid de Áreas */}
             <div style={styles.gridContainer}>
                 {Object.entries(groupedData).map(([area, maquinas], index) => (
                     <div key={area} style={styles.areaCard(index)}>

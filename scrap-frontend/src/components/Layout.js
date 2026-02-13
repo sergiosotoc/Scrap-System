@@ -39,7 +39,7 @@ const Layout = ({ children }) => {
       padding: `0 ${spacing.xl}`,
       boxShadow: '0 4px 20px -5px rgba(0, 0, 0, 0.1)',
       display: 'flex',
-      justifyContent: 'space-between', // Mantiene logo a la izq y usuario a la der
+      justifyContent: 'space-between',
       alignItems: 'center',
       borderBottom: `1px solid ${colors.gray200}`,
       position: 'sticky',
@@ -50,18 +50,16 @@ const Layout = ({ children }) => {
       boxSizing: 'border-box',
       transition: 'all 0.3s ease'
     },
-    // Logo a la izquierda
     headerLeft: {
       display: 'flex',
       alignItems: 'center',
-      zIndex: 2 // Asegurar que esté por encima si la pantalla es muy chica
+      zIndex: 2
     },
     logo: {
       height: '48px',
       width: 'auto',
       display: 'block'
     },
-    // Contenedor para Centrar el Título Absolutamente
     titleContainer: {
       position: 'absolute',
       left: '50%',
@@ -86,7 +84,6 @@ const Layout = ({ children }) => {
       whiteSpace: 'nowrap',
       textAlign: 'center'
     },
-    // Usuario a la derecha
     userInfo: {
       display: 'flex',
       alignItems: 'center',
@@ -139,7 +136,6 @@ const Layout = ({ children }) => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        {/* Izquierda: Logo */}
         <div style={styles.headerLeft}>
           <img 
             src="/Logo-COFICAB.png" 
@@ -148,12 +144,10 @@ const Layout = ({ children }) => {
           />
         </div>
         
-        {/* Centro: Título Absoluto */}
         <div style={styles.titleContainer}>
           <h1 style={styles.title}>Control de Scrap</h1>
         </div>
         
-        {/* Derecha: Información de Usuario */}
         <div style={styles.userInfo}>
           <div style={styles.userDetails}>
             <span style={styles.userName}>

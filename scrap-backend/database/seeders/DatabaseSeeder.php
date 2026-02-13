@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             ConfigScrapSeeder::class,
             UserSeeder::class,
+            DestinatariosSeeder::class,
         ]);
     }
 }

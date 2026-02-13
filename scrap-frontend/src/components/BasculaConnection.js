@@ -25,11 +25,9 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
     const campoDestinoRef = useRef(campoDestino);
 
-    // Cálculo seguro del Peso Neto
     const pesoBrutoNum = parseFloat(peso) || 0;
     const pesoNeto = Math.max(0, pesoBrutoNum - (parseFloat(tara) || 0));
 
-    // Determinar si es lectura automática real
     const esLecturaAutomatica = !modoManual && estado === 'conectado';
 
     const [tickLectura, setTickLectura] = useState(0);
@@ -56,7 +54,6 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     }, [tickLectura]);
 
 
-    // Cargar puertos
     useEffect(() => {
         let cancelado = false;
         const cargarPuertos = async () => {
@@ -244,44 +241,41 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
     return (
         <div style={styles.panel}>
-            <div style={styles.header}>
-                <div style={styles.headerTitle}>
-                    <div style={styles.iconContainer}>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 3v19"></path>
-                            <path d="M5 10h14"></path>
-                            <path d="M5 15a5 5 0 0 0 5 5h4a5 5 0 0 0 5-5"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h4 style={styles.headerText}>MÓDULO DE PESAJE</h4>
-                        <small style={styles.headerSubtext}>SERIAL INTERFACE RS232</small>
-                    </div>
-                </div>
-                <div style={{ ...styles.statusIndicator, borderColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray300) }}>
-                    <span style={{ ...styles.led, backgroundColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray400), boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none' }} />
-                    <span style={styles.statusText}>{estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'LINKING...' : 'OFFLINE')}</span>
-                </div>
-            </div>
-
             <div style={styles.lcdContainer}>
                 <div style={styles.lcdGlass}>
                     <div style={styles.lcdHeader}>
                         <span style={styles.lcdLabel}>PESO NETO (KG)</span>
-                        {/* ✅ INDICADOR VISUAL DE MODO */}
-                        <span style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 'bold',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: modoManual ? colors.warning : (estado === 'conectado' ? colors.success : colors.gray400),
-                            color: modoManual ? '#78350f' : '#ffffff',
-                            letterSpacing: '0.5px'
-                        }}>
-                            {modoManual ? 'MANUAL' : (estado === 'conectado' ? 'DIGITAL' : '---')}
-                        </span>
+                        
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div style={{ 
+                                ...styles.statusIndicator, 
+                                borderColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray300),
+                                backgroundColor: 'rgba(255,255,255,0.2)'
+                            }}>
+                                <span style={{ 
+                                    ...styles.led, 
+                                    backgroundColor: estado === 'conectado' ? colors.success : (estado === 'error' ? colors.error : colors.gray400), 
+                                    boxShadow: estado === 'conectado' ? `0 0 8px ${colors.success}` : 'none' 
+                                }} />
+                                <span style={styles.statusText}>
+                                    {estado === 'conectado' ? 'ONLINE' : (estado === 'conectando' ? 'CONECTANDO...' : 'OFFLINE')}
+                                </span>
+                            </div>
+
+                            <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 'bold',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: modoManual ? colors.warning : (estado === 'conectado' ? colors.success : colors.gray400),
+                                color: modoManual ? '#78350f' : '#ffffff',
+                                letterSpacing: '0.5px'
+                            }}>
+                                {modoManual ? 'MANUAL' : (estado === 'conectado' ? 'DIGITAL' : '---')}
+                            </span>
+                        </div>
                     </div>
-                    {/* LCD Principal: Peso Neto Calculado */}
+
                     <div style={styles.lcdValue}>{pesoNeto.toFixed(3)}</div>
 
                     <div style={styles.lcdDetailRow}>
@@ -318,36 +312,31 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
 
                     <div style={styles.controlGroup}>
                         <SmoothInput
-                            label="PESO CONTENEDOR (TARA)"
-                            // Cambiamos 'number' por 'text' para que desaparezcan las flechas
+                            label="PESO TARA (KG)"
                             type="text"
-                            // Usamos inputMode para que en móviles siga saliendo el teclado numérico
                             inputMode="decimal"
                             value={tara === 0 || tara === '0' ? '' : tara}
                             onChange={(e) => {
-                                // Validamos que solo entren números y un punto decimal
                                 const val = e.target.value.replace(/[^0-9.]/g, '');
-                                // Evitamos múltiples puntos decimales
                                 if ((val.match(/\./g) || []).length <= 1) {
                                     handleTaraChange({ target: { value: val } });
                                 }
                             }}
                             placeholder="0.000"
                             style={{ height: '36px', textAlign: 'right', fontWeight: '600' }}
-                            rightElement={<span style={{ fontSize: '10px', color: colors.gray500, fontWeight: 'bold' }}>KG</span>}
                         />
                     </div>
                 </div>
 
                 <div style={styles.controlGroup}>
-                    <label style={styles.controlLabel}>ACCIÓN</label>
+                    <label style={styles.controlLabel}>ACCIÓN DE ENLACE</label>
                     {!modoManual && estado !== 'conectado' && (
                         <SmoothButton onClick={conectarBascula} disabled={estado === 'conectando'} style={{ width: '100%', backgroundColor: estado === 'conectando' ? colors.gray400 : colors.primary }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
                                 <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                                 <line x1="12" y1="2" x2="12" y2="12"></line>
                             </svg>
-                            {estado === 'conectando' ? 'Conectando...' : 'Conectar'}
+                            {estado === 'conectando' ? 'CONECTANDO...' : 'CONECTAR BÁSCULA'}
                         </SmoothButton>
                     )}
                     {estado === 'conectado' && (
@@ -356,7 +345,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                                 <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                                 <line x1="12" y1="2" x2="12" y2="12"></line>
                             </svg>
-                            Desconectar
+                            DESCONECTAR
                         </SmoothButton>
                     )}
                     {modoManual && (
@@ -385,7 +374,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                     <SmoothButton onClick={toggleManual} style={styles.linkButton} variant="secondary">
                         {modoManual ? (
                             <>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
                                     <polyline points="1 4 1 10 7 10"></polyline>
                                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
                                 </svg>
@@ -393,7 +382,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             </>
                         ) : (
                             <>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                 </svg>
@@ -401,7 +390,7 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
                             </>
                         )}
                     </SmoothButton>
-                    <span style={styles.targetText}>Campo: {campoDestino}</span>
+                    <span style={styles.targetText}>Destino: {campoDestino.replace('material_', 'Mat ID ')}</span>
                 </div>
             </div>
         </div>
@@ -598,6 +587,15 @@ const styles = {
     targetText: {
         fontSize: typography.sizes.xs,
         color: colors.gray400
+    },
+    statusBadge: {
+        fontSize: '0.6rem',
+        fontWeight: '800',
+        padding: '2px 8px',
+        borderRadius: '4px',
+        letterSpacing: '0.5px',
+        fontFamily: typography.fontFamily,
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)'
     }
 };
 

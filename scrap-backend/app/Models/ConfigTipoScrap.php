@@ -13,8 +13,8 @@ class ConfigTipoScrap extends Model
 
     protected $fillable = [
         'tipo_nombre',
-        'uso',        // 'operador', 'receptor', 'ambos'
-        'columna_db', // Legacy
+        'uso',
+        'columna_db',
         'orden',
     ];
 

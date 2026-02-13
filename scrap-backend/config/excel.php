@@ -3,7 +3,7 @@
 return [
     'exports' => [
         'chunk_size' => 1000,
-        'pre_calculate_formulas' => false,
+        'pre_calculate_formulas' => true,
         'strict_null_comparison' => false,
         'csv' => [
             'delimiter' => ',',

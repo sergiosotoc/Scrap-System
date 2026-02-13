@@ -8,7 +8,6 @@ use Illuminate\Validation\Rule;
 
 class AreasMaquinasController extends Controller
 {
-    // Obtener lista completa ordenada
     public function index()
     {
         return ConfigAreaMaquina::orderBy('area_nombre')
@@ -16,10 +15,8 @@ class AreasMaquinasController extends Controller
             ->get();
     }
 
-    // Guardar nueva área/máquina
     public function store(Request $request)
     {
-        // Validamos que la combinación Área + Máquina sea única
         $validated = $request->validate([
             'area_nombre' => 'required|string|max:100',
             'maquina_nombre' => [
@@ -34,7 +31,6 @@ class AreasMaquinasController extends Controller
             'maquina_nombre.unique' => 'Esta máquina ya existe en el área seleccionada.'
         ]);
 
-        // Calculamos el siguiente orden para mantener la lista organizada
         $ultimoOrden = ConfigAreaMaquina::where('area_nombre', $validated['area_nombre'])
             ->max('orden');
 
@@ -51,7 +47,6 @@ class AreasMaquinasController extends Controller
         ], 201);
     }
 
-    // Eliminar configuración
     public function destroy($id)
     {
         $config = ConfigAreaMaquina::findOrFail($id);

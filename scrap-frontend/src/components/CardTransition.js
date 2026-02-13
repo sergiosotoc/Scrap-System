@@ -2,7 +2,6 @@
 import React from "react";
 import { useInViewAnimation } from "../hooks/useInViewAnimation";
 
-// Agregamos ...props para capturar onClick, onMouseEnter, etc.
 const CardTransition = ({ children, delay = 0, style, className, ...props }) => {
   const { ref, isInView } = useInViewAnimation(0.1);
 

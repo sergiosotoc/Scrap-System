@@ -13,16 +13,21 @@ use App\Http\Controllers\ExcelReportController;
 use App\Http\Controllers\MaterialesController;
 use App\Http\Controllers\AreasMaquinasController;
 use App\Http\Controllers\DestinatariosController;
+use App\Http\Controllers\HistorialController;
 
 Route::middleware('api')->group(function () {
     // Autenticación
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-    Route::get('/user', [AuthController::class, 'user'])->middleware('auth:sanctum');
+    Route::middleware('auth:sanctum')->get('/user', [AuthController::class, 'user']);
 
     // Dashboard 
     Route::middleware('auth:sanctum')->prefix('dashboard')->group(function () {
         Route::get('/stats', [DashboardController::class, 'stats']);
+        Route::get('/contraloria', [DashboardController::class, 'statsContraloria'])->middleware('role:contraloria,admin');
+        Route::get('/historial-modificaciones', [DashboardController::class, 'getHistorialModificaciones'])->middleware('role:contraloria,admin');
+        Route::get('/stats-materiales', [DashboardController::class, 'statsMaterialesContraloria'])->middleware('role:contraloria,admin');
+        Route::get('/reporte-conciliacion', [DashboardController::class, 'reporteConciliacionDiaria'])->middleware('role:contraloria,admin');
     });
 
     // Materiales
@@ -64,20 +69,32 @@ Route::middleware('api')->group(function () {
         Route::get('/puertos', [BasculaController::class, 'listarPuertos']);
         Route::post('/conectar', [BasculaController::class, 'conectar']);
         Route::post('/leer-peso', [BasculaController::class, 'leerPeso']);
-        Route::post('/leer-rapido', [BasculaController::class, 'leerPesoRapido']); 
-        Route::post('/leer-continuo', [BasculaController::class, 'leerPesoContinuo']); 
-        Route::post('/iniciar-continua', [BasculaController::class, 'iniciarLecturaContinua']); 
-        Route::post('/detener-continua', [BasculaController::class, 'detenerLecturaContinua']); 
+        Route::post('/leer-rapido', [BasculaController::class, 'leerPesoRapido']);
+        Route::post('/leer-continuo', [BasculaController::class, 'leerPesoContinuo']);
+        Route::post('/iniciar-continua', [BasculaController::class, 'iniciarLecturaContinua']);
+        Route::post('/detener-continua', [BasculaController::class, 'detenerLecturaContinua']);
         Route::post('/desconectar', [BasculaController::class, 'desconectar']);
         Route::post('/configurar', [BasculaController::class, 'configurarBascula']);
         Route::get('/diagnostico', [BasculaController::class, 'diagnostico']);
     });
 
-    // Registros de scrap -  NUEVA RUTA BATCH AGREGADA
+    // Historial de modificaciones
+    Route::middleware(['auth:sanctum'])->prefix('historial')->group(function () {
+        // Registrar edición manual
+        Route::post('/registrar-edicion', [HistorialController::class, 'registrarEdicion']);
+
+        // Registrar suma manual
+        Route::post('/registrar-suma', [HistorialController::class, 'registrarSuma']);
+
+        // Registrar borrado
+        Route::post('/registrar-borrado', [HistorialController::class, 'registrarBorrado']);
+    });
+
+    // Registros de scrap 
     Route::middleware('auth:sanctum')->prefix('registros-scrap')->group(function () {
         Route::get('/', [RegistrosScrapController::class, 'index']);
         Route::post('/', [RegistrosScrapController::class, 'store']);
-        Route::post('/batch', [RegistrosScrapController::class, 'storeBatch']); // 🔥 NUEVA RUTA
+        Route::post('/batch', [RegistrosScrapController::class, 'storeBatch']);
         Route::get('/configuracion', [RegistrosScrapController::class, 'getConfiguracion']);
         Route::get('/stats', [RegistrosScrapController::class, 'getRegistroScrapStats']);
     });
@@ -93,12 +110,13 @@ Route::middleware('api')->group(function () {
     Route::middleware('auth:sanctum')->prefix('excel')->group(function () {
         Route::get('/export-formato-empresa', [ExcelReportController::class, 'exportFormatoEmpresa']);
         Route::get('/export-recepciones', [ExcelReportController::class, 'exportReporteRecepcion']);
-        
         Route::get('/preview-formato-empresa', [ExcelReportController::class, 'previewFormatoEmpresa']);
-        
         Route::post('/enviar-reporte-correo', [ExcelReportController::class, 'enviarReporteCorreo']);
+        Route::get('/export-auditoria', [ExcelReportController::class, 'exportAuditoria'])->middleware('role:contraloria,admin');
     });
-    
+
+    Route::get('/roles', fn() => config('roles'));
+
     // NUEVO: Endpoint de salud para verificar conexión
     Route::get('/health', function () {
         return response()->json([

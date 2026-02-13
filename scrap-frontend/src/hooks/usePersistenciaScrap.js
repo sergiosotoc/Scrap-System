@@ -30,7 +30,6 @@ export const usePersistenciaScrap = (config) => {
     return storageService.hasDraftData();
   }, []);
 
-  // Verificar automáticamente al montar el hook
   useEffect(() => {
     setCargandoDesdeStorage(true);
     const saved = cargarDatosGuardados();

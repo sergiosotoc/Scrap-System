@@ -10,13 +10,13 @@ class AppConfigServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+
     }
 
     public function boot(): void
     {
         $appHost = env('APP_HOST', 'localhost');
-        $appUrl = "http://{$appHost}:8000";
+        $appUrl = "http://{$appHost}:8002";
         
         config(['app.url' => $appUrl]);
         

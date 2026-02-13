@@ -49,7 +49,7 @@ export const ToastProvider = ({ children }) => {
       display: 'flex',
       flexDirection: 'column',
       gap: spacing.sm,
-      zIndex: 100000, // Aumentado para estar por encima de los modales (99999)
+      zIndex: 100000,
       pointerEvents: 'none',
     },
     toast: {

@@ -16,6 +16,9 @@ class ConfigScrapSeeder extends Seeder
         DB::table('config_tipos_scrap')->truncate();
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
 
+        // ==========================================
+        // 1. MATERIALES DEL OPERADOR
+        // ==========================================
         $materialesOperador = [
             'COBRE',
             'Cobre Estañado',
@@ -45,7 +48,7 @@ class ConfigScrapSeeder extends Seeder
         }
 
         // ==========================================
-        // 2. MATERIALES DEL RECEPTOR (Tu lista)
+        // 2. MATERIALES DEL RECEPTOR
         // ==========================================
         $materialesReceptor = [
             'Lata de aluminio',
@@ -55,6 +58,7 @@ class ConfigScrapSeeder extends Seeder
             'Cobre estañado',
             'Cable estañado',
             'Purga PE',
+            'PURGA PE MOLIDO',
             'Cable PE',
             'Cable PE 3.5',
             'Cable de batería',
@@ -80,54 +84,84 @@ class ConfigScrapSeeder extends Seeder
         }
 
         // ==========================================
-        // 3. ÁREAS Y MÁQUINAS (Del PDF)
+        // 3. ÁREAS Y MÁQUINAS (CORREGIDO según tu lista)
         // ==========================================
         $areasMaquinas = [
-            'ROD' => ['ROD'],
-            'TREFILADO' => ['TREF 1', 'TREF 2', 'TREF 3', 'TREF 4', 'TREF 5', 'TREF 6'],
+            'ROD' => [
+                'ROD'
+            ],
+            'TREFILADO' => [
+                'TREF 1', 'TREF 2', 'TREF 3', 'TREF 4', 'TREF 5', 'TREF 6'
+            ],
             'BUNCHER' => [
                 'ZONA 1', 'ZONA 2', 'ZONA 3', 'ZONA 4', 'ZONA 5', 
                 'ZONA 6', 'ZONA 7', 'ZONA 8', 'ZONA 9', 'ZONA 10', 
                 'ZONA 11', 'ZONA 12', 'ZONA 13', 'ZONA 14', 'ZONA 15', '800'
             ],
-            'CABALLE' => ['CABALLE'],
+            'CABALLE' => [
+                'CABALLE'
+            ],
             'EXTRUSION' => [
                 'EXT01', 'EXT02', 'EXT03', 'EXT04', 'EXT05', 
                 'EXT06', 'EXT07', 'EXT08', 'EXT09'
             ],
-            'BATERIA' => ['Bateria PVC', 'Bateria XLPE'],
-            'XLPE' => ['EXT11', 'EXT12', 'EXT13', 'EXT14', 'EXT15', 'EXT16'],
-            'EBEAM' => ['Tequila', 'Mezcal', 'Pulque', 'Sotol', 'Tepache', 'WASIK3'],
-            'RWD' => ['REW PVC', 'REW PE', 'REW Battery'],
+            'BATERIA' => [
+                'Bateria PVC',
+                'Bateria XLPE'
+            ],
+            'XLPE' => [
+                'EXT11', 'EXT12', 'EXT13', 'EXT14', 'EXT15', 'EXT16'
+            ],
+            'EBEAM' => [
+                'Tequila',
+                'MEZCAL',
+                'Pulque',
+                'Sotol',
+                'Tepache',
+                'WASIK3' 
+            ],
+            'RWD' => [
+                'REW PVC',
+                'REW PE',
+                'REW Battery'
+            ],
             'OTHERS' => [
-                'Ingenieria', 
-                'RYD', 
-                'Mtto.', 
-                'Nuevos Negocios', 
+                'Ingenieria',
+                'RYD',
+                'Mtto.',
+                'Nuevos Negocios',
                 'Calidad',
-                'Retrabajo Metal', 
-                'Retrabajo Extrusion', 
+                'Retrabajo Metal',
+                'Retrabajo Extrusion',
                 'Retrabajo Extrusion XLPE',
+                'REBOBINADORA DE METAL',
                 'Logistica',
-                'Obsoleto', 
-                'RMA', 
+                'Obsoleto',
+                'RMA',
                 'Proveedores',
-                'Otras plantas Coficab', 
-                'Recycling Compound', 
+                'Otras plantas Coficab',
+                'Recycling Compound',
                 'Recycling Compound Battery',
-                'Cable Area Metal', 
+                'Cable Area Metal',
                 'Comission Eng'
             ],
-            'FPS' => ['FPS Metal', 'FPS STD PVC', 'FPS XLPE', 'FPS Bateria']
+            'FPS' => [
+                'FPS Metal',
+                'FPS STD PVC',
+                'FPS XLPE',
+                'FPS Bateria'
+            ]
         ];
 
-        $ordenArea = 1;
+        // Contador global para orden
+        $ordenGlobal = 1;
+        
         foreach ($areasMaquinas as $area => $maquinas) {
             foreach ($maquinas as $maquina) {
                 DB::table('config_areas_maquinas')->insert([
                     'area_nombre' => $area,
                     'maquina_nombre' => $maquina,
-                    'orden' => $ordenArea++,
+                    'orden' => $ordenGlobal++,
                     'activa' => true,
                     'created_at' => now(),
                     'updated_at' => now(),

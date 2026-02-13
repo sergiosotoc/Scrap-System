@@ -109,7 +109,6 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                 $sheet = $event->sheet;
                 $sheet->setShowGridlines(false);
 
-                // --- 1. LOGO (Izquierda) ---
                 try {
                     $logoPath = public_path('Logo-COFICAB.png');
                     if (file_exists($logoPath)) {
@@ -124,7 +123,6 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                     }
                 } catch (\Exception $e) {}
 
-                // --- 2. TÍTULO (Centrado) ---
                 $sheet->setCellValue('A2', 'REPORTE DE SCRAP');
                 $sheet->mergeCells('A2:F2'); 
                 $sheet->getStyle('A2')->applyFromArray([
@@ -132,7 +130,6 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
                 ]);
 
-                // --- 3. INFORMACIÓN ---
                 $sheet->setCellValue('A4', 'FECHA REPORTE:');
                 $fechaTexto = Carbon::parse($this->filtros['fecha_inicio'])->format('d-M-Y');
                 if ($this->filtros['fecha_inicio'] !== $this->filtros['fecha_fin']) {
@@ -157,7 +154,6 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT]
                 ]);
 
-                // --- 4. CUERPO DE LA TABLA ---
                 $rowCount = $this->collection()->count(); 
                 $headerRow = 8; 
                 $lastDataRow = $headerRow + $rowCount;
@@ -182,7 +178,7 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                         if ($row % 2 != 0) { 
                             $sheet->getStyle("A{$row}:F{$row}")->getFill()
                                 ->setFillType(Fill::FILL_SOLID)
-                                ->getStartColor()->setARGB('EFF6FF'); // Azul muy pálido (Zebra)
+                                ->getStartColor()->setARGB('EFF6FF');
                         }
                     }
 
@@ -194,7 +190,6 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
                     ]);
                 }
 
-                // --- 5. TOTALES ---
                 $totalRow = $lastDataRow + 1;
                 $sheet->getRowDimension($totalRow)->setRowHeight(35); 
                 
@@ -203,7 +198,7 @@ class ReporteRecepcionExport implements FromCollection, WithHeadings, WithMappin
 
                 $sheet->getStyle("A{$totalRow}:{$lastCol}{$totalRow}")->applyFromArray([
                     'font' => ['bold' => true, 'size' => 12],
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']], // Azul claro para totales
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
                     'borders' => ['top' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '2563EB']]],
                     'alignment' => ['vertical' => Alignment::VERTICAL_CENTER]
                 ]);

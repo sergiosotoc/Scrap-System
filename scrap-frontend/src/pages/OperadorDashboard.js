@@ -108,8 +108,8 @@ const OperadorDashboard = () => {
     const getTurnoActual = () => {
         const hora = new Date().getHours();
         if (hora >= 7 && hora < 15) return '1';
-        else if (hora >= 15 && hora < 23) return '2';
-        else return '3';
+        if (hora >= 15 && hora < 23) return '2';
+        return '3';
     };
 
     const today = getTodayLocal();
@@ -221,7 +221,11 @@ const OperadorDashboard = () => {
             setVistaPreviaData(null);
             setVistaPrevia(false);
         } catch (error) {
-            addToast('Error al enviar correo: ' + error.message, 'error');
+            if (error.message.includes('422')) {
+                addToast('Atención: No hay registros de scrap para enviar en este turno/fecha.', 'warning');
+            } else {
+                addToast('Error al enviar correo: ' + error.message, 'error');
+            }
         } finally {
             setEnviandoCorreo(false);
         }
@@ -265,9 +269,35 @@ const OperadorDashboard = () => {
         reportButton: { ...baseComponents.buttonPrimary, display: 'inline-flex', alignItems: 'center', gap: spacing.xs, padding: `${spacing.sm} ${spacing.md}`, height: '36px', fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, backgroundColor: colors.success, border: `1px solid ${colors.success}` },
         emailButton: { ...baseComponents.buttonSecondary, display: 'inline-flex', alignItems: 'center', gap: spacing.xs, padding: `${spacing.sm} ${spacing.md}`, height: '36px', fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, backgroundColor: colors.info, color: '#fff', border: `1px solid ${colors.info}`, ':hover': { backgroundColor: '#2563EB' } },
         primaryButton: { ...baseComponents.buttonPrimary, display: 'inline-flex', alignItems: 'center', gap: spacing.xs, padding: `${spacing.sm} ${spacing.lg}`, height: '42px' },
-        tableContainer: { overflowX: 'auto', maxHeight: '600px' },
-        table: { width: '100%', borderCollapse: 'collapse', minWidth: '1000px' },
-        th: { padding: spacing.md, textAlign: 'left', fontSize: typography.sizes.xs, fontWeight: typography.weights.bold, color: colors.gray600, textTransform: 'uppercase', backgroundColor: colors.gray50, borderBottom: `2px solid ${colors.gray200}`, position: 'sticky', top: 0, zIndex: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap' },
+        tableContainer: {
+            overflowX: 'auto',
+            width: '100%',
+            backgroundColor: colors.surface,
+            borderRadius: radius.md,
+            boxShadow: shadows.sm,
+            border: `1px solid ${colors.gray200}`
+        },
+        table: {
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: '1000px'
+        },
+
+        th: {
+            padding: spacing.md,
+            textAlign: 'left',
+            fontSize: typography.sizes.xs,
+            fontWeight: typography.weights.bold,
+            color: colors.gray600,
+            textTransform: 'uppercase',
+            backgroundColor: colors.gray50,
+            borderBottom: `2px solid ${colors.gray200}`,
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            letterSpacing: '0.05em',
+            whiteSpace: 'nowrap'
+        },
 
         tr: (index) => ({
             borderBottom: `1px solid ${colors.gray200}`,
@@ -445,9 +475,28 @@ const OperadorDashboard = () => {
                             </div>
 
                             <div style={{ display: 'flex', gap: spacing.md, justifyContent: 'flex-end', borderTop: `1px solid ${colors.gray200}`, paddingTop: spacing.md }}>
-                                <SmoothButton type="button" onClick={() => setVistaPreviaData(null)} variant="secondary" disabled={enviandoCorreo}>Volver</SmoothButton>
-                                <SmoothButton onClick={handleSendEmail} disabled={enviandoCorreo} style={{ backgroundColor: colors.success, border: 'none', color: '#fff', minWidth: '160px', justifyContent: 'center' }}>
-                                    {enviandoCorreo ? 'Enviando...' : 'Confirmar y Enviar'}
+                                <SmoothButton
+                                    type="button"
+                                    onClick={() => setVistaPreviaData(null)}
+                                    variant="secondary"
+                                    disabled={enviandoCorreo}
+                                >
+                                    Volver
+                                </SmoothButton>
+
+                                <SmoothButton
+                                    onClick={handleSendEmail}
+                                    disabled={enviandoCorreo || vistaPreviaData?.granTotal === 0}
+                                    style={{
+                                        backgroundColor: (enviandoCorreo || vistaPreviaData?.granTotal === 0) ? colors.gray400 : colors.success,
+                                        border: 'none',
+                                        color: '#fff',
+                                        minWidth: '160px',
+                                        justifyContent: 'center',
+                                        cursor: vistaPreviaData?.granTotal === 0 ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    {enviandoCorreo ? 'Enviando...' : vistaPreviaData?.granTotal === 0 ? 'Sin datos para enviar' : 'Confirmar y Enviar'}
                                 </SmoothButton>
                             </div>
                         </div>
@@ -460,7 +509,6 @@ const OperadorDashboard = () => {
     return (
         <div style={styles.container}>
             <PageWrapper style={{ height: 'auto' }}>
-                {/* Header */}
                 <CardTransition delay={0} style={styles.header}>
                     <div>
                         <h1 style={styles.title}>Dashboard Operador</h1>
@@ -553,11 +601,38 @@ const OperadorDashboard = () => {
                             </div>
 
                             <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-end', marginBottom: '2px' }}>
-                                <div style={{ transition: 'transform 0.2s', ':hover': { transform: 'scale(1.02)' } }}>
-                                    <ExcelExportButtons tipo="formato-empresa" filters={filtros} buttonText="Descargar" buttonStyle={styles.reportButton} />
+                                <div style={{
+                                    transition: 'transform 0.2s',
+                                    ':hover': { transform: totalKg > 0 ? 'scale(1.02)' : 'none' },
+                                    opacity: totalKg > 0 ? 1 : 0.6
+                                }}>
+                                    <ExcelExportButtons
+                                        tipo="formato-empresa"
+                                        filters={filtros}
+                                        buttonText={totalKg > 0 ? "Descargar" : "Sin datos"}
+                                        buttonStyle={{
+                                            ...styles.reportButton,
+                                            backgroundColor: totalKg > 0 ? colors.success : colors.gray400,
+                                            cursor: totalKg > 0 ? 'pointer' : 'not-allowed',
+                                            pointerEvents: totalKg > 0 ? 'auto' : 'none'
+                                        }}
+                                    />
                                 </div>
-                                <div style={{ transition: 'transform 0.2s', ':hover': { transform: 'scale(1.02)' } }}>
-                                    <SmoothButton onClick={handleOpenEmailModal} style={styles.emailButton} title="Enviar reporte por correo">
+                                <div style={{
+                                    transition: 'transform 0.2s',
+                                    ':hover': { transform: totalKg > 0 ? 'scale(1.02)' : 'none' },
+                                    opacity: totalKg > 0 ? 1 : 0.6
+                                }}>
+                                    <SmoothButton
+                                        onClick={handleOpenEmailModal}
+                                        disabled={totalKg === 0}
+                                        style={{
+                                            ...styles.emailButton,
+                                            backgroundColor: totalKg > 0 ? colors.info : colors.gray400,
+                                            cursor: totalKg > 0 ? 'pointer' : 'not-allowed'
+                                        }}
+                                        title={totalKg > 0 ? "Enviar reporte por correo" : "No hay datos para enviar"}
+                                    >
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                                         Enviar Correo
                                     </SmoothButton>

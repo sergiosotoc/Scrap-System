@@ -7,15 +7,13 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // En lugar de 'allowed_origins' con IPs fijas, usamos patrones
     'allowed_origins' => [],
 
-    // Esto permite cualquier IP que empiece con 192.168, localhost, etc.
     'allowed_origins_patterns' => [
         '#^http://192\.168\..+#', 
         '#^http://localhost.+#', 
         '#^http://127\.0\.0\.1.+#',
-        '#^http://10\..+#' // Para otras redes locales comunes
+        '#^http://10\..+#'
     ],
 
     'allowed_headers' => ['*'],

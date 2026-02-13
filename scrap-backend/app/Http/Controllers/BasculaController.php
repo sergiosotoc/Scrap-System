@@ -5,7 +5,6 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Process\Process;
@@ -50,17 +49,14 @@ class BasculaController extends Controller
         ];
 
         Storage::put('bascula_config.json', json_encode($config, JSON_PRETTY_PRINT));
-        Log::info("💾 Configuración guardada: {$puerto} @ " . $config['baudios'] . " baud, timeout: " . $config['timeout'] . "s");
     }
 
     public function listarPuertos(Request $request)
     {
         try {
-            Log::info('Solicitando lista de puertos');
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
-                Log::error('Script Python no encontrado');
                 return $this->listarPuertosFallback('Script no encontrado');
             }
 
@@ -70,7 +66,6 @@ class BasculaController extends Controller
             $process->run();
 
             if (!$process->isSuccessful()) {
-                Log::warning('Error ejecutando script: ' . $process->getErrorOutput());
                 return $this->listarPuertosFallback($process->getErrorOutput());
             }
 
@@ -100,7 +95,6 @@ class BasculaController extends Controller
                 'mensaje' => count($puertos) . ' puertos encontrados'
             ]);
         } catch (\Exception $e) {
-            Log::error('Error listando puertos: ' . $e->getMessage());
             return $this->listarPuertosFallback($e->getMessage());
         }
     }
@@ -113,8 +107,6 @@ class BasculaController extends Controller
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
             $timeout = min(max($timeout, 1), 30);
-
-            Log::info("🔌 Iniciando conexión en: $puerto con timeout: {$timeout}s");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
@@ -137,7 +129,6 @@ class BasculaController extends Controller
             $errorOutput = trim($process->getErrorOutput());
 
             if ($errorOutput) {
-                Log::info("Python debug: " . $errorOutput);
             }
 
             if (!$process->isSuccessful()) {
@@ -160,8 +151,6 @@ class BasculaController extends Controller
                     'timestamp' => now()
                 ], 3600);
 
-                Log::info("✅ Conexión exitosa: {$puerto} @ {$baudiosDetectados} baud - Peso: {$resultado['peso']} kg");
-
                 return response()->json([
                     'success' => true,
                     'peso_kg' => $resultado['peso'],
@@ -176,7 +165,6 @@ class BasculaController extends Controller
                     ]
                 ]);
             } else {
-                Log::warning("❌ Conexión fallida en {$puerto}: " . ($resultado['error'] ?? 'Error desconocido'));
                 return response()->json([
                     'success' => false,
                     'mensaje' => $resultado['error'] ?? 'No se pudo conectar',
@@ -185,7 +173,6 @@ class BasculaController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            Log::error('Error conectando: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'mensaje' => 'Error: ' . $e->getMessage()
@@ -201,8 +188,6 @@ class BasculaController extends Controller
             $timeout = $request->input('timeout', $currentConfig['timeout']);
 
             $timeout = min(max($timeout, 1), 10);
-
-            Log::info("⚖️ Leyendo peso desde: {$puerto} con timeout: {$timeout}s");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             if (!file_exists($scriptPath)) {
@@ -227,23 +212,19 @@ class BasculaController extends Controller
             $errorOutput = trim($process->getErrorOutput());
 
             if ($errorOutput) {
-                Log::debug("Python stderr: " . $errorOutput);
             }
 
             if (!$process->isSuccessful()) {
-                Log::warning("Script Python terminó con error: " . $errorOutput);
             }
 
             $resultado = json_decode($output, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error("JSON inválido del script: " . $output);
                 throw new \Exception("Error en la comunicación con la báscula");
             }
 
             if ($resultado['success']) {
                 $peso = $resultado['peso'] ?? 0;
-                Log::debug("✅ Peso leído: {$peso} kg desde {$puerto}");
 
                 return response()->json([
                     'success' => true,
@@ -256,8 +237,6 @@ class BasculaController extends Controller
                     'mensaje' => $resultado['mensaje'] ?? "Peso leído: {$peso} kg"
                 ]);
             } else {
-                Log::warning("❌ Error leyendo peso: " . ($resultado['error'] ?? 'Error desconocido'));
-
                 return response()->json([
                     'success' => false,
                     'mensaje' => $resultado['error'] ?? 'Error leyendo peso',
@@ -266,7 +245,6 @@ class BasculaController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            Log::error('Error en leerPeso: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'mensaje' => 'Error de comunicación con la báscula: ' . $e->getMessage(),
@@ -281,7 +259,6 @@ class BasculaController extends Controller
         try {
             $puerto = $request->input('puerto', $this->obtenerPuertoConfigurado());
 
-            Log::info("🔌 Desconectando báscula en: {$puerto}");
 
             $scriptPath = base_path('scripts/detector_universal_basculas.py');
             $pythonPath = $this->getPythonPath();
@@ -292,15 +269,12 @@ class BasculaController extends Controller
 
             Cache::forget($this->getConexionKey($puerto));
 
-            Log::info("✅ Báscula desconectada: {$puerto}");
-
             return response()->json([
                 'success' => true,
                 'mensaje' => 'Báscula desconectada correctamente',
                 'puerto' => $puerto
             ]);
         } catch (\Exception $e) {
-            Log::error('Error en desconectar: ' . $e->getMessage());
             $puerto = $request->input('puerto', $this->obtenerPuertoConfigurado());
             Cache::forget($this->getConexionKey($puerto));
 
@@ -362,7 +336,7 @@ class BasculaController extends Controller
 
                 $process = new Process([$pythonPath, '--version']);
                 $process->run();
-                $diagnostico['python'] = $process->isSuccessful() ? '✅ Disponible' : '❌ No disponible';
+                $diagnostico['python'] = $process->isSuccessful() ? 'Disponible' : 'No disponible';
                 if ($process->isSuccessful()) {
                     $diagnostico['python_version'] = trim($process->getOutput());
                 }
@@ -370,9 +344,9 @@ class BasculaController extends Controller
                 $process = new Process([$pythonPath, '-c', 'import serial; print(serial.__version__)']);
                 $process->run();
                 if ($process->isSuccessful()) {
-                    $diagnostico['pyserial'] = '✅ v' . trim($process->getOutput());
+                    $diagnostico['pyserial'] = 'v' . trim($process->getOutput());
                 } else {
-                    $diagnostico['pyserial'] = '❌ No instalado (pip install pyserial)';
+                    $diagnostico['pyserial'] = 'No instalado (pip install pyserial)';
                 }
             } catch (\Exception $e) {
                 $diagnostico['python'] = 'Error: ' . $e->getMessage();

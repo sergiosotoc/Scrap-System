@@ -16,10 +16,8 @@ const MaterialesManagement = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estado para el formulario
     const [nuevoMaterial, setNuevoMaterial] = useState({ tipo_nombre: '', uso: 'receptor' });
     
-    // Estado para eliminación
     const [deleteModal, setDeleteModal] = useState({ show: false, id: null, nombre: '' });
     const [isDeleting, setIsDeleting] = useState(false);
     const [enviando, setEnviando] = useState(false);
@@ -65,32 +63,30 @@ const MaterialesManagement = () => {
         fetchMateriales();
     }, []);
 
-    // Configuración visual por tipo de uso
     const usageConfig = {
         operador: { 
             label: 'Materiales Operador', 
-            color: colors.primary, // Azul
+            color: colors.primary,
             icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
             )
         },
         receptor: { 
             label: 'Materiales Receptor', 
-            color: colors.secondary, // Verde
+            color: colors.secondary,
             icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             )
         },
         ambos: { 
             label: 'Uso Compartido', 
-            color: '#8B5CF6', // Violeta
+            color: '#8B5CF6',
             icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             )
         }
     };
 
-    // Agrupación y filtrado
     const groupedMateriales = useMemo(() => {
         const filtered = materiales.filter(m => 
             m.tipo_nombre.toLowerCase().includes(searchTerm.toLowerCase())
@@ -108,7 +104,6 @@ const MaterialesManagement = () => {
             }
         });
 
-        // Ordenar alfabéticamente dentro del grupo
         Object.keys(groups).forEach(key => {
             groups[key].sort((a, b) => a.tipo_nombre.localeCompare(b.tipo_nombre));
         });
@@ -127,7 +122,7 @@ const MaterialesManagement = () => {
         try {
             await apiClient.createMaterial(nuevoMaterial);
             addToast('Material agregado correctamente', 'success');
-            setNuevoMaterial({ ...nuevoMaterial, tipo_nombre: '' }); // Mantener el "uso" seleccionado para capturar varios seguidos
+            setNuevoMaterial({ ...nuevoMaterial, tipo_nombre: '' });
             fetchMateriales();
         } catch (error) {
             addToast('Error al crear: ' + error.message, 'error');
@@ -164,7 +159,6 @@ const MaterialesManagement = () => {
         
         searchContainer: { width: '100%', maxWidth: '320px' },
 
-        // Formulario
         formCard: { 
             backgroundColor: colors.surface, 
             padding: spacing.lg, 
@@ -192,7 +186,6 @@ const MaterialesManagement = () => {
         },
         formRow: { display: 'flex', gap: spacing.md, alignItems: 'flex-end', flexWrap: 'wrap' },
 
-        // Grid
         gridContainer: { 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
@@ -224,7 +217,7 @@ const MaterialesManagement = () => {
         usageTitle: { fontSize: typography.sizes.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.02em' },
         countBadge: (color) => ({
             fontSize: '0.65rem',
-            backgroundColor: color + '20', // Opacidad
+            backgroundColor: color + '20',
             color: color,
             padding: '2px 8px',
             borderRadius: radius.full,
@@ -263,7 +256,7 @@ const MaterialesManagement = () => {
             borderRadius: '50%',
             backgroundColor: colors.gray100,
             border: 'none',
-            color: colors.error, // ROJO
+            color: colors.error,
             cursor: 'pointer',
             marginLeft: '4px',
             transition: 'all 0.2s ease',
@@ -289,7 +282,6 @@ const MaterialesManagement = () => {
             gap: spacing.md
         },
 
-        // Modal
         overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100000, animation: 'fadeIn 0.2s ease-out' },
         alertBox: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.xl, width: '90%', maxWidth: '400px', boxShadow: shadows.xl, textAlign: 'center', border: `1px solid ${colors.gray200}`, display: 'flex', flexDirection: 'column', gap: spacing.md },
         alertTitle: { fontSize: typography.sizes.lg, fontWeight: 'bold', color: colors.gray900, margin: 0 },
@@ -380,7 +372,6 @@ const MaterialesManagement = () => {
                     const materials = groupedMateriales[usageKey] || [];
                     const config = usageConfig[usageKey];
                     
-                    // Si hay búsqueda y no hay resultados en este grupo, no lo mostramos para limpiar la vista
                     if (materials.length === 0 && searchTerm) return null;
 
                     return (

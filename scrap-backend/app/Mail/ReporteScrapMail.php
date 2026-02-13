@@ -20,10 +20,6 @@ class ReporteScrapMail extends Mailable
     protected $excelFilePath;
     protected $fileName;
 
-    /**
-     * Create a new message instance.
-     * Constructor actualizado (parámetros simplificados)
-     */
     public function __construct($asunto, $operadorName, $excelFilePath, $fileName)
     {
         $this->asuntoPersonalizado = $asunto;
@@ -32,9 +28,6 @@ class ReporteScrapMail extends Mailable
         $this->fileName = $fileName;
     }
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
         return new Envelope(
@@ -46,9 +39,6 @@ class ReporteScrapMail extends Mailable
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
         return new Content(
@@ -61,9 +51,6 @@ class ReporteScrapMail extends Mailable
         );
     }
 
-    /**
-     * Get the attachments for the message.
-     */
     public function attachments(): array
     {
         return [

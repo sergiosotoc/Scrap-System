@@ -8,6 +8,7 @@ import { colors, shadows, radius, spacing, typography, baseComponents } from '..
 import SmoothButton from './SmoothButton';
 import LoadingSpinner from './LoadingSpinner';
 import CardTransition from './CardTransition';
+import ConfirmationModal from './ConfirmationModal';
 
 const round3 = (num) => {
   return Math.round((parseFloat(num) || 0) * 1000) / 1000;
@@ -246,6 +247,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const onLoadCompleteRef = useRef(onLoadComplete);
 
+  const [showConfirmUnlock, setShowConfirmUnlock] = useState(false);
+  const [pendingUnlockData, setPendingUnlockData] = useState(null);
+  const [showConfirmSum, setShowConfirmSum] = useState(false);
+  const [pendingSumData, setPendingSumData] = useState(null);
+
   useEffect(() => { onLoadCompleteRef.current = onLoadComplete; }, [onLoadComplete]);
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
   useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
@@ -268,7 +274,24 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   }, [pesoBloqueado]);
 
   useEffect(() => {
-    editingValuesRef.current = editingValues;
+    Object.keys(editingValues).forEach(key => {
+      const [areaIndexStr, campo] = key.split('_');
+      const areaIndex = parseInt(areaIndexStr);
+
+      if (!isNaN(areaIndex) && tablaData[areaIndex]) {
+        const fila = tablaData[areaIndex];
+        if (fila.conexion_bascula === true) {
+          setTablaData(prev => {
+            const newData = [...prev];
+            newData[areaIndex] = {
+              ...newData[areaIndex],
+              conexion_bascula: false
+            };
+            return newData;
+          });
+        }
+      }
+    });
   }, [editingValues]);
 
 
@@ -563,17 +586,48 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     const val = rawValue === '' ? 0 : round3(parseFloat(rawValue) || 0);
     const valorPrevio = parseFloat(tablaData[areaIndex][campo]) || 0;
 
-    // Si el valor cambió manualmente, guardamos el rastro y el valor que tenía antes
     if (Math.abs(valorPrevio - val) > 0.001) {
-      setHistorialCeldas(prev => ({
-        ...prev,
-        [key]: {
-          ...prev[key],
-          valorAnterior: valorPrevio,
-          modificadoManual: true,
-          fuente: 'Teclado' // Marcamos explícitamente como entrada de teclado
+      const fila = tablaData[areaIndex];
+      const materialNombre = materialesFlat.find(m => `material_${m.id}` === campo)?.tipo_nombre || campo;
+
+      const esModificacionSignificativa = Math.abs(valorPrevio - val) > 0.001;
+
+      if (esModificacionSignificativa) {
+        const registroId = fila.id;
+
+        if (registroId) {
+          apiClient.request('/historial/registrar-edicion', {
+            method: 'POST',
+            body: {
+              registro_id: registroId,
+              campo_modificado: campo,
+              valor_anterior: valorPrevio,
+              valor_nuevo: val,
+              observaciones: `Edición manual en ${fila.maquina_real} (${materialNombre})`
+            }
+          }).then(response => {
+            if (response.success) {
+              console.log('Edición registrada en historial');
+            }
+          }).catch(error => {
+            console.warn('No se pudo registrar edición en historial:', error);
+          });
+        } else {
+          setHistorialCeldas(prev => ({
+            ...prev,
+            [key]: {
+              valorAnterior: valorPrevio,
+              valorNuevo: val,
+              modificadoManual: true,
+              fuente: 'Teclado',
+              material: materialNombre,
+              maquina: fila.maquina_real,
+              area: fila.area_real,
+              timestamp: new Date().toISOString()
+            }
+          }));
         }
-      }));
+      }
     }
 
     setTablaData(prev => {
@@ -588,7 +642,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       });
 
       filaActualizada.peso_total = round3(total);
-      // Marcamos la fila como manual si la última acción fue una edición directa
       filaActualizada.conexion_bascula = false;
       newData[areaIndex] = filaActualizada;
       return newData;
@@ -599,7 +652,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       delete copy[key];
       return copy;
     });
-  }, [editingValues, tablaData, materialesFlat]);
+
+    setTimeout(autoSaveToStorage, 100);
+
+  }, [editingValues, tablaData, materialesFlat, autoSaveToStorage]);
 
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
@@ -630,14 +686,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       pesoCongeladoRef.current = nuevoValorRaw;
       const celdaKey = `${targetIndex}_${campoRealActivo}`;
 
-      setHistorialCeldas(prev => ({
-        ...prev,
-        [celdaKey]: {
-          ...prev[celdaKey],
-          fuente: esAutomatico ? 'Báscula-Auto' : 'Báscula-Manual-Input'
-        }
-      }));
-
       if (editingValuesRef.current[celdaKey] !== undefined || celdasSumadasRef.current[celdaKey]) {
         return;
       }
@@ -652,7 +700,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           const newData = [...prevData];
           const filaActualizada = { ...filaActual };
           filaActualizada[campoRealActivo] = round3(nuevoValorRaw);
-          filaActualizada.conexion_bascula = esAutomatico;
+
+          filaActualizada.conexion_bascula = true;
 
           let total = 0;
           materialesFlat.forEach(m => {
@@ -668,7 +717,26 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   }, [materialesFlat]);
 
   const handleTogglePesoBloqueado = () => {
-    const newPesoBloqueado = !pesoBloqueado;
+    const isCurrentlyLocked = pesoBloqueado;
+
+    if (isCurrentlyLocked) {
+      const target = celdaActivaRef.current;
+      if (target) {
+        const valorExistente = parseFloat(tablaData[target.areaIndex][target.campo]) || 0;
+
+        if (valorExistente > 0) {
+          setPendingUnlockData({ valorExistente });
+          setShowConfirmUnlock(true);
+          return;
+        }
+      }
+    }
+
+    ejecutarToggle(isCurrentlyLocked);
+  };
+
+  const ejecutarToggle = (isCurrentlyLocked) => {
+    const newPesoBloqueado = !isCurrentlyLocked;
     setPesoBloqueado(newPesoBloqueado);
     pesoBloqueadoRef.current = newPesoBloqueado;
 
@@ -705,9 +773,13 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         });
       }
     }
+
+    setShowConfirmUnlock(false);
+    setPendingUnlockData(null);
   };
 
   const handleSumarPeso = useCallback(() => {
+
     if (!pesoBloqueadoRef.current) {
       addToast('Primero debe CONGELAR EL PESO antes de sumar', 'warning');
       return;
@@ -725,14 +797,36 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }
 
     const { areaIndex, campo } = celdaActivaRef.current;
+
+    const valorActual = parseFloat(tablaData[areaIndex][campo]) || 0;
+
+    setPendingSumData({
+      pesoASumar: pesoASumar,
+      valorActual: valorActual,
+      nuevoTotal: round3(valorActual + pesoASumar),
+      maquina: maquinaSeleccionadaRef.current.maquina,
+      area: maquinaSeleccionadaRef.current.area
+    });
+
+    setShowConfirmSum(true);
+  }, [tablaData, addToast]);
+
+
+  const ejecutarSuma = () => {
+    if (!pendingSumData || !celdaActivaRef.current) return;
+
+    const { areaIndex, campo } = celdaActivaRef.current;
+    const { pesoASumar } = pendingSumData;
     const celdaKey = `${areaIndex}_${campo}`;
 
     setTablaData(prevData => {
       const newData = [...prevData];
       const filaActual = { ...newData[areaIndex] };
-      const valorActual = parseFloat(filaActual[campo]) || 0;
 
-      filaActual[campo] = round3(valorActual + pesoASumar);
+      const valorPrevio = parseFloat(filaActual[campo]) || 0;
+      const sumaFinal = round3(valorPrevio + pesoASumar);
+
+      filaActual[campo] = sumaFinal;
       filaActual.conexion_bascula = true;
 
       let totalFila = 0;
@@ -740,24 +834,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         totalFila += parseFloat(filaActual[`material_${m.id}`]) || 0;
       });
       filaActual.peso_total = round3(totalFila);
+
       newData[areaIndex] = filaActual;
-
-      const dataToSave = {
-        tablaData: newData,
-        formData,
-        filtroArea: filtroAreaRef.current,
-        filtroMaquina: filtroMaquinaRef.current,
-        campoBasculaActivo: campoBasculaActivoRef2.current,
-        maquinaSeleccionada: maquinaSeleccionadaRef.current,
-        celdaActiva: celdaActivaRef.current,
-        celdasSumadas: {
-          ...celdasSumadasRef.current,
-          [celdaKey]: (celdasSumadasRef.current[celdaKey] || 0) + 1
-        },
-        pesoBloqueado: true
-      };
-      storageService.saveDraft(dataToSave, false);
-
       return newData;
     });
 
@@ -767,7 +845,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     }));
 
     addToast(`+ ${pesoASumar.toFixed(3)} kg sumados correctamente`, 'success');
-  }, [materialesFlat, formData, addToast]);
+
+    setShowConfirmSum(false);
+    setPendingSumData(null);
+  };
 
   const handleMaterialChange = (newMaterialKey) => {
     setCampoBasculaActivo(newMaterialKey);
@@ -822,35 +903,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     let notas = [];
     materialesFlat.forEach(mat => {
       const key = `material_${mat.id}`;
-      const celdaKey = `${realIndex}_${key}`;
-      const historial = historialCeldas[celdaKey];
-      const vecesSumado = celdasSumadas[celdaKey];
-      const valorActual = parseFloat(fila[key]) || 0;
-
-      // Solo reportamos si hay historial o sumas en materiales con peso > 0
-      if ((historial && valorActual > 0) || vecesSumado) {
-        let detalle = `[${mat.tipo_nombre}]: `;
-
-        if (historial?.modificadoManual) {
-          detalle += `Editado manualmente (Previo: ${historial.valorAnterior}kg). `;
-        }
-
-        if (historial?.fuente) {
-          detalle += `Origen: ${historial.fuente}. `;
-        }
-
-        if (vecesSumado) {
-          detalle += `Peso acumulado (Sumado ${vecesSumado} veces). `;
-        }
-
-        notas.push(detalle.trim());
+      const vecesSumado = celdasSumadas[`${realIndex}_${key}`];
+      if (vecesSumado) {
+        notas.push(`${mat.tipo_nombre}: ${fila.maquina_real} sumado ${vecesSumado} veces`);
       }
     });
-
-    return notas.length > 0 ? notas.join(' | ') : 'Registro estándar sin modificaciones';
+    return notas.length > 0 ? notas.join(', ') : 'Proceso Automático';
   };
 
-  // 4. Función handleSubmit optimizada para determinar la fuente real de los datos
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -873,24 +933,24 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         );
 
         const detalles = [];
-        let algunMaterialFueBascula = false;
+        let esAutomatico = fila.conexion_bascula === true;
+        let tieneMateriales = false;
 
         materialesFlat.forEach(mat => {
           const key = `material_${mat.id}`;
           const celdaKey = `${realIndex}_${key}`;
-          const peso = fila[key];
+          const peso = parseFloat(fila[key]) || 0;
 
           if (peso > 0) {
+            tieneMateriales = true;
             detalles.push({ id: mat.id, peso: peso });
 
-            // LÓGICA DE VALIDACIÓN DE ORIGEN:
-            // Verificamos si este material específico vino de la báscula automática
-            // o si se usó la función de "Sumar" (que también requiere báscula conectada).
-            const h = historialCeldas[celdaKey];
-            const s = celdasSumadas[celdaKey];
+            if (historialCeldas[celdaKey]?.modificadoManual) {
+              esAutomatico = false;
+            }
 
-            if (h?.fuente === 'Báscula-Auto' || s > 0 || fila.conexion_bascula) {
-              algunMaterialFueBascula = true;
+            if (editingValuesRef.current[celdaKey] !== undefined) {
+              esAutomatico = false;
             }
           }
         });
@@ -899,9 +959,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           turno: formData.turno,
           area_real: fila.area_real,
           maquina_real: fila.maquina_real,
-          // Priorizamos marcar como conectado si detectamos rastro de báscula en el historial
-          conexion_bascula: algunMaterialFueBascula,
-          numero_lote: `LOTE-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+          conexion_bascula: tieneMateriales && esAutomatico,
+          numero_lote: `LOTE-${Date.now()}`,
           observaciones: construirObservacionesFila(fila, realIndex),
           detalles: detalles
         };
@@ -1036,13 +1095,27 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     return acc;
   }, [datosFiltrados, tablaData, materialesFlat, editingValues]);
 
-  if (loading) {
-    return <div style={styles.loading}><LoadingSpinner message="Cargando configuración..." /></div>;
-  }
+  const camposSeleccionados = useMemo(() => {
+    return !!(filtroArea && filtroMaquina && campoBasculaActivo);
+  }, [filtroArea, filtroMaquina, campoBasculaActivo]);
+
+  const puedeSumar = useMemo(() => {
+    if (!camposSeleccionados || !pesoBloqueado || liveWeightRef.current <= 0) return false;
+
+    const valorEnCelda = maquinaSeleccionada.index !== null
+      ? parseFloat(tablaData[maquinaSeleccionada.index][campoBasculaActivo]) || 0
+      : 0;
+
+    return valorEnCelda > 0;
+  }, [camposSeleccionados, pesoBloqueado, maquinaSeleccionada.index, tablaData, campoBasculaActivo]);
 
   const numFilasConPeso = datosFiltrados.filter(fila => fila.peso_total > 0).length;
   const hasSavedData = storageService.hasValidDraft();
   const isSaveDisabled = enviando || !formData.turno || numFilasConPeso === 0;
+
+  if (loading) {
+    return <div style={styles.loading}><LoadingSpinner message="Cargando configuración..." /></div>;
+  }
 
   return (
     <div style={styles.container}>
@@ -1186,33 +1259,44 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Controles y Monitor</label>
                 <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
                   <SmoothButton
                     type="button"
                     onClick={handleTogglePesoBloqueado}
+                    disabled={!camposSeleccionados}
                     style={{
                       ...(pesoBloqueado ? styles.btnLocked : styles.btnUnlocked),
-                      flex: 1, height: '42px', minWidth: '100px', fontSize: '0.7rem', padding: '0 4px'
+                      flex: 1, height: '42px', minWidth: '100px', fontSize: '0.7rem', padding: '0 4px',
+                      ...(!camposSeleccionados ? { opacity: 0.5, cursor: 'not-allowed', filter: 'grayscale(1)' } : {})
                     }}
                     variant={pesoBloqueado ? 'destructive' : 'primary'}
-                    title="Congelar el peso actual para lectura manual"
+                    title={camposSeleccionados ? "Congelar el peso actual" : "Seleccione Área, Máquina y Material primero"}
                   >
-                    {pesoBloqueado ? 'LEER PESO (Descongelar)' : 'CONGELAR PESO'}
+                    {pesoBloqueado ? 'LEER PESO (Seguir Guardando)' : 'GUARDAR PESO'}
                   </SmoothButton>
 
                   <SmoothButton
                     type="button"
                     onClick={handleSumarPeso}
                     variant="success"
-                    disabled={!pesoBloqueado}
+                    disabled={!puedeSumar}
                     style={{
                       flex: 1,
                       height: '42px',
                       minWidth: '100px',
                       fontSize: '0.7rem',
                       padding: '0 4px',
-                      ...(pesoBloqueado ? { backgroundColor: colors.success } : styles.btnSumarDisabled)
+                      ...(puedeSumar ? { backgroundColor: colors.success } : styles.btnSumarDisabled)
                     }}
-                    title={pesoBloqueado ? "Agrega el peso actual al acumulado" : "Debe congelar el peso para habilitar la suma"}
+                    title={
+                      !camposSeleccionados
+                        ? "Seleccione campos primero"
+                        : (!pesoBloqueado
+                          ? "Debe congelar el peso primero"
+                          : (liveWeightRef.current <= 0
+                            ? "Báscula en cero"
+                            : (!puedeSumar ? "La celda debe tener un valor previo para poder sumar" : "Agregar peso a lo existente")))
+                    }
                   >
                     SUMAR PESO
                   </SmoothButton>
@@ -1223,7 +1307,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                     minWidth: '200px',
                     height: '42px',
                     margin: 0,
-                    padding: '0 8px'
+                    padding: '0 8px',
+                    borderColor: camposSeleccionados ? colors.primary : colors.warning
                   }}>
                     {maquinaSeleccionada.maquina ? (
                       <>
@@ -1236,14 +1321,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                         <span style={styles.fixedMachineArea}>{maquinaSeleccionada.area}</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            setMaquinaSeleccionada({ area: '', maquina: '', index: null });
-                            setCeldaActiva(null);
-                            setFiltroArea('');
-                            setFiltroMaquina('');
-                            filtroAreaRef.current = '';
-                            filtroMaquinaRef.current = '';
-                          }}
+                          onClick={limpiarFiltros}
                           style={styles.unfixButton}
                           title="Liberar máquina"
                         >
@@ -1254,14 +1332,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                         </button>
                       </>
                     ) : (
-                      <span style={styles.noFixedMachine}>Ninguna (Click en tabla)</span>
+                      <span style={{ ...styles.noFixedMachine, color: colors.warning, fontWeight: 'bold' }}>
+                        SELECCIONE MÁQUINA Y MATERIAL
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Eliminado el contenedor original de Máquina Fijada que estaba aquí abajo */}
           </CardTransition>
         </div>
 
@@ -1373,11 +1451,55 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           </div>
         </CardTransition>
       </form>
+
+      <ConfirmationModal
+        isOpen={showConfirmUnlock}
+        title="¿Desbloquear celda?"
+        message={`La celda ya tiene registrado ${pendingUnlockData?.valorExistente.toFixed(3)} kg. Si la desbloqueas, el valor se sobreescribirá con el peso actual de la báscula.`}
+        confirmText="Sí, desbloquear"
+        cancelText="Mantener valor"
+        onConfirm={() => ejecutarToggle(true)}
+        onCancel={() => {
+          setShowConfirmUnlock(false);
+          setPendingUnlockData(null);
+        }}
+      />
+
+      <ConfirmationModal
+        isOpen={showConfirmSum}
+        title="¿Confirmar Suma de Peso?"
+        message={
+          <div style={{ textAlign: 'left' }}>
+            <p>Se agregará peso a la máquina: <strong>{pendingSumData?.maquina}</strong></p>
+            <div style={{ backgroundColor: colors.gray50, padding: '10px', borderRadius: radius.md, marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span>Valor actual:</span>
+                <span>{pendingSumData?.valorActual.toFixed(3)} kg</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: colors.success, fontWeight: 'bold' }}>
+                <span>A sumar:</span>
+                <span>+ {pendingSumData?.pesoASumar.toFixed(3)} kg</span>
+              </div>
+              <hr style={{ border: '0', borderTop: `1px solid ${colors.gray200}`, margin: '10px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', color: colors.primary }}>
+                <span>Nuevo Total:</span>
+                <span>{pendingSumData?.nuevoTotal.toFixed(3)} kg</span>
+              </div>
+            </div>
+          </div>
+        }
+        confirmText="Confirmar Suma"
+        cancelText="Cancelar"
+        onConfirm={ejecutarSuma}
+        onCancel={() => {
+          setShowConfirmSum(false);
+          setPendingSumData(null);
+        }}
+      />
     </div>
   );
 };
 
-// Estilos IDÉNTICOS al original con algunas mejoras
 const COL_AREA_WIDTH = '100px';
 const COL_MACHINE_WIDTH = '120px';
 const COL_TOTAL_WIDTH = '100px';
@@ -1407,8 +1529,22 @@ const styles = {
   statItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: spacing.sm, backgroundColor: colors.gray50, borderRadius: radius.md, minWidth: '70px' },
   statLabel: { fontSize: typography.sizes.xs, color: colors.gray600, fontWeight: typography.weights.semibold, textTransform: 'uppercase' },
   statValue: { fontSize: typography.sizes.base, fontWeight: typography.weights.bold },
-  tableContainer: { overflow: 'auto', maxHeight: '600px', borderWidth: '1px', borderStyle: 'solid', borderColor: colors.gray200, borderRadius: radius.md, boxShadow: shadows.sm },
-  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1200px', backgroundColor: colors.surface },
+  tableContainer: {
+    overflowX: 'auto',
+    width: '100%',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colors.gray200,
+    borderRadius: radius.md,
+    boxShadow: shadows.sm,
+    backgroundColor: colors.surface
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    minWidth: '1200px',
+    backgroundColor: colors.surface
+  },
   fixedHeaderArea: { ...baseHeaderStyle, left: 0, width: COL_AREA_WIDTH, minWidth: COL_AREA_WIDTH, maxWidth: COL_AREA_WIDTH, zIndex: 20 },
   fixedHeaderMachine: { ...baseHeaderStyle, left: COL_AREA_WIDTH, width: COL_MACHINE_WIDTH, minWidth: COL_MACHINE_WIDTH, maxWidth: COL_MACHINE_WIDTH, zIndex: 20 },
   tableHeaderCell: { ...baseHeaderStyle, minWidth: COL_DATA_MIN_WIDTH },
@@ -1483,7 +1619,6 @@ const styles = {
     fontWeight: typography.weights.bold
   },
 
-  // Indicador de suma
   sumaIndicator: {
     position: 'absolute',
     top: '-6px',
@@ -1501,7 +1636,6 @@ const styles = {
     zIndex: 10
   },
 
-  // Estilo para el botón de sumar
   btnSumar: {
     backgroundColor: colors.success,
     color: '#fff',

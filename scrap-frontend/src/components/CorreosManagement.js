@@ -1,5 +1,5 @@
 /* src/components/CorreosManagment.js */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { apiClient } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -15,8 +15,9 @@ const CorreosManagement = () => {
     const [loading, setLoading] = useState(true);
     const [nuevo, setNuevo] = useState({ nombre: '', email: '' });
     const [guardando, setGuardando] = useState(false);
+    
+    const [filtro, setFiltro] = useState('');
 
-    // Estado para la alerta personalizada
     const [showDeleteAlert, setShowDeleteAlert] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -35,6 +36,15 @@ const CorreosManagement = () => {
             setLoading(false);
         }
     };
+
+    const correosFiltrados = useMemo(() => {
+        if (!filtro.trim()) return correos;
+        const search = filtro.toLowerCase();
+        return correos.filter(c => 
+            c.nombre.toLowerCase().includes(search) || 
+            c.email.toLowerCase().includes(search)
+        );
+    }, [correos, filtro]);
 
     const handleGuardar = async (e) => {
         e.preventDefault();
@@ -56,13 +66,11 @@ const CorreosManagement = () => {
         }
     };
 
-    // Abre el modal en lugar de window.confirm
     const handleEliminarClick = (id, nombre) => {
         setItemToDelete({ id, nombre });
         setShowDeleteAlert(true);
     };
 
-    // Ejecuta la eliminación real
     const confirmEliminar = async () => {
         if (!itemToDelete) return;
         setIsDeleting(true);
@@ -108,8 +116,46 @@ const CorreosManagement = () => {
         formRow: {
             display: 'flex',
             gap: spacing.md,
-            alignItems: 'flex-end', // Alinea los elementos al fondo (inputs y botón)
+            alignItems: 'flex-end',
             flexWrap: 'wrap'
+        },
+        searchSection: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: spacing.lg,
+            gap: spacing.md,
+            flexWrap: 'wrap'
+        },
+        searchWrapper: {
+            position: 'relative',
+            flex: 1,
+            maxWidth: '400px'
+        },
+        searchIcon: {
+            position: 'absolute',
+            left: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: colors.gray400,
+            pointerEvents: 'none'
+        },
+        searchInput: {
+            width: '100%',
+            padding: '10px 12px 10px 40px',
+            borderRadius: radius.md,
+            border: `1px solid ${colors.gray300}`,
+            fontSize: typography.sizes.sm,
+            outline: 'none',
+            transition: 'border-color 0.2s',
+            ':focus': {
+                borderColor: colors.primary
+            }
+        },
+        resultsLabel: {
+            fontSize: typography.sizes.sm,
+            color: colors.gray500,
+            fontWeight: '600'
         },
         inputGroup: {
             flex: 1,
@@ -131,12 +177,7 @@ const CorreosManagement = () => {
             gap: spacing.md,
             transition: 'all 0.3s ease',
             position: 'relative',
-            overflow: 'hidden',
-            ':hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: shadows.md,
-                borderColor: colors.primaryLight
-            }
+            overflow: 'hidden'
         },
         avatar: {
             width: '48px',
@@ -185,11 +226,7 @@ const CorreosManagement = () => {
             alignItems: 'center',
             justifyContent: 'center',
             width: '32px',
-            height: '32px',
-            ':hover': {
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: colors.error
-            }
+            height: '32px'
         },
         empty: {
             gridColumn: '1 / -1',
@@ -200,7 +237,6 @@ const CorreosManagement = () => {
             borderRadius: radius.lg,
             border: `2px dashed ${colors.gray300}`
         },
-        // Estilos del Modal de Confirmación
         modalOverlay: {
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
@@ -255,7 +291,6 @@ const CorreosManagement = () => {
 
     if (loading) return <LoadingSpinner message="Cargando directorio..." />;
 
-    // Renderizado del Modal mediante Portal para asegurar que quede encima de todo
     const deleteAlertModal = showDeleteAlert && createPortal(
         <div style={styles.modalOverlay} onClick={() => !isDeleting && setShowDeleteAlert(false)}>
             <div style={styles.modalCard} onClick={e => e.stopPropagation()}>
@@ -305,7 +340,6 @@ const CorreosManagement = () => {
 
     return (
         <div style={styles.container}>
-            {/* Formulario para agregar */}
             <CardTransition delay={0}>
                 <div style={styles.formCard}>
                     <div style={styles.formHeader}>
@@ -341,32 +375,43 @@ const CorreosManagement = () => {
                             type="submit" 
                             disabled={guardando}
                             style={{
-                                height: '42px', // Altura estándar para inputs grandes
+                                height: '42px', 
                                 padding: '0 24px', 
                                 backgroundColor: colors.primary,
                                 color: 'white',
-                                marginBottom: '0px' // Eliminado el margen inferior para alinear perfectamente
+                                marginBottom: '0px'
                             }}
                         >
-                            {guardando ? (
-                                <>
-                                    <span style={{animation: 'spin 1s linear infinite', marginRight: '8px', display:'inline-block'}}>↻</span>
-                                    Guardando...
-                                </>
-                            ) : (
-                                <>
-                                    <span style={{marginRight: '8px', fontWeight: 'bold'}}>+</span> Agregar
-                                </>
-                            )}
+                            {guardando ? 'Guardando...' : '+ Agregar'}
                         </SmoothButton>
                     </form>
                 </div>
             </CardTransition>
 
-            {/* Grid de Destinatarios */}
+            <div style={styles.searchSection}>
+                <div style={styles.searchWrapper}>
+                    <div style={styles.searchIcon}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </div>
+                    <input 
+                        type="text"
+                        placeholder="Buscar por nombre o correo..."
+                        value={filtro}
+                        onChange={(e) => setFiltro(e.target.value)}
+                        style={styles.searchInput}
+                    />
+                </div>
+                <div style={styles.resultsLabel}>
+                    {correosFiltrados.length} {correosFiltrados.length === 1 ? 'destinatario' : 'destinatarios'}
+                </div>
+            </div>
+
             <div style={styles.grid}>
-                {correos.length > 0 ? (
-                    correos.map((c, index) => (
+                {correosFiltrados.length > 0 ? (
+                    correosFiltrados.map((c, index) => (
                         <CardTransition key={c.id} delay={Math.min(index * 50, 500)}>
                             <div 
                                 style={styles.card}
@@ -403,7 +448,7 @@ const CorreosManagement = () => {
                                 >
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                     </svg>
                                 </button>
                             </div>
@@ -415,8 +460,12 @@ const CorreosManagement = () => {
                             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                             <polyline points="22,6 12,13 2,6"></polyline>
                         </svg>
-                        <p style={{ margin: 0, fontWeight: 500 }}>No hay destinatarios registrados.</p>
-                        <p style={{ fontSize: '0.9rem' }}>Agrega correos para habilitar el envío de reportes.</p>
+                        <p style={{ margin: 0, fontWeight: 500 }}>
+                            {filtro ? 'No se encontraron coincidencias.' : 'No hay destinatarios registrados.'}
+                        </p>
+                        <p style={{ fontSize: '0.9rem' }}>
+                            {filtro ? 'Intenta con otro término de búsqueda.' : 'Agrega correos para habilitar el envío de reportes.'}
+                        </p>
                     </div>
                 )}
             </div>

@@ -4,63 +4,54 @@ import { useAuth } from '../context/AuthContext';
 import { colors, spacing, typography, baseComponents } from '../styles/designSystem';
 import LoadingSpinner from './LoadingSpinner';
 import SmoothButton from './SmoothButton';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading, logout } = useAuth();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      window.location.href = '/login';
-    }
-  }, [user, loading]);
+  const navigate = useNavigate();
 
   const handleGoToDashboard = () => {
-    if (user?.role === 'admin') {
-      window.location.href = '/admin';
-    } else if (user?.role === 'operador') {
-      window.location.href = '/operador';
-    } else if (user?.role === 'receptor') {
-      window.location.href = '/receptor';
+    if (user?.role) {
+      navigate(`/${user.role}`, { replace: true });
     } else {
-      window.location.href = '/login';
+      navigate('/login', { replace: true });
     }
   };
 
   const handleLogoutAndGoToLogin = async () => {
     try {
       await logout();
-      window.location.href = '/login';
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-      window.location.href = '/login';
+    } finally {
+      navigate('/login', { replace: true });
     }
   };
 
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        <LoadingSpinner 
-          size="lg" 
+        <LoadingSpinner
+          size="lg"
           message={
             <div style={styles.loadingTextContainer}>
-                <p style={styles.loadingMessage}>Verificando autenticación</p>
-                <p style={styles.loadingSubmessage}>Espere un momento por favor...</p>
+              <p style={styles.loadingMessage}>Verificando autenticación</p>
+              <p style={styles.loadingSubmessage}>Espere un momento por favor...</p>
             </div>
-          } 
+          }
         />
       </div>
     );
   }
 
   if (!user) {
-    return null; 
+    return <Navigate to="/login" replace />;
   }
 
   if (requiredRole) {
-    const hasPermission = Array.isArray(requiredRole) 
+    const hasPermission = Array.isArray(requiredRole)
       ? requiredRole.includes(user.role)
       : user.role === requiredRole;
-    
+
     if (!hasPermission) {
       return (
         <div style={styles.errorContainer}>
@@ -82,24 +73,24 @@ const ProtectedRoute = ({ children, requiredRole }) => {
                 Rol requerido: {Array.isArray(requiredRole) ? requiredRole.join(', ') : requiredRole.toUpperCase()}
               </span>
             </p>
-            
+
             <div style={styles.buttonGroup}>
-              <SmoothButton 
+              <SmoothButton
                 onClick={() => window.history.back()}
                 variant="secondary"
                 style={styles.secondaryButton}
               >
                 Volver Atrás
               </SmoothButton>
-              
-              <SmoothButton 
+
+              <SmoothButton
                 onClick={handleGoToDashboard}
                 style={styles.dashboardButton}
               >
                 Ir a mi Dashboard
               </SmoothButton>
-              
-              <SmoothButton 
+
+              <SmoothButton
                 onClick={handleLogoutAndGoToLogin}
                 variant="destructive"
                 style={styles.logoutButton}
@@ -141,7 +132,7 @@ const styles = {
     margin: 0,
     opacity: 0.8
   },
-  
+
   errorContainer: {
     display: 'flex',
     justifyContent: 'center',
@@ -156,7 +147,7 @@ const styles = {
     left: 0,
     zIndex: 9999
   },
-  
+
   errorContent: {
     ...baseComponents.card,
     display: 'flex',
@@ -169,32 +160,32 @@ const styles = {
     width: '100%',
     margin: 'auto'
   },
-  
+
   errorIconCircle: {
     width: '64px',
     height: '64px',
     borderRadius: '50%',
-    backgroundColor: colors.error + '15', 
+    backgroundColor: colors.error + '15',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xs
   },
-  
+
   errorTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.error,
     margin: 0
   },
-  
+
   errorMessage: {
     fontSize: typography.sizes.base,
     color: colors.gray600,
     margin: 0,
     lineHeight: 1.6
   },
-  
+
   buttonGroup: {
     display: 'flex',
     flexDirection: 'column',
@@ -203,19 +194,19 @@ const styles = {
     justifyContent: 'center',
     alignItems: 'center'
   },
-  
+
   secondaryButton: {
     width: '100%',
     maxWidth: '250px'
   },
-  
+
   dashboardButton: {
     width: '100%',
     maxWidth: '250px',
     backgroundColor: colors.primary,
     color: '#fff'
   },
-  
+
   logoutButton: {
     width: '100%',
     maxWidth: '250px',
