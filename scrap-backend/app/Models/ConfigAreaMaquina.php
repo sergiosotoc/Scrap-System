@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class ConfigAreaMaquina extends Model
 {
     protected $table = 'config_areas_maquinas';
-    
+
     protected $fillable = [
-        'area_nombre', 'maquina_nombre', 'orden', 'activa'
+        'area_nombre',
+        'maquina_nombre',
+        'orden',
+        'activa'
     ];
 
 
@@ -21,8 +24,17 @@ class ConfigAreaMaquina extends Model
     public static function getMaquinasPorArea($area)
     {
         return self::where('area_nombre', $area)
-                   ->orderBy('orden')
-                   ->pluck('maquina_nombre')
-                   ->toArray();
+            ->orderBy('orden')
+            ->pluck('maquina_nombre')
+            ->toArray();
+    }
+
+    public function materialesPermitidos()
+    {
+        return $this->belongsToMany(ConfigTipoScrap::class, 
+            'maquina_material_permitido', 
+            'config_area_maquina_id', 
+            'config_tipo_scrap_id'
+            );
     }
 }

@@ -309,7 +309,17 @@ const OperadorDashboard = () => {
 
         basculaRow: { backgroundColor: '#EFF6FF', borderLeft: `4px solid ${colors.primary}` },
         manualRow: { backgroundColor: '#FFFBEB', borderLeft: `4px solid ${colors.warning}` },
+        mixtoRow: {
+            backgroundColor: '#F0F9FF',
+            borderLeft: `4px solid ${colors.info}`
+        },
 
+        badgeMixto: {
+            ...baseComponents.badge,
+            backgroundColor: colors.info + '20',
+            color: colors.info,
+            gap: spacing.xs
+        },
         td: { padding: spacing.md, fontSize: typography.sizes.sm, color: colors.gray700, borderBottom: `1px solid ${colors.gray200}`, whiteSpace: 'nowrap' },
         numericCell: { textAlign: 'right', fontFamily: typography.fontMono, fontWeight: typography.weights.medium },
         totalCell: { textAlign: 'right', fontFamily: typography.fontMono, fontWeight: typography.weights.bold, color: colors.success },
@@ -386,10 +396,27 @@ const OperadorDashboard = () => {
     };
 
     const totalRegistros = registrosFiltrados.length;
-    const numFilasConPeso = registrosFiltrados.filter(r => parseFloat(r.peso_total) > 0).length;
-    const totalKg = registrosFiltrados.reduce((total, r) => total + (parseFloat(r.peso_total) || 0), 0);
-    const conBascula = registrosFiltrados.filter(r => r.conexion_bascula).length;
-    const manuales = registrosFiltrados.filter(r => !r.conexion_bascula).length;
+
+    const numFilasConPeso = registrosFiltrados.filter(
+        r => parseFloat(r.peso_total) > 0
+    ).length;
+
+    const totalKg = registrosFiltrados.reduce(
+        (total, r) => total + (parseFloat(r.peso_total) || 0),
+        0
+    );
+
+    const conBascula = registrosFiltrados.filter(
+        r => r.tipo_captura === 'bascula'
+    ).length;
+
+    const manuales = registrosFiltrados.filter(
+        r => r.tipo_captura === 'manual'
+    ).length;
+
+    const mixtos = registrosFiltrados.filter(
+        r => r.tipo_captura === 'mixto'
+    ).length;
 
     if (loading) {
         return (
@@ -662,31 +689,119 @@ const OperadorDashboard = () => {
                                 </thead>
                                 <tbody>
                                     {registros.map((r, index) => (
-                                        <tr key={r.id} style={{ ...styles.tr(index), ...(r.conexion_bascula ? styles.basculaRow : styles.manualRow) }} className="table-row-anim" onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.98)'} onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}>
-                                            <td style={styles.td}>{new Date(r.fecha_registro).toLocaleDateString('es-ES')}</td>
-                                            <td style={styles.td}>{new Date(r.fecha_registro).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</td>
-                                            <td style={styles.td}><span style={styles.turnoBadge}>T{r.turno}</span></td>
-                                            <td style={styles.td}><span style={styles.areaTag}>{r.area_real}</span></td>
-                                            <td style={styles.td}><strong>{r.maquina_real}</strong></td>
+                                        <tr
+                                            key={r.id}
+                                            style={{
+                                                ...styles.tr(index),
 
-                                            {config?.tipos_scrap && Array.isArray(config.tipos_scrap) ? config.tipos_scrap.sort((a, b) => a.orden - b.orden).map(mat => {
-                                                const detalle = r.materiales_resumen
-                                                    ? r.materiales_resumen.find(d => d.nombre === mat.tipo_nombre)
-                                                    : null;
-                                                const peso = detalle ? parseFloat(detalle.peso) : 0;
+                                                ...(r.tipo_captura === 'mixto'
+                                                    ? styles.mixtoRow
+                                                    : r.conexion_bascula
+                                                        ? styles.basculaRow
+                                                        : styles.manualRow)
+                                            }}
+                                            className="table-row-anim"
+                                            onMouseEnter={(e) =>
+                                                (e.currentTarget.style.filter = 'brightness(0.98)')
+                                            }
+                                            onMouseLeave={(e) =>
+                                                (e.currentTarget.style.filter = 'none')
+                                            }
+                                        >
+                                            <td style={styles.td}>
+                                                {new Date(r.fecha_registro).toLocaleDateString('es-ES')}
+                                            </td>
 
-                                                return (
-                                                    <td key={mat.id} style={{ ...styles.td, ...styles.numericCell, color: peso > 0 ? colors.gray900 : colors.gray400 }}>
-                                                        {peso > 0 ? <AnimatedCounter value={peso} duration={500} decimals={2} /> : '-'}
-                                                    </td>
-                                                );
-                                            }) : null}
+                                            <td style={styles.td}>
+                                                {new Date(r.fecha_registro).toLocaleTimeString('es-ES', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </td>
 
-                                            <td style={{ ...styles.td, ...styles.totalCell }}><strong><AnimatedCounter value={r.peso_total} duration={500} decimals={2} /></strong></td>
-                                            <td style={styles.td}>{r.conexion_bascula ? <span style={styles.badgeSuccess}>BÁSCULA</span> : <span style={styles.badgeWarn}>MANUAL</span>}</td>
+                                            <td style={styles.td}>
+                                                <span style={styles.turnoBadge}>T{r.turno}</span>
+                                            </td>
+
+                                            <td style={styles.td}>
+                                                <span style={styles.areaTag}>{r.area_real}</span>
+                                            </td>
+
+                                            <td style={styles.td}>
+                                                <strong>{r.maquina_real}</strong>
+                                            </td>
+
+                                            {config?.tipos_scrap &&
+                                                Array.isArray(config.tipos_scrap)
+                                                ? config.tipos_scrap
+                                                    .sort((a, b) => a.orden - b.orden)
+                                                    .map((mat) => {
+                                                        const detalle = r.materiales_resumen
+                                                            ? r.materiales_resumen.find(
+                                                                (d) => d.nombre === mat.tipo_nombre
+                                                            )
+                                                            : null;
+
+                                                        const peso = detalle
+                                                            ? parseFloat(detalle.peso)
+                                                            : 0;
+
+                                                        return (
+                                                            <td
+                                                                key={mat.id}
+                                                                style={{
+                                                                    ...styles.td,
+                                                                    ...styles.numericCell,
+                                                                    color:
+                                                                        peso > 0
+                                                                            ? colors.gray900
+                                                                            : colors.gray400
+                                                                }}
+                                                            >
+                                                                {peso > 0 ? (
+                                                                    <AnimatedCounter
+                                                                        value={peso}
+                                                                        duration={500}
+                                                                        decimals={2}
+                                                                    />
+                                                                ) : (
+                                                                    '-'
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })
+                                                : null}
+
+                                            <td style={{ ...styles.td, ...styles.totalCell }}>
+                                                <strong>
+                                                    <AnimatedCounter
+                                                        value={r.peso_total}
+                                                        duration={500}
+                                                        decimals={2}
+                                                    />
+                                                </strong>
+                                            </td>
+
+                                            {/* MÉTODO */}
+                                            <td style={styles.td}>
+                                                {r.tipo_captura === 'mixto' ? (
+                                                    <span style={styles.badgeMixto}>
+                                                        MIXTO
+                                                    </span>
+                                                ) : r.conexion_bascula ? (
+                                                    <span style={styles.badgeSuccess}>
+                                                        BÁSCULA
+                                                    </span>
+                                                ) : (
+                                                    <span style={styles.badgeWarn}>
+                                                        MANUAL
+                                                    </span>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
+
                             </table>
                         ) : (
                             <div style={styles.emptyState}>

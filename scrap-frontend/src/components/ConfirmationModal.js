@@ -63,9 +63,9 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
 
   return createPortal(
     <div style={styles.overlay} onClick={onCancel}>
-      <CardTransition 
-        delay={0} 
-        style={styles.modal} 
+      <CardTransition
+        delay={0}
+        style={styles.modal}
         onClick={e => e.stopPropagation()}
       >
         <div style={styles.iconContainer}>
@@ -76,7 +76,9 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
           </svg>
         </div>
         <h3 style={styles.title}>{title}</h3>
-        <p style={styles.message}>{message}</p>
+        <div style={styles.message}>
+          {message}
+        </div>
         <div style={styles.actions}>
           <SmoothButton variant="secondary" onClick={onCancel} style={{ flex: 1 }}>
             {cancelText}

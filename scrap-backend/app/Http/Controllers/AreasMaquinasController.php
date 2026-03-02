@@ -1,5 +1,6 @@
 <?php
 /* app/Http/Controllers/AreasMaquinasController.php */
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -10,9 +11,10 @@ class AreasMaquinasController extends Controller
 {
     public function index()
     {
-        return ConfigAreaMaquina::orderBy('area_nombre')
-            ->orderBy('orden')
-            ->get();
+        return ConfigAreaMaquina::with('materialesPermitidos')
+        ->orderBy('area_nombre')
+        ->orderBy('orden')
+        ->get();
     }
 
     public function store(Request $request)
@@ -20,8 +22,8 @@ class AreasMaquinasController extends Controller
         $validated = $request->validate([
             'area_nombre' => 'required|string|max:100',
             'maquina_nombre' => [
-                'required', 
-                'string', 
+                'required',
+                'string',
                 'max:100',
                 Rule::unique('config_areas_maquinas')->where(function ($query) use ($request) {
                     return $query->where('area_nombre', $request->area_nombre);
@@ -53,5 +55,54 @@ class AreasMaquinasController extends Controller
         $config->delete();
 
         return response()->json(['message' => 'Máquina eliminada del área correctamente']);
+    }
+
+    public function syncMateriales(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'materiales_ids' => 'present|array',
+            'materiales_ids.*' => 'exists:config_tipos_scrap,id'
+        ]);
+
+        try {
+            $maquina = ConfigAreaMaquina::findOrFail($id);
+            $maquina->materialesPermitidos()->sync($validated['materiales_ids']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Materiales actualizados correctamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function syncMaterialesPorArea(Request $request)
+    {
+        $validated = $request->validate([
+            'area_nombre' => 'required|string',
+            'materiales_ids' => 'present|array',
+            'materiales_ids.*' => 'exists:config_tipos_scrap,id'
+        ]);
+
+        try {
+            // Buscamos todas las máquinas que pertenecen a esa área
+            $maquinas = ConfigAreaMaquina::where('area_nombre', $validated['area_nombre'])->get();
+
+            foreach ($maquinas as $maquina) {
+                // Sincronizamos cada máquina con la misma lista de materiales
+                $maquina->materialesPermitidos()->sync($validated['materiales_ids']);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Materiales actualizados para todas las máquinas de " . $validated['area_nombre']
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 }

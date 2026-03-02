@@ -6,12 +6,14 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\DB;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
     }
+
     public function boot(): void
     {
         if (!app()->runningInConsole()) {
@@ -35,6 +37,12 @@ class AppServiceProvider extends ServiceProvider
             ];
             
             Config::set('sanctum.stateful', array_unique(array_merge($currentStateful, $dynamicStateful)));
+        }
+
+        try {
+            DB::statement("SET time_zone = '-06:00'");
+        } catch (\Exception $e) {
+            logger()->warning("No se pudo establecer la zona horaria en MySQL: ".$e->getMessage());
         }
     }
 }

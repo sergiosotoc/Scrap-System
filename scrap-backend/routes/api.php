@@ -46,6 +46,8 @@ Route::middleware('api')->group(function () {
         Route::get('/', [AreasMaquinasController::class, 'index']);
         Route::post('/', [AreasMaquinasController::class, 'store']);
         Route::delete('/{id}', [AreasMaquinasController::class, 'destroy']);
+        Route::post('/{id}/sync-materiales', [AreasMaquinasController::class, 'syncMateriales']);
+        Route::post('/sync-por-area', [AreasMaquinasController::class, 'syncMaterialesPorArea']);
     });
 
     // GESTIÓN DE DESTINATARIOS DE CORREO (Solo Admin)
@@ -97,6 +99,7 @@ Route::middleware('api')->group(function () {
         Route::post('/batch', [RegistrosScrapController::class, 'storeBatch']);
         Route::get('/configuracion', [RegistrosScrapController::class, 'getConfiguracion']);
         Route::get('/stats', [RegistrosScrapController::class, 'getRegistroScrapStats']);
+        Route::post('/check-existentes', [RegistrosScrapController::class, 'checkExistentes']);
     });
 
     // Recepciones de scrap

@@ -50,6 +50,7 @@ const ScrapRow = React.memo(({
   fila,
   realIndex,
   materialesFlat,
+  config,
   campoBasculaActivo,
   celdaActiva,
   pesoBloqueado,
@@ -58,10 +59,13 @@ const ScrapRow = React.memo(({
   onChange,
   onBlur,
   onKeyPress,
+  onEditStart,
+  onEditEnd,
   animate,
   indexDisplay,
   celdasSumadas
 }) => {
+
   const totalFila = useMemo(() => {
     let total = 0;
     materialesFlat.forEach(m => {
@@ -129,10 +133,16 @@ const ScrapRow = React.memo(({
                 inputMode="decimal"
                 value={valor}
                 onChange={(e) => onChange(realIndex, inputKey, e.target.value)}
-                onBlur={() => onBlur(realIndex, inputKey)}
-                onKeyPress={(e) => onKeyPress(e, realIndex, inputKey)}
+                onBlur={() => {
+                  onBlur(realIndex, inputKey);
+                  if (onEditEnd) onEditEnd();
+                }}
+                onKeyDown={(e) => onKeyPress(e, realIndex, inputKey)}
                 onClick={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
-                onFocus={() => onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real)}
+                onFocus={(e) => {
+                  onFocus(realIndex, inputKey, fila.area_real, fila.maquina_real);
+                  if (onEditStart) onEditStart(realIndex, inputKey);
+                }}
                 style={{
                   ...styles.inputCell,
                   ...(tieneValor ? styles.hasData : {}),
@@ -195,6 +205,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const [config, setConfig] = useState(null);
   const [materialesFlat, setMaterialesFlat] = useState([]);
+  const [materialesPorArea, setMaterialesPorArea] = useState({});
+  const [materialesFiltrados, setMaterialesFiltrados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tablaData, setTablaData] = useState([]);
 
@@ -220,6 +232,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const [editingValues, setEditingValues] = useState({});
   const [celdasSumadas, setCeldasSumadas] = useState({});
+
+  const [celdaEditando, setCeldaEditando] = useState(null);
+  const celdaEditandoRef = useRef(null);
+
+  useEffect(() => {
+    celdaEditandoRef.current = celdaEditando;
+  }, [celdaEditando]);
+
 
   const [formData, setFormData] = useState({
     turno: storageService.getCurrentTurno(),
@@ -252,6 +272,9 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   const [showConfirmSum, setShowConfirmSum] = useState(false);
   const [pendingSumData, setPendingSumData] = useState(null);
 
+  const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState(null);
+
   useEffect(() => { onLoadCompleteRef.current = onLoadComplete; }, [onLoadComplete]);
   useEffect(() => { maquinaSeleccionadaRef.current = maquinaSeleccionada; }, [maquinaSeleccionada]);
   useEffect(() => { celdaActivaRef.current = celdaActiva; }, [celdaActiva]);
@@ -263,6 +286,10 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   useEffect(() => { celdasSumadasRef.current = celdasSumadas; }, [celdasSumadas]);
 
   useEffect(() => {
+    editingValuesRef.current = editingValues;
+  }, [editingValues]);
+
+  useEffect(() => {
     if (pesoBloqueado) {
       lockedTargetRef.current = {
         index: maquinaSeleccionadaRef.current.index !== null ? maquinaSeleccionadaRef.current.index : celdaActivaRef.current?.areaIndex,
@@ -272,27 +299,6 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       lockedTargetRef.current = null;
     }
   }, [pesoBloqueado]);
-
-  useEffect(() => {
-    Object.keys(editingValues).forEach(key => {
-      const [areaIndexStr, campo] = key.split('_');
-      const areaIndex = parseInt(areaIndexStr);
-
-      if (!isNaN(areaIndex) && tablaData[areaIndex]) {
-        const fila = tablaData[areaIndex];
-        if (fila.conexion_bascula === true) {
-          setTablaData(prev => {
-            const newData = [...prev];
-            newData[areaIndex] = {
-              ...newData[areaIndex],
-              conexion_bascula: false
-            };
-            return newData;
-          });
-        }
-      }
-    });
-  }, [editingValues]);
 
 
   const saveToStorageOnDemand = useCallback(() => {
@@ -352,22 +358,49 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         if (!mounted) return;
         setConfig(configData);
 
-        let flatMats = [];
+        // Procesar todos los materiales disponibles
+        let allMaterials = [];
         if (configData.tipos_scrap) {
           if (Array.isArray(configData.tipos_scrap)) {
-            flatMats = configData.tipos_scrap;
+            allMaterials = configData.tipos_scrap;
           } else {
             Object.values(configData.tipos_scrap).forEach(grupo => {
-              flatMats = [...flatMats, ...grupo];
+              allMaterials = [...allMaterials, ...grupo];
             });
           }
-          flatMats.sort((a, b) => a.orden - b.orden);
-          setMaterialesFlat(flatMats);
+          allMaterials.sort((a, b) => a.orden - b.orden);
         }
 
+        // Crear mapa de materiales por área
+        const materialesPorAreaMap = {};
+
+        if (configData?.areas_maquinas) {
+          Object.entries(configData.areas_maquinas).forEach(([areaNombre, maquinas]) => {
+            // Si el área tiene máquinas, tomamos los materiales de la primera máquina
+            // (asumimos que todas las máquinas del área tienen los mismos materiales)
+            if (maquinas.length > 0 && maquinas[0].materiales_permitidos) {
+              materialesPorAreaMap[areaNombre] = maquinas[0].materiales_permitidos;
+            } else {
+              materialesPorAreaMap[areaNombre] = [];
+            }
+          });
+        }
+
+        setMaterialesPorArea(materialesPorAreaMap);
+
+        // Si hay un área seleccionada, filtrar materiales
+        let materialesIniciales = allMaterials;
+        if (filtroArea && materialesPorAreaMap[filtroArea]?.length > 0) {
+          const idsPermitidos = new Set(materialesPorAreaMap[filtroArea].map(m => m.id));
+          materialesIniciales = allMaterials.filter(m => idsPermitidos.has(m.id));
+        }
+
+        setMaterialesFlat(allMaterials);
+        setMaterialesFiltrados(materialesIniciales);
+
         let initialMaterial = '';
-        if (flatMats.length > 0) {
-          initialMaterial = `material_${flatMats[0].id}`;
+        if (materialesIniciales.length > 0) {
+          initialMaterial = `material_${materialesIniciales[0].id}`;
           if (!campoBasculaActivoRef2.current) {
             setCampoBasculaActivo(initialMaterial);
             campoBasculaActivoRef2.current = initialMaterial;
@@ -387,7 +420,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 peso_total: 0,
                 conexion_bascula: false
               };
-              flatMats.forEach(m => {
+              // Inicializar TODOS los materiales (incluyendo los no permitidos)
+              allMaterials.forEach(m => {
                 row[`material_${m.id}`] = 0;
               });
               data.push(row);
@@ -409,6 +443,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
             if (savedData.filtroArea) {
               setFiltroArea(savedData.filtroArea);
               filtroAreaRef.current = savedData.filtroArea;
+
+              // Actualizar materiales filtrados según el área guardada
+              if (materialesPorAreaMap[savedData.filtroArea]?.length > 0) {
+                const idsPermitidos = new Set(materialesPorAreaMap[savedData.filtroArea].map(m => m.id));
+                setMaterialesFiltrados(allMaterials.filter(m => idsPermitidos.has(m.id)));
+              } else {
+                setMaterialesFiltrados(allMaterials);
+              }
             }
             if (savedData.filtroMaquina) {
               setFiltroMaquina(savedData.filtroMaquina);
@@ -429,7 +471,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 return {
                   ...row,
                   ...savedRow,
-                  ...flatMats.reduce((acc, m) => {
+                  ...allMaterials.reduce((acc, m) => {
                     const key = `material_${m.id}`;
                     acc[key] = savedRow[key] || 0;
                     return acc;
@@ -474,8 +516,32 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       setMaquinasDisponibles([]);
       return;
     }
+
     const maquinas = config.areas_maquinas[filtroArea]?.map(m => m.maquina_nombre) || [];
     setMaquinasDisponibles(maquinas);
+
+    // Filtrar materiales según el área seleccionada
+    if (filtroArea && materialesPorArea[filtroArea]?.length > 0) {
+      const idsPermitidos = new Set(materialesPorArea[filtroArea].map(m => m.id));
+      const filtrados = materialesFlat.filter(m => idsPermitidos.has(m.id));
+      setMaterialesFiltrados(filtrados);
+
+      // Si el material activo no está en los permitidos, cambiar al primero disponible
+      if (filtrados.length > 0) {
+        const materialActualId = campoBasculaActivo.replace('material_', '');
+        if (!idsPermitidos.has(parseInt(materialActualId))) {
+          const nuevoMaterial = `material_${filtrados[0].id}`;
+          setCampoBasculaActivo(nuevoMaterial);
+          campoBasculaActivoRef2.current = nuevoMaterial;
+        }
+      }
+    } else if (filtroArea) {
+      // Si el área no tiene materiales asignados, mostrar todos
+      setMaterialesFiltrados(materialesFlat);
+    } else {
+      // Si no hay área seleccionada, mostrar todos
+      setMaterialesFiltrados(materialesFlat);
+    }
 
     if (maquinas.length === 1 && !filtroMaquina) {
       const maquinaUnica = maquinas[0];
@@ -490,7 +556,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       setFiltroMaquina(maquinaSeleccionada.maquina);
       filtroMaquinaRef.current = maquinaSeleccionada.maquina;
     }
-  }, [filtroArea, config, filtroMaquina, maquinaSeleccionada, tablaData]);
+  }, [filtroArea, config, filtroMaquina, maquinaSeleccionada, tablaData, materialesPorArea, materialesFlat, campoBasculaActivo]);
 
   const handleLimpiarSumas = useCallback(() => {
     if (Object.keys(celdasSumadas).length === 0) {
@@ -539,8 +605,17 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   }, [filtroArea, filtroMaquina, campoBasculaActivo, tablaData, maquinaSeleccionada.index, celdaActiva?.campo]);
 
   const handleCellFocus = useCallback((areaIndex, campo, area, maquina) => {
-    setPesoBloqueado(false);
-    pesoBloqueadoRef.current = false;
+    const filaDestino = tablaData[areaIndex];
+    const valorExistente = filaDestino ? parseFloat(filaDestino[campo]) || 0 : 0;
+
+    if (valorExistente > 0) {
+      setPesoBloqueado(true);
+      pesoBloqueadoRef.current = true;
+      addToast(`Celda con datos: Peso congelado para evitar sobrescribir`, 'info');
+    } else {
+      setPesoBloqueado(false);
+      pesoBloqueadoRef.current = false;
+    }
 
     setCeldaActiva({ areaIndex, campo });
     setCampoBasculaActivo(campo);
@@ -554,20 +629,72 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     celdaActivaRef.current = { areaIndex, campo };
     campoBasculaActivoRef.current = campo;
     maquinaSeleccionadaRef.current = { area, maquina, index: areaIndex };
-  }, []);
+  }, [tablaData, addToast]);
 
   const handleKeyPress = useCallback((e, areaIndex, campo) => {
+    if (e.key !== 'Enter') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const key = `${areaIndex}_${campo}`;
+    const valorManual = editingValuesRef.current[key];
+
+    if (valorManual === undefined) return;
+
+    const val = valorManual === '' ? 0 : round3(parseFloat(valorManual) || 0);
+
+    setTablaData(prev => {
+      const newData = [...prev];
+      const filaActualizada = { ...newData[areaIndex] };
+
+      filaActualizada[campo] = val;
+
+      let total = 0;
+      materialesFiltrados.forEach(m => {
+        total += parseFloat(filaActualizada[`material_${m.id}`]) || 0;
+      });
+
+      filaActualizada.peso_total = round3(total);
+      const fueManual = editingValuesRef.current[key] !== undefined;
+
+      filaActualizada.conexion_bascula = !fueManual;
+
+      newData[areaIndex] = filaActualizada;
+      return newData;
+    });
+
+    setEditingValues(prev => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+
+    setPesoBloqueado(true);
+    pesoBloqueadoRef.current = true;
+
+    setTimeout(() => autoSaveToStorage(), 50);
+
+    if (e.target) e.target.blur();
+
+    addToast('Valor guardado y peso congelado', 'success');
+
+  }, [materialesFiltrados, autoSaveToStorage, addToast]);
+
+
+  const handleFormKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
+      const tag = e.target.tagName;
+
+      if (tag === 'INPUT' && e.target.dataset.tabla === 'true') {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
-
-      e.target.blur();
-
-      setPesoBloqueado(true);
-
-      addToast('Valor fijado y peso congelado', 'info');
     }
-  }, [addToast]);
+  }, []);
+
 
   const handleInputChangeTabla = useCallback((areaIndex, campo, valor) => {
     const key = `${areaIndex}_${campo}`;
@@ -576,6 +703,16 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       setEditingValues(prev => ({ ...prev, [key]: valor }));
     }
   }, []);
+
+  const handleEditStart = useCallback((areaIndex, campo) => {
+    const key = `${areaIndex}_${campo}`;
+    setCeldaEditando(key);
+  }, []);
+
+  const handleEditEnd = useCallback(() => {
+    setCeldaEditando(null);
+  }, []);
+
 
   const handleInputBlur = useCallback((areaIndex, campo) => {
     const key = `${areaIndex}_${campo}`;
@@ -588,7 +725,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
     if (Math.abs(valorPrevio - val) > 0.001) {
       const fila = tablaData[areaIndex];
-      const materialNombre = materialesFlat.find(m => `material_${m.id}` === campo)?.tipo_nombre || campo;
+      const materialNombre = materialesFiltrados.find(m => `material_${m.id}` === campo)?.tipo_nombre || campo;
 
       const esModificacionSignificativa = Math.abs(valorPrevio - val) > 0.001;
 
@@ -636,7 +773,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       filaActualizada[campo] = val;
 
       let total = 0;
-      materialesFlat.forEach(m => {
+      materialesFiltrados.forEach(m => {
         const matKey = `material_${m.id}`;
         total += parseFloat(filaActualizada[matKey]) || 0;
       });
@@ -655,7 +792,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
     setTimeout(autoSaveToStorage, 100);
 
-  }, [editingValues, tablaData, materialesFlat, autoSaveToStorage]);
+  }, [editingValues, tablaData, materialesFiltrados, autoSaveToStorage]);
 
   const handlePesoFromBascula = useCallback((pesoInput, campoDestinoEnviado, esAutomatico) => {
     const currentBloqueado = pesoBloqueadoRef.current;
@@ -673,7 +810,14 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     if (campoDestinoEnviado && campoDestinoEnviado !== campoRealActivo) return;
     if (!campoRealActivo) return;
 
-    if (currentBloqueado) return;
+    if (currentBloqueado) {
+      const target = celdaActivaRef.current;
+
+      if (!target) return;
+
+      return;
+    }
+
 
     let targetIndex = -1;
     if (currentMaquinaSel.index !== null) {
@@ -685,10 +829,16 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     if (targetIndex !== -1) {
       pesoCongeladoRef.current = nuevoValorRaw;
       const celdaKey = `${targetIndex}_${campoRealActivo}`;
+      const celdaEnEdicion = celdaEditandoRef.current === celdaKey;
 
-      if (editingValuesRef.current[celdaKey] !== undefined || celdasSumadasRef.current[celdaKey]) {
+      if (
+        celdaEnEdicion ||
+        editingValuesRef.current[celdaKey] !== undefined ||
+        celdasSumadasRef.current[celdaKey]
+      ) {
         return;
       }
+
 
       setTablaData(prevData => {
         const filaActual = prevData[targetIndex];
@@ -704,7 +854,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           filaActualizada.conexion_bascula = true;
 
           let total = 0;
-          materialesFlat.forEach(m => {
+          materialesFiltrados.forEach(m => {
             total += parseFloat(filaActualizada[`material_${m.id}`]) || 0;
           });
           filaActualizada.peso_total = round3(total);
@@ -714,7 +864,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         return prevData;
       });
     }
-  }, [materialesFlat]);
+  }, [materialesFiltrados]);
 
   const handleTogglePesoBloqueado = () => {
     const isCurrentlyLocked = pesoBloqueado;
@@ -765,7 +915,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           fila[target.campo] = round3(pesoActual);
 
           let total = 0;
-          materialesFlat.forEach(m => total += parseFloat(fila[`material_${m.id}`]) || 0);
+          materialesFiltrados.forEach(m => total += parseFloat(fila[`material_${m.id}`]) || 0);
           fila.peso_total = round3(total);
 
           newData[target.areaIndex] = fila;
@@ -830,7 +980,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       filaActual.conexion_bascula = true;
 
       let totalFila = 0;
-      materialesFlat.forEach(m => {
+      materialesFiltrados.forEach(m => {
         totalFila += parseFloat(filaActual[`material_${m.id}`]) || 0;
       });
       filaActual.peso_total = round3(totalFila);
@@ -851,10 +1001,29 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
   };
 
   const handleMaterialChange = (newMaterialKey) => {
+    const currentIndex = maquinaSeleccionada.index;
+
+    if (currentIndex !== null && tablaData[currentIndex]) {
+      const valorEnNuevoMaterial = parseFloat(tablaData[currentIndex][newMaterialKey]) || 0;
+
+      if (valorEnNuevoMaterial > 0) {
+        setPesoBloqueado(true);
+        pesoBloqueadoRef.current = true;
+        addToast(`Material con datos: peso congelado`, `info`);
+      } else {
+        if (!pesoBloqueadoRef.current) {
+          setPesoBloqueado(false);
+          pesoBloqueadoRef.current = false;
+        }
+      }
+    }
+
     setCampoBasculaActivo(newMaterialKey);
     campoBasculaActivoRef2.current = newMaterialKey;
+
     if (celdaActiva && celdaActiva.areaIndex !== null) {
       setCeldaActiva(prev => ({ ...prev, campo: newMaterialKey }));
+      campoBasculaActivoRef.current = newMaterialKey;
     }
   };
 
@@ -901,7 +1070,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const construirObservacionesFila = (fila, realIndex) => {
     let notas = [];
-    materialesFlat.forEach(mat => {
+    materialesFiltrados.forEach(mat => {
       const key = `material_${mat.id}`;
       const vecesSumado = celdasSumadas[`${realIndex}_${key}`];
       if (vecesSumado) {
@@ -925,46 +1094,88 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       return;
     }
 
+    setPendingSubmitData({
+      filasConPeso: filasConPeso
+    });
+
+    setShowConfirmSubmit(true);
+  };
+
+  const ejecutarSubmit = async () => {
+    if (!pendingSubmitData || !pendingSubmitData.filasConPeso) {
+      addToast('No hay datos para guardar', 'warning');
+      setShowConfirmSubmit(false);
+      setPendingSubmitData(null);
+      return;
+    }
+
+    setShowConfirmSubmit(false);
     setEnviando(true);
+
     try {
       const prepararDatosFila = (fila) => {
         const realIndex = tablaData.findIndex(item =>
-          item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
+          item.area_real === fila.area_real &&
+          item.maquina_real === fila.maquina_real
         );
 
         const detalles = [];
-        let esAutomatico = fila.conexion_bascula === true;
+
+        let tieneAutomatico = false;
+        let tieneManual = false;
         let tieneMateriales = false;
 
-        materialesFlat.forEach(mat => {
+        materialesFiltrados.forEach(mat => {
           const key = `material_${mat.id}`;
           const celdaKey = `${realIndex}_${key}`;
           const peso = parseFloat(fila[key]) || 0;
 
           if (peso > 0) {
             tieneMateriales = true;
-            detalles.push({ id: mat.id, peso: peso });
 
-            if (historialCeldas[celdaKey]?.modificadoManual) {
-              esAutomatico = false;
-            }
+            detalles.push({
+              id: mat.id,
+              peso: peso
+            });
 
-            if (editingValuesRef.current[celdaKey] !== undefined) {
-              esAutomatico = false;
+            const fueEditadoManual =
+              historialCeldas[celdaKey]?.modificadoManual ||
+              editingValuesRef.current[celdaKey] !== undefined;
+
+            if (fueEditadoManual) {
+              tieneManual = true;
+            } else {
+              tieneAutomatico = true;
             }
           }
         });
+
+        let conexionTipo = false;
+
+        if (tieneAutomatico && !tieneManual) {
+          conexionTipo = true;
+        }
+        else if (!tieneAutomatico && tieneManual) {
+          conexionTipo = false;
+        }
+        else if (tieneAutomatico && tieneManual) {
+          conexionTipo = true;
+        }
+
 
         return {
           turno: formData.turno,
           area_real: fila.area_real,
           maquina_real: fila.maquina_real,
-          conexion_bascula: tieneMateriales && esAutomatico,
+          conexion_bascula: tieneMateriales ? conexionTipo : false,
           numero_lote: `LOTE-${Date.now()}`,
           observaciones: construirObservacionesFila(fila, realIndex),
-          detalles: detalles
+          detalles
         };
       };
+
+
+      const filasConPeso = pendingSubmitData.filasConPeso;
 
       if (filasConPeso.length > 10) {
         const datosBatch = filasConPeso.map(fila => prepararDatosFila(fila));
@@ -972,7 +1183,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
         if (resultado.success) {
           storageService.clearDraftData();
-          addToast(`Guardado exitoso: ${resultado.count_exitosos} máquinas registradas`, 'success');
+          addToast(`Guardado exitoso: ${resultado.count_exitosos || resultado.count || filasConPeso.length} máquinas registradas`, 'success');
           if (onRegistroCreado) onRegistroCreado();
         } else {
           throw new Error(resultado.message || 'Error al procesar el lote');
@@ -992,6 +1203,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       addToast(`Error al guardar: ${error.message}`, 'error');
     } finally {
       setEnviando(false);
+      setPendingSubmitData(null);
     }
   };
 
@@ -1057,7 +1269,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   const totales = useMemo(() => {
     const acc = {};
-    materialesFlat.forEach(m => acc[`material_${m.id}`] = 0);
+    materialesFiltrados.forEach(m => acc[`material_${m.id}`] = 0);
     let generalInt = 0;
 
     datosFiltrados.forEach((fila) => {
@@ -1065,7 +1277,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
         item.area_real === fila.area_real && item.maquina_real === fila.maquina_real
       );
 
-      materialesFlat.forEach(m => {
+      materialesFiltrados.forEach(m => {
         const key = `material_${m.id}`;
         const editKey = `${realIndex}_${key}`;
 
@@ -1077,7 +1289,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
       });
 
       let filaTotal = 0;
-      materialesFlat.forEach(m => {
+      materialesFiltrados.forEach(m => {
         const key = `material_${m.id}`;
         const editKey = `${realIndex}_${key}`;
 
@@ -1093,7 +1305,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
     Object.keys(acc).forEach(key => acc[key] = acc[key] / 1000);
     acc.general = generalInt / 1000;
     return acc;
-  }, [datosFiltrados, tablaData, materialesFlat, editingValues]);
+  }, [datosFiltrados, tablaData, materialesFiltrados, editingValues]);
 
   const camposSeleccionados = useMemo(() => {
     return !!(filtroArea && filtroMaquina && campoBasculaActivo);
@@ -1119,7 +1331,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
 
   return (
     <div style={styles.container}>
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={handleFormKeyDown}
+        style={styles.form}
+      >
         <div style={styles.controls}>
           <CardTransition delay={0} style={styles.section}>
             <BasculaConnection
@@ -1227,9 +1443,13 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                   onChange={(e) => handleMaterialChange(e.target.value)}
                   style={styles.selectPrimary}
                 >
-                  {materialesFlat.map(m => (
-                    <option key={m.id} value={`material_${m.id}`}>{m.tipo_nombre}</option>
-                  ))}
+                  {materialesFiltrados.length > 0 ? (
+                    materialesFiltrados.map(m => (
+                      <option key={m.id} value={`material_${m.id}`}>{m.tipo_nombre}</option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No hay materiales asignados a esta área</option>
+                  )}
                 </select>
               </div>
               <div style={styles.inputGroup}>
@@ -1347,7 +1567,11 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           <div style={styles.tableHeader}>
             <div style={styles.tableTitleSection}>
               <h3 style={styles.sectionTitle}>Datos de Producción</h3>
-              <p style={styles.tableSubtitle}>{filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}{filtroMaquina ? ` | Seleccionada: ${filtroMaquina}` : ''}</p>
+              <p style={styles.tableSubtitle}>
+                {filtroArea ? `Área: ${filtroArea}` : 'Todas las áreas'}
+                {filtroMaquina ? ` | Seleccionada: ${filtroMaquina}` : ''}
+                {filtroArea && materialesFiltrados.length > 0 && ` | ${materialesFiltrados.length} materiales`}
+              </p>
             </div>
             <div style={styles.stats}>
               <div style={styles.statItem}><span style={styles.statLabel}>Máquinas</span><strong style={styles.statValue}><AnimatedCounter value={datosFiltrados.length} duration={500} decimals={0} /></strong></div>
@@ -1362,7 +1586,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 <tr>
                   <th style={styles.fixedHeaderArea}>ÁREA</th>
                   <th style={styles.fixedHeaderMachine}>MÁQUINA</th>
-                  {materialesFlat.map(mat => {
+                  {materialesFiltrados.map(mat => {
                     const key = `material_${mat.id}`;
                     return (
                       <th key={mat.id} style={{ ...styles.tableHeaderCell, ...(campoBasculaActivo === key ? styles.activeColumnHeader : {}) }}>
@@ -1384,7 +1608,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                       key={`${fila.area_real}-${fila.maquina_real}`}
                       fila={fila}
                       realIndex={realIndex}
-                      materialesFlat={materialesFlat}
+                      materialesFlat={materialesFiltrados}
+                      config={config}
                       campoBasculaActivo={campoBasculaActivo}
                       celdaActiva={celdaActiva}
                       pesoBloqueado={pesoBloqueado}
@@ -1392,6 +1617,8 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                       onChange={handleInputChangeTabla}
                       onBlur={handleInputBlur}
                       onKeyPress={handleKeyPress}
+                      onEditStart={handleEditStart}
+                      onEditEnd={handleEditEnd}
                       editingValues={editingValues}
                       animate={triggerAnimation}
                       indexDisplay={index}
@@ -1401,7 +1628,7 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
                 })}
                 <tr style={styles.totalsRow}>
                   <td style={styles.fixedTotalArea} colSpan="2">TOTALES</td>
-                  {materialesFlat.map(mat => (
+                  {materialesFiltrados.map(mat => (
                     <td key={mat.id} style={styles.columnTotalCell}>
                       <strong style={styles.columnTotalValue}><AnimatedCounter value={totales[`material_${mat.id}`]} duration={500} decimals={3} /></strong>
                     </td>
@@ -1496,6 +1723,52 @@ const RegistroScrapCompleto = ({ onRegistroCreado, onCancelar, onLoadComplete })
           setPendingSumData(null);
         }}
       />
+
+      <ConfirmationModal
+        isOpen={showConfirmSubmit}
+        title="Confirmar envío de registros"
+        modalWidth="500px"
+        message={
+          <div style={{
+            textAlign: 'center',
+            padding: '10px 0'
+          }}>
+            <div style={{
+              fontSize: '1rem',
+              color: colors.gray700,
+              marginBottom: '15px'
+            }}>
+              ¿Está seguro que desea guardar todos los registros?
+            </div>
+            <div style={{
+              fontSize: '0.85rem',
+              color: colors.warning,
+              backgroundColor: colors.warning + '10',
+              padding: '8px 12px',
+              borderRadius: radius.md,
+              border: `1px solid ${colors.warning}30`,
+              margin: 0
+            }}>
+              Esta acción no se puede deshacer
+            </div>
+          </div>
+        }
+        confirmText="Sí, guardar"
+        cancelText="Cancelar"
+        onConfirm={ejecutarSubmit}
+        onCancel={() => {
+          setShowConfirmSubmit(false);
+          setPendingSubmitData(null);
+        }}
+        confirmButtonStyle={{
+          backgroundColor: colors.success,
+          padding: '8px 20px'
+        }}
+        cancelButtonStyle={{
+          padding: '8px 20px'
+        }}
+      />
+
     </div>
   );
 };

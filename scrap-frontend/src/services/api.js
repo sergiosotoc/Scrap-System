@@ -335,4 +335,16 @@ export const apiClient = {
         const query = new URLSearchParams(params).toString();
         return this.request(`/excel/preview-formato-empresa?${query}`, {}, 30000);
     },
+
+    async syncMaterialesMaquina(maquinaId, materialesIds) {
+        return this.request(`/config-areas/${maquinaId}/sync-materiales`, {
+            method: 'POST',
+            body: { materiales_ids: materialesIds }
+        }, 30000);
+    },
+
+    async getMaterialesPorUso(uso) {
+        return this.request(`/materiales/lista/${uso}`, {}, 15000);
+    },
+    
 };

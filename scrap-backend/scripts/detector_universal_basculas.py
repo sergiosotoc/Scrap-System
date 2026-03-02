@@ -347,6 +347,17 @@ class DetectorUniversalBasculas:
         if not datos or len(datos) < 2:
             return None, "sin_datos"
 
+        # 1. Braumker YP200 (prioridad alta por formato específico)
+        match = re.search(r'(ST|US),GS,([+-]?\d+\.\d{2})kg', datos)
+        if match:
+            try:
+                peso = float(match.group(2))
+                if 0.001 <= peso <= 1000:
+                    return peso, "braumker_yp200"
+            except:
+                pass
+
+        # 2. Torrey (ST,GS formato)
         if 'ST,GS' in datos:
             match = re.search(r'ST,GS[, ]*([0-9]+\.[0-9]+)', datos)
             if match:
@@ -357,6 +368,7 @@ class DetectorUniversalBasculas:
                 except:
                     pass
 
+        # 3. CAS (N o T seguido de número)
         match = re.search(r'[NT](\d+\.?\d*)', datos)
         if match:
             try:
@@ -366,6 +378,7 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
+        # 4. Números con signo (+/-)
         match = re.search(r'[+-]?(\d+\.?\d*)', datos)
         if match:
             try:
@@ -375,6 +388,7 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
+        # 5. Decimal simple
         match = re.search(r'(\d+\.\d+)', datos)
         if match:
             try:
@@ -384,6 +398,7 @@ class DetectorUniversalBasculas:
             except:
                 pass
 
+        # 6. Números grandes (gramos)
         match = re.search(r'(\d{3,})', datos)
         if match:
             try:
