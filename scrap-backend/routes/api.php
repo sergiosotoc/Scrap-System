@@ -14,6 +14,7 @@ use App\Http\Controllers\MaterialesController;
 use App\Http\Controllers\AreasMaquinasController;
 use App\Http\Controllers\DestinatariosController;
 use App\Http\Controllers\HistorialController;
+use App\Http\Controllers\DraftController;
 
 Route::middleware('api')->group(function () {
     // Autenticación
@@ -116,6 +117,12 @@ Route::middleware('api')->group(function () {
         Route::get('/preview-formato-empresa', [ExcelReportController::class, 'previewFormatoEmpresa']);
         Route::post('/enviar-reporte-correo', [ExcelReportController::class, 'enviarReporteCorreo']);
         Route::get('/export-auditoria', [ExcelReportController::class, 'exportAuditoria'])->middleware('role:contraloria,admin');
+    });
+
+    Route::prefix('draft')->middleware('auth:sanctum')->group(function () {
+        Route::post('/save',  [DraftController::class, 'save']);
+        Route::get('/load',   [DraftController::class, 'load']);
+        Route::delete('/clear', [DraftController::class, 'clear']);
     });
 
     Route::get('/roles', fn() => config('roles'));

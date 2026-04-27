@@ -68,12 +68,11 @@ const ReceptorDashboard = () => {
   const [filterHU, setFilterHU] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [pesoBloqueado, setPesoBloqueado] = useState(false);
   const [formData, setFormData] = useState({
     peso_kg: '',
     tipo_scrap_id: '',
     tipo_material: '',
-    origen_tipo: 'externa',
+    origen_tipo: 'interna',
     origen_especifico: '',
     destino: 'almacenamiento',
     lugar_almacenamiento: '',
@@ -88,7 +87,6 @@ const ReceptorDashboard = () => {
   useEffect(() => {
     const handleEscKey = (event) => { if (event.key === 'Escape') setShowModal(false); };
     if (showModal) {
-      setPesoBloqueado(false);
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleEscKey);
     } else {
@@ -170,143 +168,143 @@ const ReceptorDashboard = () => {
   }, [recepcionesVisualizadas, selectedClasif]);
 
   const handleImprimirHU = async (id) => {
-  try {
-    const recepcion = recepciones.find((r) => r.id === id);
-    if (!recepcion) throw new Error("Recepción no encontrada");
-
-    let logoData = null;
     try {
-      logoData = await getImageDataUrl('/Logo-COFICAB.png');
-    } catch (e) {
-      console.warn("No se pudo cargar el logo, se usará texto.");
-    }
+      const recepcion = recepciones.find((r) => r.id === id);
+      if (!recepcion) throw new Error("Recepción no encontrada");
 
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [139.7, 215.9], 
-    });
+      let logoData = null;
+      try {
+        logoData = await getImageDataUrl('/Logo-COFICAB.png');
+      } catch (e) {
+        console.warn("No se pudo cargar el logo, se usará texto.");
+      }
 
-    const sheetWidth = 215.9;
-    const sheetHeight = 139.7;
-    
-    const labelWidth = sheetWidth * 0.4; 
-    const labelHeight = 65; 
-    
-    const offsetX = (sheetWidth - labelWidth) / 2;
-    const offsetY = 2; 
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [139.7, 215.9],
+      });
 
-    const margin = 4;
-    const contentWidth = labelWidth - margin * 2;
-    
-    doc.setLineWidth(0.6);
-    doc.setDrawColor(0);
-    doc.roundedRect(offsetX + margin, offsetY + margin, contentWidth, labelHeight - margin * 2, 3, 3);
+      const sheetWidth = 215.9;
+      const sheetHeight = 139.7;
 
-    const headerLineY = offsetY + 15;
-    doc.line(offsetX + margin, headerLineY, offsetX + labelWidth - margin, headerLineY);
+      const labelWidth = sheetWidth * 0.4;
+      const labelHeight = 65;
 
-    if (logoData) {
-      doc.addImage(logoData, 'PNG', offsetX + margin + 2, offsetY + margin + 1, 25, 8);
-    }
+      const offsetX = (sheetWidth - labelWidth) / 2;
+      const offsetY = 2;
 
-    doc.setFontSize(7);
-    doc.setTextColor(80);
-    doc.setFont('helvetica', 'bold');
-    doc.text('RECEPCIÓN SCRAP', offsetX + labelWidth - margin - 4, offsetY + 8, { align: 'right' });
+      const margin = 4;
+      const contentWidth = labelWidth - margin * 2;
 
-    doc.setFontSize(6);
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'normal');
-    const fechaTexto = new Date(recepcion.fecha_entrada).toLocaleDateString('es-MX', {
+      doc.setLineWidth(0.6);
+      doc.setDrawColor(0);
+      doc.roundedRect(offsetX + margin, offsetY + margin, contentWidth, labelHeight - margin * 2, 3, 3);
+
+      const headerLineY = offsetY + 15;
+      doc.line(offsetX + margin, headerLineY, offsetX + labelWidth - margin, headerLineY);
+
+      if (logoData) {
+        doc.addImage(logoData, 'PNG', offsetX + margin + 2, offsetY + margin + 1, 25, 8);
+      }
+
+      doc.setFontSize(7);
+      doc.setTextColor(80);
+      doc.setFont('helvetica', 'bold');
+      doc.text('RECEPCIÓN SCRAP', offsetX + labelWidth - margin - 4, offsetY + 8, { align: 'right' });
+
+      doc.setFontSize(6);
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'normal');
+      const fechaTexto = new Date(recepcion.fecha_entrada).toLocaleDateString('es-MX', {
         year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-    }).toUpperCase();
-    doc.text(fechaTexto, offsetX + labelWidth - margin - 4, offsetY + 13, { align: 'right' });
+      }).toUpperCase();
+      doc.text(fechaTexto, offsetX + labelWidth - margin - 4, offsetY + 13, { align: 'right' });
 
-    const boxTop = headerLineY;
-    const boxHeight = 12;
-    doc.setFillColor(242, 242, 242);
-    doc.rect(offsetX + margin + 0.4, boxTop, contentWidth - 0.8, boxHeight, 'F');
-    doc.line(offsetX + margin, boxTop + boxHeight, offsetX + labelWidth - margin, boxTop + boxHeight);
+      const boxTop = headerLineY;
+      const boxHeight = 12;
+      doc.setFillColor(242, 242, 242);
+      doc.rect(offsetX + margin + 0.4, boxTop, contentWidth - 0.8, boxHeight, 'F');
+      doc.line(offsetX + margin, boxTop + boxHeight, offsetX + labelWidth - margin, boxTop + boxHeight);
 
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'bold');
-    const materialFull = recepcion.tipo_material.toUpperCase();
-    let fSize = 16; 
-    doc.setFontSize(fSize);
-    while (doc.getTextWidth(materialFull) > contentWidth - 6 && fSize > 8) {
-      fSize -= 1;
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'bold');
+      const materialFull = recepcion.tipo_material.toUpperCase();
+      let fSize = 16;
       doc.setFontSize(fSize);
+      while (doc.getTextWidth(materialFull) > contentWidth - 6 && fSize > 8) {
+        fSize -= 1;
+        doc.setFontSize(fSize);
+      }
+      doc.text(materialFull, offsetX + margin + (contentWidth / 2), boxTop + (boxHeight / 2) + (fSize * 0.35) / 2.5, { align: 'center' });
+
+      const middleY = boxTop + boxHeight;
+      const footerLineY = offsetY + labelHeight - 10;
+      doc.line(offsetX + margin + (contentWidth / 2), middleY, offsetX + margin + (contentWidth / 2), footerLineY);
+
+      const colLeftCenter = offsetX + margin + (contentWidth * 0.25);
+      const barcodeWidth = 32;
+      const barcodeHeight = 12;
+      const canvasBc = document.createElement('canvas');
+      JsBarcode(canvasBc, recepcion.numero_hu, {
+        format: 'CODE128', displayValue: true, fontSize: 12, height: 30, width: 2, margin: 0
+      });
+      doc.addImage(canvasBc.toDataURL('image/jpeg'), 'JPEG', colLeftCenter - (barcodeWidth / 2), middleY + 2, barcodeWidth, barcodeHeight);
+
+      const qrSize = 12;
+      try {
+        const QRCode = await import('qrcode').then(module => module.default);
+        const qrDataUrl = await QRCode.toDataURL(recepcion.numero_hu, { margin: 1 });
+        doc.addImage(qrDataUrl, 'PNG', colLeftCenter - (qrSize / 2), middleY + 15, qrSize, qrSize);
+      } catch (e) { console.warn(e); }
+
+      const colRightCenter = offsetX + margin + (contentWidth * 0.75);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`HU: ${recepcion.numero_hu}`, colRightCenter, middleY + 6, { align: 'center' });
+
+      const bwWidth = 32;
+      const bwHeight = 16;
+      doc.setLineWidth(0.5);
+      doc.roundedRect(colRightCenter - (bwWidth / 2), middleY + 8, bwWidth, bwHeight, 2, 2);
+
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.text('PESO NETO (KG)', colRightCenter, middleY + 12, { align: 'center' });
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(parseFloat(recepcion.peso_kg).toFixed(2), colRightCenter, middleY + 21, { align: 'center' });
+
+      doc.setLineWidth(0.4);
+      doc.line(offsetX + margin, footerLineY, offsetX + labelWidth - margin, footerLineY);
+
+      const footerTextY = footerLineY + 3.5;
+      doc.setFontSize(6);
+
+      doc.setTextColor(100);
+      doc.text('ORIGEN:', offsetX + margin + 2, footerTextY);
+      doc.setTextColor(0);
+      const origenLabel = (recepcion.origen_tipo === 'interna' ? 'PLANTA INTERNA' : (recepcion.origen_especifico || 'EXTERIOR')).toUpperCase();
+      doc.text(origenLabel, offsetX + margin + 12, footerTextY);
+
+      doc.setTextColor(100);
+      doc.text('DESTINO:', offsetX + margin + (contentWidth / 2) + 2, footerTextY);
+      doc.setTextColor(0);
+      const destinoLabel = (recepcion.destino || 'ALMACÉN').toUpperCase();
+      doc.text(destinoLabel.substring(0, 12), offsetX + margin + (contentWidth / 2) + 13, footerTextY);
+
+      doc.setFontSize(4);
+      doc.setTextColor(150);
+      doc.text('Sistema Scrap - COFICAB', offsetX + margin + (contentWidth / 2), offsetY + labelHeight - 2, { align: 'center' });
+
+      doc.save(`HU_${recepcion.numero_hu}.pdf`);
+      addToast('Etiqueta generada correctamente', 'success');
+    } catch (error) {
+      addToast('Error: ' + error.message, 'error');
     }
-    doc.text(materialFull, offsetX + margin + (contentWidth / 2), boxTop + (boxHeight / 2) + (fSize * 0.35) / 2.5, { align: 'center' });
-
-    const middleY = boxTop + boxHeight;
-    const footerLineY = offsetY + labelHeight - 10;
-    doc.line(offsetX + margin + (contentWidth / 2), middleY, offsetX + margin + (contentWidth / 2), footerLineY);
-
-    const colLeftCenter = offsetX + margin + (contentWidth * 0.25);
-    const barcodeWidth = 32;
-    const barcodeHeight = 12;
-    const canvasBc = document.createElement('canvas');
-    JsBarcode(canvasBc, recepcion.numero_hu, {
-      format: 'CODE128', displayValue: true, fontSize: 12, height: 30, width: 2, margin: 0
-    });
-    doc.addImage(canvasBc.toDataURL('image/jpeg'), 'JPEG', colLeftCenter - (barcodeWidth / 2), middleY + 2, barcodeWidth, barcodeHeight);
-
-    const qrSize = 12;
-    try {
-      const QRCode = await import('qrcode').then(module => module.default);
-      const qrDataUrl = await QRCode.toDataURL(recepcion.numero_hu, { margin: 1 });
-      doc.addImage(qrDataUrl, 'PNG', colLeftCenter - (qrSize / 2), middleY + 15, qrSize, qrSize);
-    } catch (e) { console.warn(e); }
-
-    const colRightCenter = offsetX + margin + (contentWidth * 0.75);
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`HU: ${recepcion.numero_hu}`, colRightCenter, middleY + 6, { align: 'center' });
-
-    const bwWidth = 32;
-    const bwHeight = 16;
-    doc.setLineWidth(0.5);
-    doc.roundedRect(colRightCenter - (bwWidth / 2), middleY + 8, bwWidth, bwHeight, 2, 2);
-
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'normal');
-    doc.text('PESO NETO (KG)', colRightCenter, middleY + 12, { align: 'center' });
-
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(parseFloat(recepcion.peso_kg).toFixed(2), colRightCenter, middleY + 21, { align: 'center' });
-
-    doc.setLineWidth(0.4);
-    doc.line(offsetX + margin, footerLineY, offsetX + labelWidth - margin, footerLineY);
-
-    const footerTextY = footerLineY + 3.5;
-    doc.setFontSize(6);
-    
-    doc.setTextColor(100);
-    doc.text('ORIGEN:', offsetX + margin + 2, footerTextY);
-    doc.setTextColor(0);
-    const origenLabel = (recepcion.origen_tipo === 'interna' ? 'PLANTA INTERNA' : (recepcion.origen_especifico || 'EXTERIOR')).toUpperCase();
-    doc.text(origenLabel, offsetX + margin + 12, footerTextY);
-
-    doc.setTextColor(100);
-    doc.text('DESTINO:', offsetX + margin + (contentWidth / 2) + 2, footerTextY);
-    doc.setTextColor(0);
-    const destinoLabel = (recepcion.destino || 'ALMACÉN').toUpperCase();
-    doc.text(destinoLabel.substring(0, 12), offsetX + margin + (contentWidth / 2) + 13, footerTextY);
-
-    doc.setFontSize(4);
-    doc.setTextColor(150);
-    doc.text('Sistema Scrap - COFICAB', offsetX + margin + (contentWidth / 2), offsetY + labelHeight - 2, { align: 'center' });
-
-    doc.save(`HU_${recepcion.numero_hu}.pdf`);
-    addToast('Etiqueta generada correctamente', 'success');
-  } catch (error) {
-    addToast('Error: ' + error.message, 'error');
-  }
-};
+  };
 
   const handleUpdateDestino = async (id, nuevoDestino) => {
     const previousState = [...recepciones];
@@ -322,7 +320,6 @@ const ReceptorDashboard = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'peso_kg' && pesoBloqueado) return;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -331,10 +328,8 @@ const ReceptorDashboard = () => {
   };
 
   const handlePesoFromBascula = useCallback((peso, campo) => {
-    if (!pesoBloqueado) {
-      setFormData(prev => (prev[campo] === peso ? prev : { ...prev, [campo]: peso }));
-    }
-  }, [pesoBloqueado]);
+    setFormData(prev => (prev[campo] === peso ? prev : { ...prev, [campo]: peso }));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -344,7 +339,17 @@ const ReceptorDashboard = () => {
       const response = await apiClient.createRecepcionScrap(formData);
       addToast(`Recepción exitosa HU: ${response.numero_hu}`, 'success');
       setShowModal(false);
-      setFormData({ peso_kg: '', tipo_material: '', origen_tipo: 'externa', origen_especifico: '', destino: 'almacenamiento', lugar_almacenamiento: '', observaciones: '' });
+
+      setFormData({
+        peso_kg: '',
+        tipo_material: '',
+        origen_tipo: 'interna',
+        origen_especifico: '',
+        destino: 'almacenamiento',
+        lugar_almacenamiento: '',
+        observaciones: ''
+      });
+
       loadReceptorData();
     } catch (error) {
       addToast('Error: ' + error.message, 'error');
@@ -503,13 +508,22 @@ const ReceptorDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
                 <h4 style={styles.sectionTitle}>Detalles del Pesaje</h4>
                 <SmoothInput
-                  label="Peso Neto (kg)" type="number" step="0.01" name="peso_kg" value={formData.peso_kg} onChange={handleInputChange} disabled={pesoBloqueado}
-                  style={{ fontSize: '1.2rem', fontWeight: 'bold', backgroundColor: pesoBloqueado ? colors.gray50 : colors.surface }}
-                  rightElement={
-                    <SmoothButton type="button" onClick={() => setPesoBloqueado(!pesoBloqueado)} variant={pesoBloqueado ? 'destructive' : 'secondary'} style={{ height: '32px' }}>
-                      {pesoBloqueado ? "Capturado" : "Fijar Peso"}
-                    </SmoothButton>
-                  }
+                  label="Peso Neto (kg)"
+                  type="text"
+                  inputMode="decimal"
+                  name="peso_kg"
+                  value={formData.peso_kg}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                      handleInputChange(e);
+                    }
+                  }}
+                  style={{
+                    fontSize: '1.2rem',
+                    fontWeight: 'bold',
+                    backgroundColor: colors.surface
+                  }}
                   required
                 />
                 <SmoothSelect

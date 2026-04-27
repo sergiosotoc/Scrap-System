@@ -6,7 +6,7 @@ import SmoothButton from './SmoothButton';
 import SmoothInput from './SmoothInput';
 import SmoothSelect from './SmoothSelect';
 
-const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado" }) => {
+const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoInicial = "desconectado", areaActual, maquinaActual }) => {
     const [estado, setEstado] = useState(modoInicial);
     const [peso, setPeso] = useState(0);
     const [tara, setTara] = useState(0);
@@ -31,6 +31,11 @@ const BasculaConnection = ({ onPesoObtenido, campoDestino = 'peso_cobre', modoIn
     const esLecturaAutomatica = !modoManual && estado === 'conectado';
 
     const [tickLectura, setTickLectura] = useState(0);
+
+    useEffect(() => {
+        setTara(0);
+        setTickLectura(t => t + 1); 
+    }, [areaActual, maquinaActual,campoDestino]);
 
     useEffect(() => {
         campoDestinoRef.current = campoDestino;

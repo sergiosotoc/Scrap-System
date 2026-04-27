@@ -98,16 +98,24 @@ class ExcelReportController extends Controller
 
             $materiales = ConfigTipoScrap::whereIn('uso', ['operador', 'ambos'])->orderBy('orden', 'asc')->get();
 
-            $registrosBD = RegistrosScrap::with(['detalles.tipoScrap'])
+            $registrosBD = RegistrosScrap::with(['detalles.tipoScrap', 'operador'])
                 ->whereDate('fecha_registro', $fecha)
                 ->when($turno, fn($q) => $q->where('turno', $turno))
                 ->get();
 
+            $nombresOperadores = $registrosBD->pluck('operador.name')
+                ->filter()
+                ->unique()
+                ->implode(', ');
+
             $coleccionFinal = $this->generarColeccionReporte($fecha, $turno, $registrosBD);
+
+            $userSummary =new \stdClass();
+            $userSummary->name = !empty($nombresOperadores) ? $nombresOperadores : 'Sin Registros';
 
             $fechaTexto = Carbon::parse($fecha)->format('d-M-Y');
             return Excel::download(
-                new FormatoScrapEmpresaExport($coleccionFinal, $fecha, $turno, $user, $materiales),
+                new FormatoScrapEmpresaExport($coleccionFinal, $fecha, $turno, $userSummary, $materiales),
                 "REPORTE_SCRAP_{$fechaTexto}.xlsx"
             );
         } catch (\Exception $e) {
@@ -140,11 +148,16 @@ class ExcelReportController extends Controller
                 ->orderBy('orden', 'asc')
                 ->get();
 
-            $registrosBD = RegistrosScrap::with(['detalles.tipoScrap'])
+            $registrosBD = RegistrosScrap::with(['detalles.tipoScrap', 'operador'])
                 ->whereDate('fecha_registro', $fecha)
                 ->when($turno, fn($q) => $q->where('turno', $turno))
                 ->when($user->role !== 'admin', fn($q) => $q->where('operador_id', $user->id))
                 ->get();
+
+            $nombresOperadores = $registrosBD->pluck('operador.name')
+            ->filter()
+            ->unique()
+            ->implode(', ');
 
             $coleccionFinal = $this->generarColeccionReporte($fecha, $turno, $registrosBD);
 
@@ -181,7 +194,7 @@ class ExcelReportController extends Controller
                 'granTotal' => collect($filas)->sum('total'),
                 'fecha' => $fecha,
                 'turno' => $turno ?? 'Todos',
-                'operador' => $user->name
+                'operador' => !empty($nombresOperadores) ? $nombresOperadores: 'Sin registros'
             ]);
         } catch (\Exception $e) {
             \Log::error('Error en previewFormatoEmpresa: ' . $e->getMessage());

@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { colors } from '../styles/designSystem';
 import SmoothButton from './SmoothButton';
 
-const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte", buttonStyle = {} }) => {
+const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte", buttonStyle = {}, disabled }) => {
     const [exportando, setExportando] = useState(false);
     const { addToast } = useToast();
 
@@ -13,16 +13,16 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         setExportando(true);
         try {
             let resultado;
-            
+
             if (tipo === 'formato-empresa') {
                 resultado = await excelService.exportFormatoEmpresa(filters.fecha, filters.turno);
-            } 
+            }
             else if (tipo === 'recepciones') {
                 if (!filters.fechaInicio || !filters.fechaFin) {
                     throw new Error('Debes seleccionar un rango de fechas');
                 }
                 resultado = await excelService.exportRecepciones(filters.fechaInicio, filters.fechaFin, filters.destino);
-            } 
+            }
             else {
                 throw new Error('Tipo de exportación no válido');
             }
@@ -37,7 +37,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
             window.URL.revokeObjectURL(url);
 
             addToast(`Reporte generado exitosamente`, 'success');
-            
+
         } catch (error) {
             console.error('Error exportando Excel:', error);
             if (error.message.includes('404')) {
@@ -53,9 +53,9 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
     };
 
     return (
-        <SmoothButton 
+        <SmoothButton
             onClick={handleExport}
-            disabled={exportando}
+            disabled={exportando || disabled}
             variant="primary"
             title="Generar Reporte en Excel"
             style={{
@@ -67,7 +67,7 @@ const ExcelExportButtons = ({ tipo, filters = {}, buttonText = "Generar Reporte"
         >
             {exportando ? (
                 <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation: 'spin 1s linear infinite'}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
                         <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
                     </svg>
                     <span>Generando...</span>

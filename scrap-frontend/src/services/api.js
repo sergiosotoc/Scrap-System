@@ -346,5 +346,21 @@ export const apiClient = {
     async getMaterialesPorUso(uso) {
         return this.request(`/materiales/lista/${uso}`, {}, 15000);
     },
-    
+
+    async getRecepcionesScrap(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/recepciones-scrap?${query}`, {}, 30000);
+    },
+
+    async saveDraft(data) {
+        return this.request('/draft/save', { method: 'POST', body: data }, 10000);
+    },
+    async loadDraft(turno, fecha) {
+        return this.request(`/draft/load?turno=${turno}&fecha=${fecha}`, {}, 10000);
+    },
+    async clearDraft(turno, fecha) {
+        return this.request(`/draft/clear?turno=${turno}&fecha=${fecha}`,
+            { method: 'DELETE' }, 10000);
+    },
+
 };
